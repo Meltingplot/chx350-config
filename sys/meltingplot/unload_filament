@@ -1,0 +1,18 @@
+M98 P"0:/sys/meltingplot/ensure_safety"
+
+M83                 ; relative extrusion
+
+if move.axes[2].homed == true && global.machine_mode == "automatic"
+  G91 G1 Z30          ; raise printbed 30mm
+
+M17 E0 ; activate tool board motor! bug in 3.6.1
+
+G1 E12 F120          ; extrude 12mm
+G1 E-5 F600          ; retract 5mm @ 10mm/sec
+G1 E-30 F60          ; retract 30mm @ 1mm/s to let filament tip harden
+G1 E-100 F180       ; retract 100mm @ 3mm/sec
+G1 E-100 F360       ; fast retract any additional filament
+G4 P0               ; wait for moves to finish
+M400                ; wait for moves to finish
+M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+M291 P"Remove the Filament." S1

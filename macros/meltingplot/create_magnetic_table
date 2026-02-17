@@ -1,0 +1,12 @@
+M17             ; activate motors
+M569.6 P50.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 50.
+M569.6 P50.0 V3 ; check table
+
+M569.6 P51.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 51.
+M569.6 P51.0 V3 ; check table
+
+M569.6 P52.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 52.
+M569.6 P52.0 V3 ; check table
+
+M569.6 P53.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 53.
+M569.6 P53.0 V3 ; check table

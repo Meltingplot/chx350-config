@@ -1,0 +1,22 @@
+
+G10                                                       ; Retract the filament
+M568 P0 R0 S0 A0                                          ; disable hotend
+M140 S0 R0                                                ; set bed heater to 0°
+M140 P0 S-273                                             ; disable bed heater
+T-1                                                       ; deselect all tools
+
+; do no run this after mode switch is initialized
+if global.door_left_switch_checked == true && global.door_right_switch_checked == true
+  G90                                                     ; absolute positioning
+  if move.axes[2].homed
+    G1 Z{move.axes[2].max-1} F60000                       ; lift z to clearance height 
+  G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; move gantry away from camera
+
+;M84                                                      ; turn off motors
+M106 S0                                                   ; Turn off fans
+
+M400
+G4 S1                                                     ; wait for motion system to complete moves, otherwise we will get an default mode error
+
+set global.door_left_switch_checked = false               ; set to unsafe state
+set global.door_right_switch_checked = false              ; set to unsafe state

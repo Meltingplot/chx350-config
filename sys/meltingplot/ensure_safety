@@ -1,0 +1,7 @@
+while ( global.door_left_switch_checked == false || global.door_right_switch_checked == false )
+  if iterations > 0
+    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ global.door_left_switch_checked ^ "<br>Türstatus rechts: " ^ global.door_right_switch_checked}  R"Türkontrolle" S2
+  else
+    M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
+
+M98 P"0:/sys/meltingplot/check_doors_closed"

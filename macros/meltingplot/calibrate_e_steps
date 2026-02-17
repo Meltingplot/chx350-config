@@ -1,0 +1,111 @@
+; params
+var calDistance = exists(param.D) ? param.D : 25.3/2 ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear
+var tool = exists(param.T) ? param.T : 0            ; tool number
+var tolerance = exists(param.S) ? param.S : 0.25    ; tolerance in %
+var repeatCount = exists(param.A) ? param.A : 3     ; number of iterations
+var silent = exists(param.Q) ? param.Q : false      ; silent mode
+var targetTemp = exists(param.R) ? param.R : 0      ; target temperature in C
+var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
+var validValue = 50 * move.extruders[0].microstepping.value ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
+var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
+
+if var.silent
+  set var.silent = true;
+
+if move.extruders[0].filament == null
+  echo "Error: no filament loaded! abort!"
+  M99
+
+var previousTool = state.currentTool                ; store current tool
+
+var extruder = tools[var.tool].filamentExtruder     ; get current extruder
+var currentHeater = tools[var.tool].heaters[0]      ; get current heater
+var currentTemp = heat.heaters[var.currentHeater].active ; get current temperature
+var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+
+if !exists(global.ignoreMFMevents)
+  global ignoreMFMevents = true
+else
+  set global.ignoreMFMevents = true
+
+T-1                                                 ; deselect any tool
+T{var.tool}                                         ; select tool
+
+M83                                                 ; use relative distances for extrusion
+M107                                                ; fan off
+M220 S100                                           ; reset speed percentage
+M221 D{var.extruder} S100                           ; reset flow rate
+M572 D{var.extruder} S0                             ; reset pressure advance
+M592 D{var.extruder} A0 B0                          ; reset non linear extrusion
+
+var count = var.repeatCount
+var avgFlow = 0.0
+
+while var.count > 0
+  M591 D{var.extruder} S0                             ; disable filament monitoring
+  M400                                                ; wait for moves to finish
+  G4 S1
+  M591 D{var.extruder} A1 S2 E1                       ; enable filament monitoring on all moves
+  M400                                                ; wait for moves to finish
+  G4 S1
+  if sensors.filamentMonitors[var.extruder].lastPercentage != null
+    echo "unable to reset filament monitor. Please check the configuration of the filament monitor."
+    if !var.silent
+      M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
+    T-1                                               ; deselect tool
+    T{var.previousTool}                               ; select previous tool
+    M99                                               ; exit macro
+  G1 E{var.minDistance} F{var.baseSpeed}              ; extrude the specified distance to ensure the sensor is calibrated
+  M400                                                ; wait for moves to finish
+  G4 S1
+  if sensors.filamentMonitors[var.extruder].lastPercentage == null
+    echo "unable to calibrate filament monitor. Please check the configuration of the filament monitor."
+    if !var.silent
+      M291 P"Unable to calibrate filament monitor. Please check the configuration of the filament monitor." S2
+    T-1                                               ; deselect tool
+    T{var.previousTool}                               ; select previous tool
+    M99                                               ; exit macro
+    
+  G1 E{var.calDistance} F{var.baseSpeed}              ; extrude the specified distance
+  M400                                                ; wait for moves to finish
+  G4 S1
+  var flow = sensors.filamentMonitors[var.extruder].avgPercentage / 100.0
+
+  if var.flow < (1 - var.tolerance) || var.flow > (1 + var.tolerance)
+    echo "Extrusion too low or too high, please check the filament and extruder."
+    if !var.silent
+      M291 P"Extrusion too low or to hight, please check the filament and extruder." S2
+    T-1                                               ; deselect tool
+    T{var.previousTool}                               ; select previous tool
+    M99                                               ; exit macro
+
+  set var.avgFlow = var.avgFlow + var.flow
+  set var.count = var.count - 1
+  echo "Extrusion flow: " ^ {var.flow * 100.0} ^ "%, remaining iterations: " ^ var.count
+
+set var.avgFlow = var.avgFlow / var.repeatCount
+echo "Extrusion flow: " ^ {var.avgFlow * 100.0} ^ "%"
+echo "E-Steps: " ^ move.extruders[var.extruder].stepsPerMm
+var newESteps = {floor(move.extruders[var.extruder].stepsPerMm / var.avgFlow)}
+echo "New E-Steps: " ^ var.newESteps
+
+if var.newESteps < (var.validValue * 0.9) || var.newESteps > (var.validValue * 1.1)
+  echo "New E-Steps out of range, please check the configuration."
+  if !var.silent
+    M291 P"New E-Steps out of range, please check the configuration." S2
+  T-1                                               ; deselect tool
+  T{var.previousTool}                               ; select previous tool
+  M99                                               ; exit macro
+
+echo >{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-esteps.g"} "; calibration temperature: " ^ var.currentTemp
+echo >>{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-esteps.g"} "M92 E" ^ var.newESteps
+
+M92 E{var.newESteps} ; activate new e-steps
+
+M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
+M98 P"0:/sys/meltingplot/machine-override"                ; Load Machine specific overrides
+
+T-1                                               ; deselect tool
+T{var.previousTool}                               ; select previous tool
+
+set global.ignoreMFMevents = false

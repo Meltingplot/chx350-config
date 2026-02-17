@@ -1,0 +1,285 @@
+set global.result = 0
+M98 P"0:/macros/meltingplot/align_z_axis"
+if global.result != 0
+  echo "Error: Z-Axis not aligned!"
+  M99
+
+G28 X Y U
+
+M290 R0 S0 ; clear baby stepping
+
+; check if printer is cold
+if sensors.analog[4].lastReading > 35
+  M291 P{"Printer temp is above 35°C - current " ^ sensors.analog[4].lastReading ^ "<br>Wait until the printer is cold and repeat."} R"Prerequirements" S2
+  M99
+
+; heat nozzle for thermal expansion
+T0 ; select tool with SZP
+; heat up the nozzle to 250°C - it is in the mid range of 180 - 400°C without buring the currently loaded material to much
+M568 P0 S250 A2 ; heat tool
+M140 S0 ; bed must be cold!
+
+M116 ; wait for heaters
+
+G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
+G1 Z120 F6000 ; drive z up to around 120mm -> to be able to place the z-probe on the bed
+G92 Z20 ; set z-height to 20mm to prevent accidantly crashing into the probing tool
+
+M291 P"Die Düse ist auf 250°C erhitzt, fassen Sie diese nicht an!" R"Gefahr!" S2
+M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Zero Z-Height Tool" S3
+M291 P"Öffnen Sie die Türen zum Bauraum, positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Place Z-Height Tool" S3
+if result != 0
+  echo "abort by user!"
+  M99
+M98 P"0:/sys/meltingplot/check_doors_closed"
+
+M564 S0 ; disable boundaries
+M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Calibrate Z-Height" S3 Z1
+if result != 0
+  echo "abort by user!"
+  M99
+M564 S1 ; enable boundaries
+
+var reading = 0
+
+while true
+  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Reading" S6
+  set var.reading = input
+  echo "Reading: " ^ var.reading
+  if var.reading >= 0 && var.reading <= 3
+    break
+  else
+    M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
+  if iterations > 2
+    echo "Abort! Mehrfach einen Wert außerhalb des Intervalls 0 - 3mm angegeben."
+    M99
+
+G92 Z{100 + var.reading}
+G1 Z120
+
+M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Clean the Printbed" S3
+if result != 0
+  echo "abort by user!"
+  M99
+M98 P"0:/sys/meltingplot/check_doors_closed"
+
+T0 ; select tool with SZP
+M568 P0 S250 A2 ; heat tool
+M116 ; wait for heaters
+
+M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+
+; go down to trigger height + dive height * 1.5
+G90 G1 Z{sensors.probes[0].triggerHeight + sensors.probes[0].diveHeights[0] * 1.5}
+M400 ; SBC specific
+
+; find the lowest value which gives readings != 999999
+var driveCurrent = 15
+while true
+  ; sensors.probes[0].value[0]
+  echo "Test SZP drive current: " ^ {var.driveCurrent}
+  M558.2 K0 S{var.driveCurrent} R0
+  M400 ; sbc specific
+  G4 S1
+  if sensors.probes[0].value[0] < 999999
+    break
+  set var.driveCurrent = var.driveCurrent + 1
+  if iterations > 5
+    echo "abort! can't find drive current value!"
+    M99
+
+; go down to trigger height and calc R such that the trigger value is 9000
+G90 G1 Z{sensors.probes[0].triggerHeight}
+M400
+G4 S1
+var readingOffset = sensors.probes[0].value[0] - 9000
+M558.2 K0 S{var.driveCurrent} R{var.readingOffset}
+
+; store the values persistent
+echo >{"0:/sys/meltingplot/z-probe/szp_standard_mode_calibration_cold.g"} "M558.2 K0 S" ^ {var.driveCurrent} ^ " R" ^ {var.readingOffset}
+
+; align print bed for touch mode
+M98 P"0:/sys/bed.g" S1 ; call bed.g without z-probing at the end
+M98 P"0:/sys/bed.g" S1 ; call bed.g without z-probing at the end
+
+G90 G1 Z20 F6000
+G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
+
+;calibrate touch mode
+M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+
+; find the lowest value which gives readings != 999999
+; start with the standard mode drive current
+;set var.driveCurrent = 15
+while true
+  ; sensors.probes[0].value[0]
+  ; go down to drive height + 10%
+  G90 G1 Z{sensors.probes[0].diveHeights[0]*1.1}
+  M400
+  echo "Test SZP drive current: " ^ {var.driveCurrent}
+  M558.2 K0 S{var.driveCurrent} R0
+  M400 ; sbc specific
+  G4 S1
+  ; in touch mode the drive current must give readings from about driveHeight down to 0
+  if sensors.probes[0].value[0] < 999999
+    G90 G1 Z0
+    M400
+    G4 S1
+    if sensors.probes[0].value[0] < 999999
+      break
+
+  set var.driveCurrent = var.driveCurrent + 1
+  
+  if iterations > 5
+    echo "abort! can't find drive current value for touch mode wit"
+    M99
+
+; go down to zero height and calc R such that the trigger value is 9000
+;G90 G1 Z{sensors.probes[0].diveHeights[0]}
+G90 G1 Z0
+M400 ; sbc specific
+G4 S1
+set var.readingOffset = sensors.probes[0].value[0] - 9000
+M558.2 K0 S{var.driveCurrent} R{var.readingOffset}
+G90 G1 Z{sensors.probes[0].diveHeights[0]}
+
+; store the values persistent
+echo >{"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_cold.g"} "M558.2 K0 S" ^ {var.driveCurrent} ^ " R" ^ {var.readingOffset}
+
+; Calibrate the SZP in warm state
+M140 S90 ; enable bed heater
+M291 P"Die Kalibrierung im kalten Zustand war erfolgreich.<br>Jetzt wird das Druckbett auf 90°C aufgeheizt und der Vorgang wiederholt. Dies kann bis zu 20 Minuten dauern!" R"Gefahr!" S2
+
+M116 ; wait for bed heater
+
+while true
+; check if printer/SZP is warm
+  if sensors.analog[4].lastReading > 50
+    break
+  if iterations >= 60
+    echo "Unable to heat up SZP above 50°C in 10min - abort!"
+    M99
+  G4 S10
+
+G1 Z120 F6000 ; drive z up to around 120mm -> to be able to place the z-probe on the bed
+G92 Z20 ; set z-height to 20mm to prevent accidantly crashing into the probing tool
+
+M291 P"Die Düse ist auf 250°C erhitzt und das Druckbett auf 90°C, fassen Sie diese nicht an!" R"Gefahr!" S2
+M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Zero Z-Height Tool" S3
+M291 P"Positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Place Z-Height Tool" S3
+if result != 0
+  echo "abort by user!"
+  M99
+
+M98 P"0:/sys/meltingplot/check_doors_closed"
+
+M564 S0 ; disable boundaries
+M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Calibrate Z-Height" S3 Z1
+if result != 0
+  echo "abort by user!"
+  M99
+M564 S1 ; enable boundaries
+
+set var.reading = 0
+
+while true
+  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Reading" S6
+  set var.reading = input
+  echo "Reading: " ^ var.reading
+  if var.reading >= 0 && var.reading <= 3
+    break
+  else
+    M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
+  if iterations > 2
+    echo "Abort! Mehrfach einen Wert außerhalb des Intervalls 0 - 3mm angegeben."
+    M99
+
+G92 Z{100 + var.reading}
+G1 Z120
+
+M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Clean the Printbed" S3
+if result != 0
+  echo "abort by user!"
+  M99
+
+M98 P"0:/sys/meltingplot/check_doors_closed"
+
+T0 ; select tool with SZP
+M568 P0 S250 A2 ; heat tool
+M116 ; wait for heaters
+
+M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+
+; go down to trigger height + dive height * 1.5
+G90 G1 Z{sensors.probes[0].triggerHeight + sensors.probes[0].diveHeights[0] * 1.5}
+M400 ; SBC specific
+
+; find the lowest value which gives readings != 999999
+set var.driveCurrent = 15
+while true
+  ; sensors.probes[0].value[0]
+  echo "Test SZP drive current: " ^ {var.driveCurrent}
+  M558.2 K0 S{var.driveCurrent} R0
+  M400 ; sbc specific
+  G4 S1
+  if sensors.probes[0].value[0] < 999999
+    break
+  set var.driveCurrent = var.driveCurrent + 1
+  if iterations > 5
+    echo "abort! can't find drive current value!"
+    M99
+
+; go down to trigger height and calc R such that the trigger value is 9000
+G90 G1 Z{sensors.probes[0].triggerHeight}
+M400
+G4 S1
+set var.readingOffset = sensors.probes[0].value[0] - 9000
+M558.2 K0 S{var.driveCurrent} R{var.readingOffset}
+
+; store the values persistent
+echo >{"0:/sys/meltingplot/z-probe/szp_standard_mode_calibration_warm.g"} "M558.2 K0 S" ^ {var.driveCurrent} ^ " R" ^ {var.readingOffset}
+
+;calibrate touch mode
+M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+
+; find the lowest value which gives readings != 999999
+; start with the standard mode drive current
+;set var.driveCurrent = 15
+while true
+  ; sensors.probes[0].value[0]
+  ; go down to drive height + 20%
+  G90 G1 Z{sensors.probes[0].diveHeights[0]*1.2}
+  M400
+
+  echo "Test SZP drive current: " ^ {var.driveCurrent}
+  M558.2 K0 S{var.driveCurrent} R0
+  M400 ; sbc specific
+  G4 S1
+  ; in touch mode the drive current must give readings from about driveHeight down to 0
+  if sensors.probes[0].value[0] < 999999
+    G90 G1 Z0
+    M400
+    G4 S1
+    if sensors.probes[0].value[0] < 999999
+      break
+
+  set var.driveCurrent = var.driveCurrent + 1
+  
+  if iterations > 5
+    echo "abort! can't find drive current value for touch mode!"
+    M99
+
+; go down to trigger height and calc R such that the trigger value is 9000
+;G90 G1 Z{sensors.probes[0].diveHeights[0]}
+G90 G1 Z0
+M400 ; sbc specific
+G4 S1
+set var.readingOffset = sensors.probes[0].value[0] - 9000
+M558.2 K0 S{var.driveCurrent} R{var.readingOffset}
+G90 G1 Z{sensors.probes[0].diveHeights[0]}
+
+; store the values persistent
+echo >{"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_warm.g"} "M558.2 K0 S" ^ {var.driveCurrent} ^ " R" ^ {var.readingOffset}
+
+;M140 S-273.1 ; disable bed heater
+;M568 P0 A0 ; disable hotend

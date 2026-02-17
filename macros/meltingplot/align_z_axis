@@ -1,0 +1,4 @@
+M98 P"0:/sys/meltingplot/ensure_safety"
+if global.result != 0
+  M99
+M98 P"0:/sys/meltingplot/align_z_axis.g"

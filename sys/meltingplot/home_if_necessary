@@ -1,0 +1,2 @@
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false
+  G28 ; home all axes

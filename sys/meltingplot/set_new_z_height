@@ -1,0 +1,10 @@
+G91                                  ; relative position
+M400                                 ; make sure everything has stopped before we reset the motor currents
+M913 Z40                             ; set motor current to 40%
+G1 H3 Z{(move.axes[2].max)+5} F1250  ; lower z axis
+M400                                 ; make sure everything has stopped before we reset the motor currents
+M913 Z100                            ; motor currents back to normal
+G1 Z-2.5 F960                        ; raise z 2.5mm
+G90                                  ; absolute position
+M208 Z0 S1                           ; overwrite probed z minimum to 0
+M500 P31                             ; store new z height in config-overwrite.g

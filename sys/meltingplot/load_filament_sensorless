@@ -1,0 +1,121 @@
+if global.debug
+  echo "load_filament_sensorless"
+
+M98 P"0:/sys/meltingplot/ensure_safety"
+
+if state.currentTool == -1
+  echo "No tool selected - abort!"
+  M99
+
+if move.axes[2].homed == true
+  G91 G1 Z30 ; raise printbed 30mm
+
+M291 P"Feed new Filament into the PTFE Tube." S2
+
+var tool = 0
+var extruder = tools[var.tool].extruders[0]
+var filament = move.extruders[var.extruder].filament
+
+M83                 ; relative extrusion
+M17 E0              ; activate tool board motor! bug in 3.6.1
+
+if exists(global.ignoreMFMevents)
+  set global.ignoreMFMevents = true
+else
+  global ignoreMFMevents = true
+
+M591 D{var.tool} S0 A0
+M591 D{var.tool} S2 A1 ; enable MFM on all moves
+
+var last_position = sensors.filamentMonitors[var.tool].position
+var last_avg_percantage = sensors.filamentMonitors[var.tool].avgPercentage
+if var.last_avg_percantage == null
+  set var.last_avg_percantage = 0
+
+var drive_filament = 0
+var filament_loaded = false
+
+while true
+  var position = sensors.filamentMonitors[var.tool].position
+  var movment = (var.position - var.last_position) != 0
+
+  if var.movment && var.drive_filament == 0
+    echo "manual feed detected - pos: " ^ var.position ^ " lastPos: " ^ var.last_position
+    set var.drive_filament = 12
+
+  if var.drive_filament > 0
+    G1 E10 F120
+  
+  var avg_percantage = sensors.filamentMonitors[var.tool].avgPercentage
+  if var.avg_percantage == null
+    set var.avg_percantage = 0
+
+  M400 ; sync system
+  G4 P250 ; SBC specific
+
+  if var.drive_filament > 0 && var.avg_percantage > 20
+    set var.filament_loaded = true
+    if var.last_avg_percantage < 20
+      echo "Filament movment by drive detected"
+      G1 E30 F120 ; extrude 15mm calc distance 10mm per drive e.g. 25mm, length from hobb wheel to nozzle 65mm -> 30mm
+      set var.drive_filament = 1 ; extrude 10mm more to check if filament is stuck
+  
+  var last_percentage = sensors.filamentMonitors[var.tool].lastPercentage
+  if var.last_percentage == null
+    set var.last_percentage = 0
+
+  if var.filament_loaded && (var.avg_percantage < 20 || var.last_percentage < 10)
+    echo "Filament stuck! cancle loading"
+    set global.filament_loading_error = true
+    break
+
+  if iterations > 240 ; 60s
+    echo "abort"
+    set global.filament_loading_error = true
+    break 
+
+  if var.drive_filament > 0
+    set var.drive_filament = var.drive_filament - 1
+
+    if var.drive_filament == 0 && var.filament_loaded == false
+      echo "Filament loading failed"
+      M98 P"0:/sys/meltingplot/unload_filament"
+      set global.filament_loading_error = true
+      break
+
+  if var.drive_filament == 0 && var.filament_loaded
+    echo "Filament loaded!"
+    break
+
+  set var.last_position = var.position
+  set var.last_avg_percantage = var.avg_percantage
+
+set global.ignoreMFMevents = false
+M591 D{var.tool} S1 A0
+
+if global.filament_loading_error == false
+  ; calibrate e-steps
+  echo "calibrating e-steps"
+  M98 P"0:/macros/meltingplot/calibrate_e_steps"
+
+  var current_tool = 0
+  var current_filament = move.extruders[var.current_tool].filament
+
+  if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}) == false
+    echo "No non linear extrusion (NLE) calibration found!"
+    if job.file.fileName == null
+      echo "Creating NLE calibration."
+      M98 P"0:/macros/meltingplot/calibrate_nle"
+    else
+      echo "unable to create NLE calibration while printjob is running! Manually run the calibrate_nle macro."
+
+G1 E-12.5 F180      ; retract filament
+M400
+G4 P0               ; wait for moves to finish
+
+if global.filament_loading_error
+  M568 P{var.tool} A0 ; disable heater of tool
+
+M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+
+M291 P"Clean the printbed" S2

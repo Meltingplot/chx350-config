@@ -1,0 +1,13 @@
+if global.machine_mode != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+
+T0 ; select tool
+M291 R"Filament Temperature" P"Please select the Filament Extrusion temperature" S5
+M400
+M109 S{input}
+
+M98 P"0:/sys/meltingplot/unload_filament"   ; unload filament
+
+T-1
+M568 P0 A0

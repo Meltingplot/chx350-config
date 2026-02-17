@@ -1,0 +1,3 @@
+set global.result = 0
+while (sensors.gpIn[2].value == 0 || sensors.gpIn[3].value == 0 || sensors.gpIn[4].value == 0 )
+    M291 P"Please close both doors and press ok!" S2

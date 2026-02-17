@@ -1,0 +1,53 @@
+; Global variables for MeltingPlot system
+
+; activate debug messages
+global debug = true
+
+; result variable for macros
+global result = 0
+
+; filament
+global filament_max_flow_rate = 20
+global filament_loading_error = false
+global mfmbackoff = 3
+global ignoreMFMevents = false
+global lastMFMBackoffCheck = 0
+
+
+; homing and stall detection
+global closed_loop_homing = false
+global ignore_stall_events = false
+global sensorless_z_homing = false
+global z_motor_stall_count = vector(4,0)
+global z_motor_stall_time = 0
+global z_motor_stall_time_max = 5
+
+; machine state
+global machine_mode = "default"
+global daemon_cycle_time = 0
+global potential_unsafe_state = true
+global machine_is_hot = true
+global door_left_open = true
+global door_right_open = true
+global door_left_state_transition = false
+global door_right_state_transition = false
+global door_left_switch_checked = false
+global door_right_switch_checked = false
+global door_ignore_trigger = false
+
+global last_machine_position = vector(4,0)
+global axis_is_moving = vector(4,0)
+global last_extruder_position = vector(2,0)
+global extruder_is_moving = vector(2,0)
+
+; pause and resume
+global auto_resume = false
+global ramp_up_after_pause = true
+global ramp_up_step = 0
+
+; led colors
+global led_color = 0
+global led_colors = {"white", "blue", "green", "yellow", "red"}
+
+; daemon reload flag
+global daemon_reload = false

@@ -1,0 +1,73 @@
+M107                                        ; fan off
+M144 P0 S1                                  ; activate bed 1 heater
+T0                                          ; select tool 0
+
+; currently volumetric extrusion is somehow broken in RRF
+;M200 D[filament_diameter_0] T0 ; set filament diameter for volumetric E
+
+M83                                         ; use relative distances for extrusion
+G90                                         ; use absolute coordinates
+
+set global.door_ignore_trigger = true ; do not pause the print while we check the door switches!
+while ( global.door_left_switch_checked == false || global.door_right_switch_checked == false )
+  if iterations > 5
+    echo "Error: unable to verify the door switches! abort! - Contact the Manufacturer for Assistance!"
+    set global.door_ignore_trigger = false
+    M0
+    M99
+
+  if iterations > 0
+    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ global.door_left_switch_checked ^ "<br>Türstatus rechts: " ^ global.door_right_switch_checked}  R"Türkontrolle" S2
+  else
+    M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
+set global.door_ignore_trigger = false
+
+M116                                        ; wait for all heaters
+
+while global.machine_mode != "automatic"
+  G4 S1 ; wait for automatic mode
+  if iterations > 10
+    echo "Error: machine is not in automatic mode! abort!"
+    M0
+    M99
+
+M400 ; dsf specific
+G4 P500 ; dsf specific - wait for the keepout zone to remove
+
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false            ; check if u is homed
+  M98 P"0:/macros/meltingplot/align_z_axis"
+  G90 G1 Z50
+  G4 S30 ; wait 30 s for heat to warmup the printhead / chamber temp sensor
+  G28 ; G32 is part of homez.g
+else
+  G90 G1 Z50
+  G4 S30 ; wait 30 s for heat to warmup the printhead / chamber temp sensor
+  G32 ; align bed
+
+G29                                         ; create new hight map
+if result != 0 || global.result != 0
+  echo "Warning: G29 failed - repeat"
+  G32
+  G29
+  if result != 0 || global.result != 0
+    echo "Error: G29 failed to create height map"
+    M0
+    M99
+
+G90                                     ; absolute positioning
+G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max-0.5} F60000
+M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
+M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+M98 P"0:/sys/meltingplot/probe_current_positon"
+if global.result != 0
+  M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+  M98 P"0:/sys/meltingplot/probe_current_positon"
+if global.result > 1
+  echo "Error Homing Z - abort!"
+  M18 Z
+  M0
+  M99
+
+M106 S0
+M98 P"0:/sys/meltingplot/prime_nozzle_0"    ; prime nozzle
