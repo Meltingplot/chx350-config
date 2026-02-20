@@ -1,4 +1,5 @@
-echo "probe_current_positon"
+if global.debug
+  echo "probe_current_positon"
 M400 ; SBC mode specific - make sure the current motion has stopped!
 var pos_x = move.axes[0].machinePosition
 var pos_y = move.axes[1].machinePosition
