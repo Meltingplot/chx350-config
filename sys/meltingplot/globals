@@ -9,6 +9,10 @@ global result = 0
 ; filament
 global filament_max_flow_rate = 20
 global filament_loading_error = false
+global deferred_filament_load_t0 = false	
+global deferred_filament_load_t1 = false	
+global deferred_filament_nle_calibration_t0 = false
+global deferred_filament_nle_calibration_t1 = false
 global mfmbackoff = 3
 global ignoreMFMevents = false
 global lastMFMBackoffCheck = 0

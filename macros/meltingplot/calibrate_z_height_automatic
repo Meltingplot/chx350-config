@@ -48,6 +48,10 @@ while true
   echo "Reading: " ^ var.reading
   if var.reading >= 0 && var.reading <= 3
     break
+  elif var.reading >= 3 && var.reading < 3000
+    set var.reading = var.reading / 1000.0
+    echo "Convert to mm: " ^ var.reading
+    break
   else
     M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
   if iterations > 2
@@ -84,7 +88,7 @@ while true
   if sensors.probes[0].value[0] < 999999
     break
   set var.driveCurrent = var.driveCurrent + 1
-  if iterations > 5
+  if iterations > 10
     echo "abort! can't find drive current value!"
     M99
 
@@ -101,6 +105,10 @@ echo >{"0:/sys/meltingplot/z-probe/szp_standard_mode_calibration_cold.g"} "M558.
 ; align print bed for touch mode
 M98 P"0:/sys/bed.g" S1 ; call bed.g without z-probing at the end
 M98 P"0:/sys/bed.g" S1 ; call bed.g without z-probing at the end
+
+if global.result != 0
+  echo "Error: abort - unable to align bed"
+  M99
 
 G90 G1 Z20 F6000
 G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
@@ -130,7 +138,7 @@ while true
 
   set var.driveCurrent = var.driveCurrent + 1
   
-  if iterations > 5
+  if iterations > 10 || var.driveCurrent > 31
     echo "abort! can't find drive current value for touch mode wit"
     M99
 
@@ -188,6 +196,10 @@ while true
   echo "Reading: " ^ var.reading
   if var.reading >= 0 && var.reading <= 3
     break
+  elif var.reading >= 3 && var.reading < 3000
+    set var.reading = var.reading / 1000.0
+    echo "Convert to mm: " ^ var.reading
+    break
   else
     M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
   if iterations > 2
@@ -225,7 +237,7 @@ while true
   if sensors.probes[0].value[0] < 999999
     break
   set var.driveCurrent = var.driveCurrent + 1
-  if iterations > 5
+  if iterations > 10
     echo "abort! can't find drive current value!"
     M99
 
@@ -265,7 +277,7 @@ while true
 
   set var.driveCurrent = var.driveCurrent + 1
   
-  if iterations > 5
+  if iterations > 10 || var.driveCurrent > 31
     echo "abort! can't find drive current value for touch mode!"
     M99
 
@@ -283,3 +295,5 @@ echo >{"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_warm.g"} "M558.2 K
 
 ;M140 S-273.1 ; disable bed heater
 ;M568 P0 A0 ; disable hotend
+
+echo "Finished successful"

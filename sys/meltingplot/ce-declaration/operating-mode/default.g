@@ -6,7 +6,7 @@ M203 X60.00 Y60.00 Z60.00 U60 E60.00                    ; set maximum speeds (mm
 M201 X12.00 Y12.00 Z12.00 U12.00 E12.00                 ; set accelerations (mm/s^2)
 M201.1 X12 Y12 U12 Z12 E12                              ; set homing accelerations (mm/s^2)
 M204 P500 T1000                                         ; Set printing and travel accelerations
-M906 X1400 Y1400 Z500 U1400 E1100                       ; set motor currents (mA) and motor idle factor in per cent
+M906 X1400 Y1400 Z1500 U1400 E1100                      ; set motor currents (mA) and motor idle factor in per cent
 
 M84 S30                                                 ; Set idle timeout
 M917 X{200/move.axes[0].current*100} Y{200/move.axes[1].current*100} U{200/move.axes[3].current*100} ; set idle current to 200mA for X, Y and U
@@ -20,7 +20,7 @@ while iterations < #tools
   M568 P{iterations} A0                                 ; disable hotend
 
 while iterations < #heat.heaters
-  M143 H{iterations} S50 A2 ; do not allow to turn heater on above 50°C
+  M143 H{iterations} S50 A2                             ; do not allow to turn heater on above 50°C
 
 M400 ; DSF specific
 

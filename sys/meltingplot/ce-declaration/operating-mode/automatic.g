@@ -1,6 +1,6 @@
 M566 X720.0 Y720.0 Z72.00 U720.0 E1000.00 P1            ; set maximum instantaneous speed changes (mm/min) and apply jerk on every move
-M203 X60000.00 Y70000.00 Z1800.00 U70000 E3600.00       ; set maximum speeds (mm/min)
-M201 X10000.00 Y20000.00 Z400.00 U20000 E1000.00        ; set accelerations (mm/s^2)
+M203 X50000.00 Y60000.00 Z1800.00 U60000 E3600.00       ; set maximum speeds (mm/min)
+M201 X6000.00 Y6000.00 Z400.00 U6000 E1000.00           ; set accelerations (mm/s^2)
 M201.1 X500 Y500 U500 Z100 E1000                        ; set homing accelerations (mm/s^2)
 M204 P12000 T20000                                      ; Set printing and travel accelerations
 M906 X2500 Y2500 Z1500 U2500 E1100                      ; set motor currents (mA) and motor idle factor in per cent
@@ -11,7 +11,7 @@ M917 Z{350/move.axes[2].current*100}                    ; set idle current to 35
 
 M917 E50                                                ; set idle current to 50% for E
 
-M915 Z S15 F1 R1                                        ; stall detection for high current
+M915 Z S15 F1 R0                                        ; stall detection for high current
 
 M599 Z-1:-1 S0                                          ; clear keepout zone
 M400 ; dsf specific

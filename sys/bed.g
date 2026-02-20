@@ -39,30 +39,36 @@ while true
   G30 P0 X{sensors.probes[0].offsets[0]*2+var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[0]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
   if result != 0
     echo "Warning: G32 - repeat p0"
+    G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
     G30 P0 X{sensors.probes[0].offsets[0]*2+var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[0]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
     if result != 0
       echo "Error: G32 - error!"
       set global.result = result
       M99
     echo "G32: p0 ok"
+  G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
   G30 P1 X{sensors.probes[0].offsets[0]*2+var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[1]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
   if result != 0
     echo "Warning: G32 - repeat p1"
+    G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
     G30 P1 X{sensors.probes[0].offsets[0]*2+var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[1]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
     if result != 0
       echo "Error: G32 - error!"
       set global.result = result
       M99
     echo "G32: p1 ok"
+  G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
   G30 P2 X{move.axes[0].max-sensors.probes[0].offsets[0]*2-var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[2]+var.pos_variation_y} Z-99999               ; probe near a leadscrew, half way along Y axis
   if result != 0
     echo "Warning: G32 - repeat p2"
+    G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
     G30 P2 X{move.axes[0].max-sensors.probes[0].offsets[0]*2-var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[2]+var.pos_variation_y} Z-99999               ; probe near a leadscrew, half way along Y axis
     if result != 0
       echo "Error: G32 - error!"
       set global.result = result
       M99
     echo "G32: p2 ok"
+  G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
   G30 P3 X{move.axes[0].max-sensors.probes[0].offsets[0]*2-var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[3]+var.pos_variation_y} Z-99999 S4            ; probe near sec. leadscrew
   if result != 0
     if iterations > 2
