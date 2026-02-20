@@ -40,18 +40,34 @@ while #boards < 7
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 50 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
 M569.1 P50.0 T3 E6.0:20.0 S200 R160 I200 D0.08 V320 A160000 H0.3
+if result != 0	
+  echo "Error - abort!"	
+  M112
+
 M569 P50.0 D2 S1 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 50 as being in open-loop drive mode (D2) and reversed (S0)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 51 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
 M569.1 P51.0 T3 E6.0:20.0 S200 R160 I200 D0.08 V320 A160000 H0.3
+if result != 0	
+  echo "Error - abort!"	
+  M112
+
 M569 P51.0 D2 S0 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 51 as being in open-loop drive mode (D2) reversed (S1)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 52 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
 M569.1 P52.0 T3 E6.0:20.0 S200 R160 I120 D0.1 V240 A112000 H0.3
+if result != 0	
+  echo "Error - abort!"	
+  M112
+
 M569 P52.0 D2 S0 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 51 as being in open-loop drive mode (D2) reversed (S1)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 53 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
 M569.1 P53.0 T3 E6.0:20.0 S200 R160 I120 D0.1 V240 A112000 H0.3
+if result != 0	
+  echo "Error - abort!"	
+  M112
+
 M569 P53.0 D2 S0 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 51 as being in open-loop drive mode (D2) reversed (S1)
 
 M569 P20.0 S1                                           ; physical drive 20.0 on toolboard goes forward (E0)
@@ -64,7 +80,7 @@ if result != 0
   M112
 M400                                                    ; SBC specific wait
 
-M669 K5 X1:1:0:-1 Y0:1:0:0 Z0:0:1:0 U0:0:0:1 S100 T0.1  ; select CoreIDX mode and enable segmentation
+M669 K5 X1:1:0:-1 Y0:1:0:0 Z0:0:1:0 U0:0:0:1 S10 T0.1   ; select CoreIDX mode and enable segmentation
 
 M400                                                    ; SBC specific wait
 
@@ -74,7 +90,6 @@ M350 X64 Y64 U64 I0                                     ; configure microsteppin
 M400                                                    ; SBC specific wait
 M92 X320 Y320 Z1600 U320 E3200                          ; set steps per mm
 M400                                                    ; SBC specific wait
-;M595 P120                                              ; extend the motion queue
 
 ; General preferences
 G90                                                     ; send absolute coordinates...
@@ -139,7 +154,7 @@ if result != 0
   echo "Error: M558 failed!"
   M112
 M308 A"SZP coil" S4 Y"thermistor" P"60.temp0"           ; thermistor on coil
-G31 K0 Z2 X23.2 Y12.3 P8000                             ; set Z probe trigger value, offset and trigger height
+G31 K0 Z2 X23.2 Y12.3 P9000                             ; set Z probe trigger value, offset and trigger height
 M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
 M557 X{sensors.probes[0].offsets[0],move.axes[0].max-sensors.probes[0].offsets[0]} Y{sensors.probes[0].offsets[1],move.axes[1].max-sensors.probes[0].offsets[1]} P40:21                        ; define mesh grid
 
