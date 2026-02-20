@@ -23,6 +23,7 @@ while ( global.door_left_switch_checked == false || global.door_right_switch_che
 set global.door_ignore_trigger = false
 
 M116                                        ; wait for all heaters
+M98 P"0:/sys/meltingplot/wait_for_heater" H0 ; wait for bed heater to settle
 
 while global.machine_mode != "automatic"
   G4 S1 ; wait for automatic mode

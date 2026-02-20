@@ -1,0 +1,42 @@
+if !exists(param.H)
+  echo "Error: abort - No heater specified"
+  M99
+
+var heater = param.H
+
+var interval = 10                           ; Sekunden zwischen Messungen
+var alpha = 0.3                             ; EMA-Gewichtung Neuwert (30%)
+var slopeThreshold = 0.005                  ; max. Slope pro Sekunde
+var maxAvgPwm = 0.9                         ; maximalwert der als stabiler Zustand gewertet wird.
+var requiredStable = 5                      ; stabile Zyklen in Folge
+var stableCount = 0
+
+var ema = heat.heaters[var.heater].avgPwm   ; EMA initialisieren
+var emaPrev = var.ema                       ; vorheriger EMA-Wert
+
+if global.debug
+  echo "Waiting for temperature of Heater " ^ var.heater ^ " to settle."
+
+; Erstmal ein paar Zyklen den EMA einschwingen lassen
+while iterations < 5
+  G4 S{var.interval}
+  set var.ema = (1 - var.alpha) * var.ema + var.alpha * heat.heaters[var.heater].avgPwm
+
+set var.emaPrev = var.ema
+
+while var.stableCount < var.requiredStable
+  G4 S{var.interval}
+  set var.emaPrev = var.ema
+  set var.ema = 0.7 * var.ema + 0.3 * heat.heaters[var.heater].avgPwm
+
+  var slope = (var.ema - var.emaPrev) / var.interval
+  if global.debug
+    echo "avgPwm: " ^ heat.heaters[var.heater].avgPwm ^ " | EMA: " ^ var.ema ^ " | slope: " ^ var.slope ^ "/s"
+
+  if abs(var.slope) < var.slopeThreshold && var.ema < var.maxAvgPwm
+    set var.stableCount = var.stableCount + 1
+  else
+    set var.stableCount = 0
+
+if global.debug
+  echo "Bed settled – EMA: " ^ var.ema ^ " | avgPwm: " ^ heat.heaters[var.heater].avgPwm
