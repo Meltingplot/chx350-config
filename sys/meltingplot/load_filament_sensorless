@@ -7,8 +7,8 @@ if state.currentTool == -1
   echo "No tool selected - abort!"
   M99
 
-if move.axes[2].homed == true
-  G91 G1 Z30 ; raise printbed 30mm
+if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 5)
+  G90 G1 Z{move.axes[2].max-5} ; raise printbed to the bottom to prevent damage while feeding filament
 
 M291 P"Feed new Filament into the PTFE Tube." S2
 
