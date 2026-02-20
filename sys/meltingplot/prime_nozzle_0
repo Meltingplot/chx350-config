@@ -2,14 +2,14 @@ G90                                                 ; absolute position
 T0                                                  ; select tool 0
 G1 Z20 F60000                                       ; lift z
 G1 U{move.axes[3].max} F60000
-G1 X{move.axes[0].min} Y{move.axes[1].max-10} F60000 ; position nozzle
+G1 X{move.axes[0].min} Y{move.axes[1].min-10} F60000 ; position nozzle
 G1 Z0.500                                           ;
 M116                                                ; wait for extruder temp
 G11                                                 ; unretract if for any reason is retracted
 G1 E5 F120                                          ; extrude 5mm
 G1 F1000                                            ; set feed retracted
-G1 Y{move.axes[1].min+10} E35                       ; extrude 40mm
+G1 Y{move.axes[1].max-10} E35                       ; extrude 40mm
 G10                                                 ; retract
-G1 Y{move.axes[1].min-20} F60000                    ; wipe move
+G1 Y{move.axes[1].max-20} F60000                    ; wipe move
 G92 E0                                              ; set E to Zero
 M400
