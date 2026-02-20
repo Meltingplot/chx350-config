@@ -16,7 +16,7 @@ G90 G1 Z200 F6000
 M400
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 G90 G1 Z20 F6000
-G90 G1 Z{sensors.probes[0].triggerHeight + sensors.probes[0].diveHeights[0] * 1.5} F600 ; drive close to dive height	G90 G1 Z{sensors.probes[0].diveHeights[0]*2} F600 ; drive close to dive height
+G90 G1 Z{sensors.probes[0].triggerHeight + sensors.probes[0].diveHeights[0] * 1.5} F600 ; drive close to dive height
 ; if bed heater is active and above 60 °C - wait a bit for the heat to reach the toolhead	
 if heat.heaters[0].active >= 60 && heat.heaters[0].state == "active" && sensors.analog[4].lastReading <= 40
   G4 S30  ; wait 30 seconds for the heat to reach the toolhead, that the z-probe can work properly
