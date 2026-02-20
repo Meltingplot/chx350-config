@@ -19,7 +19,7 @@ M400
 M558.2 K0 S-1
 if result != 0
   echo "M558.2 - retry"
-  G1 Z{sensors.probes[0].diveHeights[0]} F600 ; drive close to dive height
+  G1 Z{sensors.probes[0].triggerHeight} F600 ; drive close to dive height
   M400
   M558.2 K0 S-1
   if result != 0
