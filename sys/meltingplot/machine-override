@@ -1,4 +1,4 @@
-; Put Machine specific overried in this file, e.g. rotation direction of specific stepper motor
+; Put Machine specific overrides in this file, e.g. rotation direction of specific stepper motor
 ; this files is loaded from config.g
 
 ; enable, if your printer is equippted with an rotary filament monitor
