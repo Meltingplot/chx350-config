@@ -1,4 +1,6 @@
-echo "szp_touch_mode.g"
+if global.debug
+  echo "szp_touch_mode.g"
+
 if sensors.analog[4].lastReading > 40
   M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_warm.g"
 else
