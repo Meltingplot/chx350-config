@@ -56,7 +56,7 @@ if result != 0 || global.result != 0
     M99
 
 G90                                     ; absolute positioning
-G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max-0.5} F60000
+G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
 M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"

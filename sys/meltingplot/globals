@@ -1,7 +1,7 @@
 ; Global variables for MeltingPlot system
 
 ; activate debug messages
-global debug = true
+global debug = false
 
 ; result variable for macros
 global result = 0
@@ -20,6 +20,7 @@ global lastMFMBackoffCheck = 0
 
 ; homing and stall detection
 global closed_loop_homing = false
+
 global ignore_stall_events = false
 global sensorless_z_homing = false
 global z_motor_stall_count = vector(4,0)

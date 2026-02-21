@@ -1,3 +1,4 @@
+;M98 P"0:/sys/meltingplot/check_doors_closed" ; this is moved to calling macro
 if global.debug
   echo "align_z_axis.g"
 

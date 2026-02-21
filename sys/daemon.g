@@ -1,5 +1,3 @@
-var pause_grace_time = 0
-
 while state.status != "halted" && global.daemon_reload == false
   var start_time = state.upTime + state.msUpTime / 1000
 

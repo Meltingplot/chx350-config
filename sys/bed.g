@@ -30,10 +30,13 @@ if global.result != 0
 
 G90                                       ; absolute positioning
 G1 Z20 F6000                              ; lift Z to safe height
+G1 U{move.axes[3].max} F60000             ; move u away
 G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
 
 var pos_variation_x = mod(state.msUpTime,16) ; 0 - 15
 var pos_variation_y = (mod(state.msUpTime,16)+8)-16 ; -8 - +7
+
+set global.result = 0
 
 while true
   G30 P0 X{sensors.probes[0].offsets[0]*2+var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[0]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis

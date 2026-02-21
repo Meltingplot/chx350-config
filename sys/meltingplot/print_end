@@ -5,7 +5,7 @@ M140 S0 R0                                                ; set bed heater to 0Â
 M140 P0 S-273                                             ; disable bed heater
 T-1                                                       ; deselect all tools
 
-; do no run this after mode switch is initialized
+; do not run this after mode switch is initialized
 if global.door_left_switch_checked == true && global.door_right_switch_checked == true
   G90                                                     ; absolute positioning
   if move.axes[2].homed

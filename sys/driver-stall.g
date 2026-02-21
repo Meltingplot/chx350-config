@@ -1,4 +1,5 @@
-echo "driver stall - "^{param.B}^"."^{param.D}^" : "^{param.P}^" ,"^{param.S}
+if global.debug
+  echo "driver stall - "^{param.B}^"."^{param.D}^" : "^{param.P}^" ,"^{param.S}
 
 if param.B == 0 && param.D < 4
   if global.sensorless_z_homing
@@ -14,4 +15,3 @@ if param.B == 0 && param.D < 4
   else
     echo "Z-Motor stall detected! E-Stop!"
     M112
-    
