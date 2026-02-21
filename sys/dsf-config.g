@@ -4,4 +4,4 @@
 
 M586 C'*' ; allow CORS requests from any domain - needed for access through reverse proxy
 
-M98 P"sys/meltingplot/dsf-config-override.g" ; include the machine specific DSF configuration
+M98 P"0:/sys/meltingplot/dsf-config-override.g" ; include the machine specific DSF configuration
