@@ -6,10 +6,17 @@
 M703
 
 var current_tool = 0
-var current_filament = move.extruders[var.current_tool].filament
+var current_extruder = tools[var.current_tool].extruders[0]
+var current_filament = move.extruders[var.current_extruder].filament
+var current_esteps = move.extruders[var.current_extruder].stepsPerMm
+var validValue = 50 * move.extruders[var.current_extruder].microstepping.value
 
 if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"})
   M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"}
+
+if var.newESteps < (var.validValue * 0.8) || var.newESteps > (var.validValue * 1.2)
+  echo "Warning: configured E-Steps of tool " ^ var.current_tool ^ " out of range, please check the configuration. Using Default."
+  M92 E{var.validValue}
 
 if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"})
   M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}
