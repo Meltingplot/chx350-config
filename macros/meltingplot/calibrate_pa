@@ -5,7 +5,7 @@
 
 ; params
 var tool = exists(param.T) ? param.T : 0            ; tool number
-var maxCurrent = exists(param.C) ? param.C : 1600   ; max motor current mA
+var maxCurrent = exists(param.C) ? param.C : 1100   ; max motor current mA
 var startCurrent = exists(param.A) ? param.A : 200  ; start motor current mA
 var stepCurrent = exists(param.S) ? param.S : 50    ; current step size mA
 var extrudeDistance = exists(param.D) ? param.D : 5  ; extrude distance per step mm
