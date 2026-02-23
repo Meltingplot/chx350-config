@@ -22,6 +22,9 @@ if var.current_esteps < (var.validValue * 0.8) || var.current_esteps > (var.vali
 if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"})
   M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}
 
+if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-pa.g"})
+  M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-pa.g"}
+
 ; Wait for set temperatures to be reached
 if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active
   M116 P0                 ; wait for T0 only if we need to heat up

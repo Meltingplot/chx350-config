@@ -1,0 +1,311 @@
+; Cold compression pressure advance calibration
+; Ramps extruder motor current against a cold nozzle plug to measure
+; filament column spring constant, then estimates PA from force-displacement curve.
+; Optional MFI parameter improves estimate by accounting for melt viscosity.
+
+; params
+var tool = exists(param.T) ? param.T : 0            ; tool number
+var maxCurrent = exists(param.C) ? param.C : 1600   ; max motor current mA
+var startCurrent = exists(param.A) ? param.A : 200  ; start motor current mA
+var stepCurrent = exists(param.S) ? param.S : 50    ; current step size mA
+var extrudeDistance = exists(param.D) ? param.D : 5  ; extrude distance per step mm
+var silent = exists(param.Q) ? param.Q : false       ; silent mode
+var mfi = exists(param.M) ? param.M : 0             ; Melt Flow Index (g/10min) from datasheet, 0 = unknown
+
+if var.silent
+  set var.silent = true
+
+; preconditions: filament must be loaded
+if move.extruders[0].filament == null
+  echo "Error: no filament loaded! abort!"
+  M99
+
+; precondition: nozzle must be cold (< 50C) to form plug
+var extruder = tools[var.tool].filamentExtruder
+var currentHeater = tools[var.tool].heaters[0]
+if heat.heaters[var.currentHeater].current > 50
+  echo "Error: nozzle too hot (" ^ {heat.heaters[var.currentHeater].current} ^ "C). Nozzle must be below 50C for cold compression test."
+  if !var.silent
+    M291 P"Nozzle too hot! Cool down below 50C first." S2
+  M99
+
+; store state for restoration
+var previousTool = state.currentTool
+var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance
+var previousMotorCurrent = 1100                      ; default E current from CE declaration
+
+; suppress MFM error events during calibration
+if !exists(global.ignoreMFMevents)
+  global ignoreMFMevents = true
+else
+  set global.ignoreMFMevents = true
+
+; select tool
+T-1
+T{var.tool}
+
+; reset extrusion parameters
+M83                                                  ; relative extrusion
+M107                                                 ; fan off
+M220 S100                                            ; reset speed percentage
+M221 D{var.extruder} S100                            ; reset flow rate
+M572 D{var.extruder} S0                              ; reset pressure advance
+M592 D{var.extruder} A0 B0                           ; reset non-linear extrusion
+
+; enable cold extrusion (nozzle is cold by design)
+M302 P1                                              ; allow cold extrusion
+
+; calculate number of steps in the current ramp
+var stepCount = floor((var.maxCurrent - var.startCurrent) / var.stepCurrent) + 1
+if var.stepCount < 3
+  echo "Error: need at least 3 current steps. Adjust A/C/S parameters."
+  M302 P0 S160 R90                                   ; restore cold extrusion prevention
+  T-1
+  T{var.previousTool}
+  set global.ignoreMFMevents = false
+  M99
+
+; data vectors: current (mA) and displacement (mm) for each step
+var currents = vector(var.stepCount, 0.0)
+var displacements = vector(var.stepCount, 0.0)
+var cumulativeDisplacement = 0.0
+var validSamples = 0
+
+echo "=== Cold Compression PA Calibration ==="
+echo "Filament: " ^ {move.extruders[0].filament}
+echo "Current ramp: " ^ {var.startCurrent} ^ "mA to " ^ {var.maxCurrent} ^ "mA in " ^ {var.stepCurrent} ^ "mA steps (" ^ {var.stepCount} ^ " steps)"
+echo "Extrude distance per step: " ^ {var.extrudeDistance} ^ "mm"
+if var.mfi > 0
+  echo "MFI (datasheet): " ^ {var.mfi} ^ " g/10min"
+
+; === CURRENT RAMP LOOP ===
+while iterations < var.stepCount
+  var current = var.startCurrent + (iterations * var.stepCurrent)
+  set var.currents[iterations] = var.current
+
+  ; set extruder motor current for this step
+  M906 E{var.current}
+  M400
+  G4 P500                                           ; 500ms settle time for current change
+
+  ; reset MFM sensor to get clean position reading
+  M591 D{var.extruder} S0
+  M400
+  G4 S1
+  M591 D{var.extruder} A1 S2 E1
+  M400
+  G4 S1
+
+  ; check MFM reset succeeded
+  if sensors.filamentMonitors[var.extruder].lastPercentage != null
+    echo "Warning: MFM reset failed at step " ^ {iterations} ^ " (" ^ {var.current} ^ "mA)"
+    set var.displacements[iterations] = 0
+    continue
+
+  ; record position before extrusion attempt
+  var posBefore = sensors.filamentMonitors[var.extruder].position
+
+  ; attempt to push filament against cold plug
+  G1 E{var.extrudeDistance} F30                      ; 0.5mm/s — slow push against plug
+  M400
+  G4 S2                                              ; 2s equilibrium settling time
+
+  ; record position after — displacement = actual filament movement through MFM
+  var posAfter = sensors.filamentMonitors[var.extruder].position
+  var displacement = var.posAfter - var.posBefore
+
+  ; clamp negative displacements (noise) to zero
+  if var.displacement < 0
+    set var.displacement = 0
+
+  set var.displacements[iterations] = var.displacement
+  set var.cumulativeDisplacement = var.cumulativeDisplacement + var.displacement
+  set var.validSamples = var.validSamples + 1
+
+  echo "Step " ^ {iterations} ^ ": " ^ {var.current} ^ "mA -> displacement: " ^ {var.displacement} ^ "mm (cumulative: " ^ {var.cumulativeDisplacement} ^ "mm)"
+
+  ; safety: stop if cumulative displacement exceeds 10mm (grinding risk)
+  if var.cumulativeDisplacement > 10
+    echo "Warning: cumulative displacement > 10mm — stopping to prevent grinding"
+    break
+
+; === ANALYSIS ===
+echo ""
+echo "=== Analysis ==="
+echo "Total steps measured: " ^ {var.validSamples}
+echo "Cumulative displacement: " ^ {var.cumulativeDisplacement} ^ "mm"
+
+; find threshold: first step with non-zero displacement (> 0.1mm noise floor)
+var thresholdIndex = -1
+var thresholdCurrent = 0
+var i = 0
+while var.i < var.validSamples
+  if var.displacements[var.i] > 0.1
+    set var.thresholdIndex = var.i
+    set var.thresholdCurrent = var.currents[var.i]
+    break
+  set var.i = var.i + 1
+
+if var.thresholdIndex < 0
+  echo "Error: no measurable displacement detected at any current level."
+  echo "Possible causes: MFM not detecting movement, nozzle not cold enough, or filament too stiff for max current."
+  ; cleanup and exit
+  M302 P0 S160 R90
+  M906 E{var.previousMotorCurrent}
+  M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
+  M98 P"0:/sys/meltingplot/machine-override"
+  T-1
+  T{var.previousTool}
+  set global.ignoreMFMevents = false
+  M99
+
+echo "Drivetrain compliance threshold: " ^ {var.thresholdCurrent} ^ "mA (step " ^ {var.thresholdIndex} ^ ")"
+
+; count compression phase data points (displacement > 0.1mm)
+var compressionPoints = 0
+set var.i = var.thresholdIndex
+while var.i < var.validSamples
+  if var.displacements[var.i] > 0.1
+    set var.compressionPoints = var.compressionPoints + 1
+  set var.i = var.i + 1
+
+echo "Compression phase data points: " ^ {var.compressionPoints}
+
+; === LINEAR REGRESSION on compression phase ===
+; Model: displacement = (1/k) * current + offset
+; Using least-squares: slope = (N*Sxy - Sx*Sy) / (N*Sxx - Sx*Sx)
+
+var N = 0
+var Sx = 0.0                                         ; sum of currents
+var Sy = 0.0                                         ; sum of displacements
+var Sxx = 0.0                                        ; sum of current^2
+var Sxy = 0.0                                        ; sum of current * displacement
+
+set var.i = var.thresholdIndex
+while var.i < var.validSamples
+  if var.displacements[var.i] > 0.1
+    set var.N = var.N + 1
+    set var.Sx = var.Sx + var.currents[var.i]
+    set var.Sy = var.Sy + var.displacements[var.i]
+    set var.Sxx = var.Sxx + pow(var.currents[var.i], 2)
+    set var.Sxy = var.Sxy + var.currents[var.i] * var.displacements[var.i]
+  set var.i = var.i + 1
+
+; need at least 2 points for regression
+if var.N < 2
+  echo "Error: insufficient compression data points (" ^ {var.N} ^ ") for regression. Need >= 2."
+  M302 P0 S160 R90
+  M906 E{var.previousMotorCurrent}
+  M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
+  M98 P"0:/sys/meltingplot/machine-override"
+  T-1
+  T{var.previousTool}
+  set global.ignoreMFMevents = false
+  M99
+
+var denom = var.N * var.Sxx - var.Sx * var.Sx
+if var.denom == 0
+  echo "Error: degenerate regression (all points at same current)."
+  M302 P0 S160 R90
+  M906 E{var.previousMotorCurrent}
+  M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
+  M98 P"0:/sys/meltingplot/machine-override"
+  T-1
+  T{var.previousTool}
+  set global.ignoreMFMevents = false
+  M99
+
+var slope = (var.N * var.Sxy - var.Sx * var.Sy) / var.denom    ; mm/mA = 1/k
+var intercept = (var.Sy - var.slope * var.Sx) / var.N
+
+; spring constant k = 1/slope (mA/mm — force proxy per unit displacement)
+; higher k = stiffer = less PA needed
+if var.slope <= 0
+  echo "Error: non-positive slope (" ^ {var.slope} ^ ") — displacement not increasing with current. Data may be noisy."
+  M302 P0 S160 R90
+  M906 E{var.previousMotorCurrent}
+  M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
+  M98 P"0:/sys/meltingplot/machine-override"
+  T-1
+  T{var.previousTool}
+  set global.ignoreMFMevents = false
+  M99
+
+var springK = 1.0 / var.slope                        ; mA/mm
+
+echo "Linear regression: displacement = " ^ {var.slope} ^ " * current + " ^ {var.intercept}
+echo "Spring constant k = " ^ {var.springK} ^ " mA/mm"
+
+; === PA ESTIMATION ===
+; Tentative lookup model based on spring constant ranges
+; k is in mA/mm — higher = stiffer filament = lower PA
+; These thresholds need empirical calibration on real hardware
+
+var paEstimate = 0.0
+
+if var.mfi > 0
+  ; Combined model: PA = alpha / k + beta / MFI + gamma
+  ; Initial constants (need empirical tuning):
+  ;   alpha = 50.0 (elastic compliance contribution)
+  ;   beta  = 0.5  (viscosity contribution — lower MFI = higher viscosity = more PA)
+  ;   gamma = -0.02 (offset)
+  set var.paEstimate = 50.0 / var.springK + 0.5 / var.mfi - 0.02
+  echo "PA model (k + MFI): 50.0/" ^ {var.springK} ^ " + 0.5/" ^ {var.mfi} ^ " - 0.02 = " ^ {var.paEstimate}
+else
+  ; Spring-constant-only lookup (no MFI available)
+  if var.springK > 2000
+    set var.paEstimate = 0.01                        ; very stiff (carbon fiber composites)
+  elif var.springK > 1000
+    set var.paEstimate = 0.04                        ; stiff (engineering polymers, PA6)
+  elif var.springK > 500
+    set var.paEstimate = 0.07                        ; medium (PLA, PETG)
+  elif var.springK > 200
+    set var.paEstimate = 0.12                        ; soft (ABS, ASA)
+  else
+    set var.paEstimate = 0.18                        ; very soft (TPU, PVB)
+  echo "PA model (k-only lookup): k=" ^ {var.springK} ^ " -> PA=" ^ {var.paEstimate}
+
+; clamp to valid PA range
+if var.paEstimate < 0.005
+  set var.paEstimate = 0.005
+if var.paEstimate > 0.25
+  set var.paEstimate = 0.25
+
+echo ""
+echo "=== Result ==="
+echo "Estimated PA (M572 S): " ^ {var.paEstimate}
+echo "Spring constant k: " ^ {var.springK} ^ " mA/mm"
+echo "Threshold current: " ^ {var.thresholdCurrent} ^ " mA"
+if var.mfi > 0
+  echo "MFI: " ^ {var.mfi} ^ " g/10min"
+
+; === WRITE config-auto-pa.g ===
+var filamentName = move.extruders[0].filament
+echo >{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; cold compression PA calibration"
+echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; spring constant k=" ^ {var.springK} ^ " mA/mm, threshold current: " ^ {var.thresholdCurrent} ^ "mA"
+echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; regression: displacement = " ^ {var.slope} ^ " * current + " ^ {var.intercept}
+if var.mfi > 0
+  echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; MFI: " ^ {var.mfi} ^ " g/10min"
+echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; data points: " ^ {var.compressionPoints} ^ ", cumulative displacement: " ^ {var.cumulativeDisplacement} ^ "mm"
+echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "M572 D0 S" ^ {var.paEstimate}
+
+echo "Saved to: 0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"
+
+; === RAW DATA DUMP for external analysis ===
+echo ""
+echo "=== Raw Data (current_mA, displacement_mm) ==="
+set var.i = 0
+while var.i < var.validSamples
+  echo {var.currents[var.i]} ^ "," ^ {var.displacements[var.i]}
+  set var.i = var.i + 1
+
+; === CLEANUP ===
+M302 P0 S160 R90                                    ; restore cold extrusion prevention
+M906 E{var.previousMotorCurrent}                     ; restore motor current
+M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; restore MFM config
+M98 P"0:/sys/meltingplot/machine-override"           ; reload machine overrides
+
+T-1
+T{var.previousTool}
+
+set global.ignoreMFMevents = false
