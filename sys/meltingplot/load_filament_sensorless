@@ -108,13 +108,13 @@ if global.filament_loading_error == false
   var current_tool = 0
   var current_filament = move.extruders[var.current_tool].filament
 
-  if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}) == false
+  if global.result != 0 && fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}) == false
     echo "No non linear extrusion (NLE) calibration found!"
     if job.file.fileName == null
       echo "Creating NLE calibration."
       M98 P"0:/macros/meltingplot/calibrate_nle"
     else
-      echo "unable to create NLE calibration while printjob is running! Manually run the calibrate_nle macro."
+      echo "Warning: unable to create NLE calibration while printjob is running! Manually run the calibrate_nle macro."
 
 G1 E-12.5 F180      ; retract filament
 M400

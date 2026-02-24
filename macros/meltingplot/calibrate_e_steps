@@ -12,8 +12,11 @@ var minDistance = 15                                ; minimum distance to extrud
 if var.silent
   set var.silent = true;
 
+set global.result = 0
+
 if move.extruders[0].filament == null
   echo "Error: no filament loaded! abort!"
+  set global.result = 1
   M99
 
 var previousTool = state.currentTool                ; store current tool
@@ -49,21 +52,23 @@ while var.count > 0
   M400                                                ; wait for moves to finish
   G4 S1
   if sensors.filamentMonitors[var.extruder].lastPercentage != null
-    echo "unable to reset filament monitor. Please check the configuration of the filament monitor."
+    echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
+    set global.result = 2
     M99                                               ; exit macro
   G1 E{var.minDistance} F{var.baseSpeed}              ; extrude the specified distance to ensure the sensor is calibrated
   M400                                                ; wait for moves to finish
   G4 S1
   if sensors.filamentMonitors[var.extruder].lastPercentage == null
-    echo "unable to calibrate filament monitor. Please check the configuration of the filament monitor."
+    echo "Error: unable to calibrate filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to calibrate filament monitor. Please check the configuration of the filament monitor." S2
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
+    set global.result = 3
     M99                                               ; exit macro
     
   G1 E{var.calDistance} F{var.baseSpeed}              ; extrude the specified distance
@@ -72,11 +77,12 @@ while var.count > 0
   var flow = sensors.filamentMonitors[var.extruder].avgPercentage / 100.0
 
   if var.flow < (1 - var.tolerance) || var.flow > (1 + var.tolerance)
-    echo "Extrusion too low or too high, please check the filament and extruder."
+    echo "Error: Extrusion too low or too high, please check the filament and extruder. Flow: " ^ var.flow
     if !var.silent
       M291 P"Extrusion too low or to hight, please check the filament and extruder." S2
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
+    set global.result = 4
     M99                                               ; exit macro
 
   set var.avgFlow = var.avgFlow + var.flow
@@ -90,11 +96,12 @@ var newESteps = {floor(move.extruders[var.extruder].stepsPerMm / var.avgFlow)}
 echo "New E-Steps: " ^ var.newESteps
 
 if var.newESteps < (var.validValue * 0.9) || var.newESteps > (var.validValue * 1.1)
-  echo "New E-Steps out of range, please check the configuration."
+  echo "Error: new E-Steps out of range, please check the configuration."
   if !var.silent
     M291 P"New E-Steps out of range, please check the configuration." S2
   T-1                                               ; deselect tool
   T{var.previousTool}                               ; select previous tool
+  set global.result = 5
   M99                                               ; exit macro
 
 echo >{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-esteps.g"} "; calibration temperature: " ^ var.currentTemp
