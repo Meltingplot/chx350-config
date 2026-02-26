@@ -19,6 +19,8 @@ var extrusionSpeeds = vector(var.sampleCount, 1.0) ; // create vector for extrus
 if var.silent
   set var.silent = true;
 
+set global.result = 0
+
 var previousTool = state.currentTool                ; store current tool
 
 var extruder = tools[var.tool].filamentExtruder     ; get current extruder
@@ -59,12 +61,13 @@ while iterations < #var.sampleValues / 2
   M400                                                ; wait for moves to finish
   G4 S1
   if sensors.filamentMonitors[var.extruder].lastPercentage != null
-    echo "unable to reset filament monitor. Please check the configuration of the filament monitor."
+    echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 1
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
   G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{(move.axes[3].max)} F2000 ; move to center of bed
@@ -75,10 +78,11 @@ while iterations < #var.sampleValues / 2
   M400                                                ; wait for moves to finish
   G4 S1
   if sensors.filamentMonitors[var.extruder].avgPercentage == null
-    echo "Unvalid values from Filament Monitor received - Check the filament path!"
+    echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 2
     M99                                               ; exit macro
   var correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
   var previous_index = max(1,iterations-1) ; previous sample index
@@ -90,7 +94,7 @@ while iterations < #var.sampleValues / 2
     set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
     break
   elif var.correction >= 1.3
-    echo "Error to high - try to recover NLE calibration - possible grinding or other issues"
+    echo "Warning: Value to high - try to recover NLE calibration - possible grinding or other issues"
     ; try to recover
     M591 D{var.extruder} S0                             ; disable filament monitoring
     M400                                                ; wait for moves to finish
@@ -106,8 +110,9 @@ while iterations < #var.sampleValues / 2
       set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
-    echo "Error to high - stop NLE calibration - possible grinding or other issues"
+    echo "Error: Value to high - stop NLE calibration - possible grinding or other issues"
     set global.ignoreMFMevents = false
+    set global.result = 3
     M99
   
   echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2]} ^ " mm/s, Correction factor: " ^ {var.correction}
@@ -124,12 +129,13 @@ while iterations < #var.sampleValues / 2
   G4 S1
   var previous_index = max(1,iterations-1) ; previous sample index
   if sensors.filamentMonitors[var.extruder].lastPercentage != null
-    echo "unable to reset filament monitor. Please check the configuration of the filament monitor."
+    echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 4
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
   G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} F2000 ; move to center of bed
@@ -140,10 +146,11 @@ while iterations < #var.sampleValues / 2
   M400                                                ; wait for moves to finish
   G4 S1
   if sensors.filamentMonitors[var.extruder].avgPercentage == null
-    echo "Unvalid values from Filament Monitor received - Check the filament path!"
+    echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 5
     M99                                               ; exit macro
   var correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
   if var.correction < 1
@@ -153,7 +160,7 @@ while iterations < #var.sampleValues / 2
     set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
     break
   elif var.correction >= 1.3 && iterations > 0
-    echo "Error to high - try to recover NLE calibration - possible grinding or other issues"
+    echo "Warning: Value (" ^ var.correction ^ ") to high - try to recover NLE calibration - possible grinding or other issues"
     ; try to recover
     M591 D{var.extruder} S0                             ; disable filament monitoring
     M400                                                ; wait for moves to finish
@@ -169,14 +176,16 @@ while iterations < #var.sampleValues / 2
       set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
-    echo "Error to high - stop NLE calibration - possible grinding or other issues"
+    echo "Error: Value (" ^ var.correction ^ ") to high - stop NLE calibration - possible grinding or other issues"
+    set global.result = 6
     M99
   elif var.correction >= 1.3 && iterations == 0
     echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2+1]} ^ " mm/s, Correction factor: " ^ {var.correction}
-    echo "NLE calibration failed! - check the filament and extruder"
+    echo "Error: NLE calibration failed! - check the filament and extruder"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 7
     M99
   echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2+1]} ^ " mm/s, Correction factor: " ^ {var.correction}
   set var.sampleValues[iterations*2+1] = var.correction ; calculate sample value based on correction factor
@@ -231,10 +240,11 @@ while true
   echo "Delta: " ^ {var.Delta} ^ ", A: " ^ {var.nle_a} ^ ", B: " ^ {var.nle_b}
 
   if isnan(var.nle_a) || isnan(var.nle_b)
-    echo "Unvalid values for A and B - abort!"
+    echo "Error: Unvalid values for A and B - abort!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.ignoreMFMevents = false
+    set global.result = 8
     M99                                               ; exit macro
 
   M592 D{var.extruder} A{max(0,var.nle_a)} B{var.nle_b}                          ; activate non linear extrusion
@@ -248,12 +258,13 @@ while true
     M400                                                ; wait for moves to finish
     G4 S1
     if sensors.filamentMonitors[var.extruder].lastPercentage != null
-      echo "unable to reset filament monitor. Please check the configuration of the filament monitor."
+      echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
       if !var.silent
         M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
       T-1                                               ; deselect tool
       T{var.previousTool}                               ; select previous tool
       set global.ignoreMFMevents = false
+      set global.result = 9
       M99                                               ; exit macro
     G90                                                ; use absolute coordinates
     G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} F2000 ; move to center of bed
@@ -266,10 +277,11 @@ while true
     G4 S1
     var diffPos = move.extruders[0].position - var.startPos 
     if sensors.filamentMonitors[var.extruder].avgPercentage == null
-      echo "Unvalid values from Filament Monitor received - Check the filament path!"
+      echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
       T-1                                               ; deselect tool
       T{var.previousTool}                               ; select previous tool
       set global.ignoreMFMevents = false
+      set global.result = 10
       M99                                               ; exit macro
     var correction = (100 * var.calDistance) / (sensors.filamentMonitors[var.extruder].avgPercentage * var.diffPos);
     ;var correction = 100 / ( ( (sensors.filamentMonitors[var.extruder].avgPercentage / 100 ) * var.diffPos) / var.calDistance * 100)
@@ -280,10 +292,11 @@ while true
       echo "Correction to high " ^ {var.correction} ^ " - stop at iteration " ^ {var.x-1} ^ " with correction factor: " ^ {var.sampleValues[(var.x-1)*2]}
       set var.sampleCount = max(var.x * 2 - 2, 0) ; set sample count to current iteration to stop further iterations
       if var.sampleCount == 0
-        echo "No more samples to remove - failed NLE calibration"
+        echo "Error: No more samples to remove - failed NLE calibration"
         T-1                                               ; deselect tool
         T{var.previousTool}                               ; select previous tool
         set global.ignoreMFMevents = false
+        set global.result = 11
         M99
       set var.failed = true ; set failed flag to true
       break
