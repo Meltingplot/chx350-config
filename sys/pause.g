@@ -7,10 +7,13 @@ if state.currentTool != -1
   G1 E-12.5 F2000                                                     ; retract 12.5mm of filament
 
 if move.axes[2].homed
-  G91 G1 Z5 F1200                                                     ; lift Z relative to current position
+  var amount = 5
+  if move.axes[2].machinePosition < 200
+    set var.amount = 200
+  G91 G1 Z{var.amount} F1200                                                     ; lift Z relative to current position
 
 M106 S0                                                             ; disable fan
 T-1 P0                                                              ; put current tool into standby without toolchange
 
 G90
-G53 G1 X{(move.axes[0].max-5)} Y{(move.axes[1].min)} U{(move.axes[3].max)} F60000      ; go to X=max Y=max
+G53 G1 X{(move.axes[0].max-5)} Y{(move.axes[1].min)} U{(move.axes[3].max)} F60000
