@@ -70,7 +70,7 @@ while iterations < #var.sampleValues / 2
     set global.result = 1
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
-  G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{(move.axes[3].max)} F2000 ; move to center of bed
+  G1 X{move.axes[0].max/2} Y0 U{(move.axes[3].max)} F2000 ; move to center of bed
   M400                                               ; wait for moves to finish
   G4 S1
   G91                                               ; use relative coordinates
@@ -138,7 +138,7 @@ while iterations < #var.sampleValues / 2
     set global.result = 4
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
-  G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} F2000 ; move to center of bed
+  G1 X{move.axes[0].max/2} F2000 ; move to center of bed
   M400                                               ; wait for moves to finish
   G4 S1
   G91                                               ; use relative coordinates
@@ -192,6 +192,9 @@ while iterations < #var.sampleValues / 2
 
 while iterations < var.sampleCount
   echo "Sample " ^ {iterations} ^ ": Extrusion speed: " ^ {var.extrusionSpeeds[iterations]} ^ " mm/s, Correction factor: " ^ {var.sampleValues[iterations]}
+
+G1 E{var.sampleDistance} F60 ; slowly extrude material to free the extruder
+M400
 
 var nle_a = 0.0
 var nle_b = 0.0
@@ -267,7 +270,7 @@ while true
       set global.result = 9
       M99                                               ; exit macro
     G90                                                ; use absolute coordinates
-    G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} F2000 ; move to center of bed
+    G1 X{move.axes[0].max/2} F2000 ; move to center of bed
     M400                                               ; wait for moves to finish
     G4 S1
     G91                                               ; use relative coordinates
