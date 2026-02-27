@@ -67,6 +67,8 @@ if global.result != 0
   M98 P"0:/sys/meltingplot/probe_current_positon"
 if global.result > 1
   echo "Error: Homing Z - abort!"
+  G1 Z{move.axes[2].max} F6000 ; drive Z up to prevent damage
+  M400
   M18 Z
   M0
   M99
