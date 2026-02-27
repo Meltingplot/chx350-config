@@ -7,29 +7,29 @@
 
 if global.machine_is_hot && (global.machine_mode != "automatic" || (exists(param.E) && param.E == 1))
   if global.led_color != 4
-    M150 E{0} U255 R00 B00 P255 S32 ; set to color red
+    M150 E{0} U255 R00 B00 P255 S33 ; set to color red
     set global.led_color = 4
   M99
 
 if (exists(param.I) && param.I == 0 ) || (exists(param.C) && param.C == "white" )
   if global.led_color != 0
-    M150 E{0} U240 R240 B255 P255 S32 ; set to color white
+    M150 E{0} U200 R200 B200 P255 S33 ; set to color white
     set global.led_color = 0
 elif (exists(param.I) && param.I == 1 ) || (exists(param.C) && param.C == "blue" )
   if global.led_color != 1
-    M150 E{0} U0 R154 B215 P255 S32 ; set it to meltingplot blue
+    M150 E{0} U0 R154 B215 P255 S33 ; set it to meltingplot blue
     set global.led_color = 1
 elif (exists(param.I) && param.I == 2 ) || (exists(param.C) && param.C == "green" )
   if global.led_color != 2
-    M150 E{0} U40 R200 B40 P255 S32 ; set to color green
+    M150 E{0} U40 R200 B40 P255 S33 ; set to color green
     set global.led_color = 2
 
 ; check yellow (warnung) und red(gefahr) seperate
 if (exists(param.I) && param.I == 3 ) || (exists(param.C) && param.C == "yellow" )
   if global.led_color != 3
-    M150 E{0} U255 R50 B0 P255 S32 ; set it to yellow
+    M150 E{0} U255 R50 B0 P255 S33 ; set it to yellow
     set global.led_color = 3
 if (exists(param.I) && param.I == 4 ) || (exists(param.C) && param.C == "red" )
   if global.led_color != 4
-    M150 E{0} U255 R00 B00 P255 S32 ; set to color red
+    M150 E{0} U255 R00 B00 P255 S33 ; set to color red
     set global.led_color = 4
