@@ -193,7 +193,7 @@ while iterations < #var.sampleValues / 2
 while iterations < var.sampleCount
   echo "Sample " ^ {iterations} ^ ": Extrusion speed: " ^ {var.extrusionSpeeds[iterations]} ^ " mm/s, Correction factor: " ^ {var.sampleValues[iterations]}
 
-G1 E{var.sampleDistance} F60 ; slowly extrude material to free the extruder
+G1 E{var.calDistance} F60 ; slowly extrude material to free the extruder
 M400
 
 var nle_a = 0.0
