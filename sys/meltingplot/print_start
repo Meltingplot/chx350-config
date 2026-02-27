@@ -62,10 +62,11 @@ G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
 M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
 M98 P"0:/sys/meltingplot/probe_current_positon"
 if global.result != 0
+  G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
   M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
   M98 P"0:/sys/meltingplot/probe_current_positon"
 if global.result > 1
-  echo "Error Homing Z - abort!"
+  echo "Error: Homing Z - abort!"
   M18 Z
   M0
   M99
