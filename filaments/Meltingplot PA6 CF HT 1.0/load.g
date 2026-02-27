@@ -3,7 +3,7 @@ if global.debug
 
 ; Load T0
 
-G10 P0 S275 R160                                    ; set temperatures
+G10 P0 S285 R160                                    ; set temperatures
 T0                                                  ; select tool
 M116 P0                                             ; wait for temp
 if state.currentTool == 0
