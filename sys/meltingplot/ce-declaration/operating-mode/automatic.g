@@ -20,5 +20,9 @@ M302 P0 S160 R90                                        ; allow extrusion again
 M143 H0 S120 A0 ; revert to default value
 M143 H1 S300 A0 ; revert to default value
 
+if state.currentTool != -1
+  ; run /filaments/<filament name>/config.g
+  M703
+
 set global.machine_mode = "automatic"
 echo "Automatic Mode"
