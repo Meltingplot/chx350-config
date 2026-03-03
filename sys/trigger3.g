@@ -10,7 +10,7 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
     while global.machine_mode != "automatic" && iterations < 5
       M400
       G4 P500
-    if global.machine_mode == "automatic"
+    if global.machine_mode == "automatic" && (heat.heaters[0].state != "active" || heat.heaters[1].state != "active")
       M291 R"Heizelemente" P"Druckbettheizung und Hotend aktivieren?" K{"Ja","Nein"} S4 T30 F1 J2
       if (input == 0)
         M144 P0 S1 ; activate bed heater
