@@ -106,7 +106,7 @@ while iterations < #var.sampleValues / 2
     M400                                                ; wait for moves to finish
     G4 S1
     set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
-    if var.correction > 1.11 && var.correction < 1.3
+    if var.correction > 0.98 && var.correction < 1.3
       set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
@@ -119,6 +119,9 @@ while iterations < #var.sampleValues / 2
   set var.sampleValues[iterations*2] = var.correction ; calculate sample value based on correction factor
   set var.extrusionSpeeds[iterations*2+1] = var.extrusionSpeeds[iterations*2] * var.correction ; adjust extrusion speed based on correction factor
 
+G1 E-5 F120
+G1 E20 F60
+M400
 ; repeat the sample collection - this time with calculated extrusion speeds
 while iterations < #var.sampleValues / 2
   M591 D{var.extruder} S0                             ; disable filament monitoring
@@ -162,6 +165,9 @@ while iterations < #var.sampleValues / 2
   elif var.correction >= 1.3 && iterations > 0
     echo "Warning: Value (" ^ var.correction ^ ") to high - try to recover NLE calibration - possible grinding or other issues"
     ; try to recover
+    G1 E-5 F120
+    G1 E20 F60
+    M400
     M591 D{var.extruder} S0                             ; disable filament monitoring
     M400                                                ; wait for moves to finish
     G4 S1
@@ -172,7 +178,7 @@ while iterations < #var.sampleValues / 2
     M400                                                ; wait for moves to finish
     G4 S1
     set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
-    if var.correction > 1.11 && var.correction < 1.3
+    if var.correction > 0.98 && var.correction < 1.3
       set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
