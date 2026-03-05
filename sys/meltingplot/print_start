@@ -55,23 +55,5 @@ if result != 0 || global.result != 0
     M0
     M99
 
-G90                                     ; absolute positioning
-G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
-M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
-M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
-M98 P"0:/sys/meltingplot/probe_current_positon"
-if global.result != 0
-  G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
-  M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-  M98 P"0:/sys/meltingplot/probe_current_positon"
-if global.result > 1
-  echo "Error: Homing Z - abort!"
-  G1 Z{move.axes[2].max} F6000 ; drive Z up to prevent damage
-  M400
-  M18 Z
-  M0
-  M99
-
 M106 S0
 M98 P"0:/sys/meltingplot/prime_nozzle_0"    ; prime nozzle
