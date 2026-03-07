@@ -17,6 +17,17 @@ global mfmbackoff = 3
 global ignoreMFMevents = false
 global lastMFMBackoffCheck = 0
 
+; MFM false positive detection
+global mfm_last_pct = null                ; previous lastPercentage reading
+global mfm_swing_count = 0                ; large-swing count in current window
+global mfm_window_start = 0               ; window start time (upTime)
+global mfm_suppress_until = 0             ; upTime until which to suppress (0 = not active)
+global mfm_last_check_time = 0.0          ; last MFM check timestamp (sub-second precision)
+; heater PWM tracking for extrusion verification
+global mfm_pwm_min = 0.0                  ; min avgPwm in current window
+global mfm_pwm_max = 0.0                  ; max avgPwm in current window
+global mfm_pwm_range = 0.0                ; computed range from last complete window
+global mfm_pwm_window_start = 0           ; PWM window start time
 
 ; homing and stall detection
 global closed_loop_homing = false

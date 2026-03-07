@@ -18,5 +18,17 @@ M106 S0                                                   ; Turn off fans
 M400
 G4 S1                                                     ; wait for motion system to complete moves, otherwise we will get an default mode error
 
+; Reset MFM false positive detection state
+set global.mfm_suppress_until = 0
+set global.mfm_swing_count = 0
+set global.mfm_last_pct = null
+set global.mfm_window_start = 0
+set global.mfm_pwm_min = 0.0
+set global.mfm_pwm_max = 0.0
+set global.mfm_pwm_range = 0.0
+set global.mfm_pwm_window_start = 0
+set global.mfmbackoff = 3
+set global.ignoreMFMevents = false
+
 set global.door_left_switch_checked = false               ; set to unsafe state
 set global.door_right_switch_checked = false              ; set to unsafe state

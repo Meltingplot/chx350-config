@@ -1,0 +1,53 @@
+; MFM auto-recovery: verify filament movement after suspected error
+; Sets global.result: 0 = false positive (resume), 1+ = real issue (pause)
+
+echo "MFM: starting auto-recovery..."
+
+set global.ignoreMFMevents = true          ; prevent re-triggering during test
+M400                                       ; wait for queued moves
+
+; Heater PWM fast-fail: if PWM below threshold — definitely not extruding — real issue
+; (above threshold is inconclusive due to boost modes)
+if heat.heaters[1].avgPwm < 0.15
+  echo "MFM: heater PWM low (" ^ {heat.heaters[1].avgPwm} ^ ") — confirms real issue"
+  set global.result = 2
+  set global.ignoreMFMevents = false
+  M99
+
+; PWM above threshold (inconclusive) — do test extrusion to verify
+G91                                        ; relative mode
+G1 E-5 F120                               ; retract
+M400
+G4 S3                                      ; settle
+
+; Reset MFM for clean measurement
+var extruder = 0
+M591 D{var.extruder} S0                    ; disable
+M400
+G4 S1
+M591 D{var.extruder} A1 S2 E1             ; enable in measurement mode
+M400
+G4 S1
+
+; Test extrusion (also re-primes after retract)
+G1 E10 F60                                ; 10mm at 1mm/s = 2 MFM samples
+M400
+G4 S1
+
+; Evaluate
+if sensors.filamentMonitors[var.extruder].avgPercentage == null
+  echo "MFM: auto-recovery — no sensor data"
+  set global.result = 1
+elif sensors.filamentMonitors[var.extruder].avgPercentage > 50
+  echo "MFM: auto-recovery OK (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — false positive"
+  set global.result = 0
+  set global.mfm_suppress_until = state.upTime + 600
+  M220 S100
+  set global.mfmbackoff = 3
+else
+  echo "MFM: auto-recovery FAILED (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — real issue"
+  set global.result = 2
+
+; Restore normal MFM config
+M98 P"0:/sys/meltingplot/machine-override"
+set global.ignoreMFMevents = false

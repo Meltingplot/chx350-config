@@ -57,8 +57,73 @@ while state.status != "halted" && global.daemon_reload == false
     M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
     M112
 
-  if exists(global.mfmbackoff) && exists(global.lastMFMBackoffCheck) && global.mfmbackoff < 3 && ((global.lastMFMBackoffCheck + 60) < state.upTime)
-    M220 S{50+25*global.mfmbackoff} ; increase speed in steps of 50 + 0*25, 1*25 2*25
+  ; === MFM monitoring — only during printing (calibration uses ignoreMFMevents separately) ===
+  if state.status == "processing" && job.file.fileName != null
+
+    ; Suppression expiry
+    if global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until
+      set global.mfm_suppress_until = 0
+      set global.ignoreMFMevents = false
+      set global.mfm_swing_count = 0
+      set global.mfm_last_pct = null
+      echo "MFM: suppression period ended, monitoring resumed"
+
+    ; --- Heater PWM tracking (10s rolling window) ---
+    if (state.upTime - global.mfm_pwm_window_start) > 10
+      ; Window complete — save range and reset
+      set global.mfm_pwm_range = global.mfm_pwm_max - global.mfm_pwm_min
+      set global.mfm_pwm_min = heat.heaters[1].avgPwm
+      set global.mfm_pwm_max = heat.heaters[1].avgPwm
+      set global.mfm_pwm_window_start = state.upTime
+    else
+      set global.mfm_pwm_min = min(global.mfm_pwm_min, heat.heaters[1].avgPwm)
+      set global.mfm_pwm_max = max(global.mfm_pwm_max, heat.heaters[1].avgPwm)
+
+    ; --- Fixed 500ms time base for MFM checks ---
+    var now = state.upTime + state.msUpTime / 1000
+    if (var.now - global.mfm_last_check_time) >= 0.5
+      set global.mfm_last_check_time = var.now
+
+      if global.mfm_suppress_until == 0
+        var currentPct = sensors.filamentMonitors[0].lastPercentage
+        if var.currentPct != null && var.currentPct != global.mfm_last_pct
+          ; New MFM reading arrived
+
+          ; Backoff fast-track recovery
+          if global.mfmbackoff < 3
+            if var.currentPct > 80 && var.currentPct < 150
+              echo "MFM: reading normal (" ^ {var.currentPct} ^ "%) — fast-track speed restore"
+              M220 S100
+              set global.mfmbackoff = 3
+              set global.lastMFMBackoffCheck = state.upTime
+            elif (global.lastMFMBackoffCheck + 60) < state.upTime
+              ; Slow recovery: step up speed every 60s (existing fallback)
+              M220 S{50+25*global.mfmbackoff}
+              set global.mfmbackoff = global.mfmbackoff + 1
+              set global.lastMFMBackoffCheck = state.upTime
+
+          ; Oscillation detection (swing-based)
+          if global.mfm_last_pct != null
+            var swing = abs(var.currentPct - global.mfm_last_pct)
+            if var.swing >= 80
+              echo "MFM: large swing (" ^ {global.mfm_last_pct} ^ "% → " ^ {var.currentPct} ^ "%)"
+              if (state.upTime - global.mfm_window_start) > 300
+                set global.mfm_swing_count = 0
+                set global.mfm_window_start = state.upTime
+              set global.mfm_swing_count = global.mfm_swing_count + 1
+              if global.mfm_swing_count >= 2
+                echo "MFM: oscillation detected — suppressing for 10 min"
+                set global.mfm_suppress_until = state.upTime + 600
+                set global.ignoreMFMevents = true
+                set global.mfm_swing_count = 0
+                M220 S100
+                set global.mfmbackoff = 3
+
+          set global.mfm_last_pct = var.currentPct
+
+  elif global.mfmbackoff < 3 && ((global.lastMFMBackoffCheck + 60) < state.upTime)
+    ; Fallback: original slow recovery when not printing (e.g. recovering after print state change)
+    M220 S{50+25*global.mfmbackoff}
     set global.mfmbackoff = global.mfmbackoff + 1
     set global.lastMFMBackoffCheck = state.upTime
 
