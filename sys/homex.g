@@ -1,3 +1,5 @@
+set global.result = 0
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
 var motor_currents = {move.axes[0].percentCurrent, move.axes[1].percentCurrent, move.axes[3].percentCurrent}

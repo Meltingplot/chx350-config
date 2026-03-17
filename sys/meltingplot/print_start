@@ -40,10 +40,22 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].ho
   G90 G1 Z50
   G4 S30 ; wait 30 s for heat to warmup the printhead / chamber temp sensor
   G28 ; G32 is part of homez.g
+  if result != 0 || global.result != 0
+    echo "Warning: G28 failed - repeat"
+    G28
+    if result != 0 || global.result != 0
+      echo "Error: G28 failed - abort!"
+      M99
 else
   G90 G1 Z50
   G4 S30 ; wait 30 s for heat to warmup the printhead / chamber temp sensor
   G32 ; align bed
+  if result != 0 || global.result != 0
+    echo "Warning: G32 failed - run G28"
+    G28
+    if result != 0 || global.result != 0
+      echo "Error: G28 failed - abort!"
+      M99
 
 G29                                         ; create new hight map
 if result != 0 || global.result != 0

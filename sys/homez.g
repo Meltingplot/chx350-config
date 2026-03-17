@@ -1,3 +1,5 @@
+set global.result = 0
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
 ; this check is used when called from homeall.g

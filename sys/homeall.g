@@ -1,6 +1,9 @@
 ; homeall.g
 ; called to home all axes
 ;
+
+set global.result = 0
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
 M98 P"0:/sys/meltingplot/align_z_axis.g"

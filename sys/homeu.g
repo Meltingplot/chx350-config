@@ -12,6 +12,8 @@
 ; So we set H to 185 to be sure of hitting the endstop
 ; 1 rev is 40mm so 185 steps/sec is 185/200 * 40 = 37 mm/sec * 60 = 2220 mm/min
 
+set global.result = 0
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
 var motor_current = move.axes[3].percentCurrent

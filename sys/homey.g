@@ -2,6 +2,8 @@
 ; called to home the Y axis
 ;
 
+set global.result = 0
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
 var motor_current = move.axes[1].percentCurrent
