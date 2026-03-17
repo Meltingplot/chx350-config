@@ -5,7 +5,7 @@ M98 P"0:/sys/meltingplot/globals"                       ; Load Global Variables
 M98 P"0:/sys/meltingplot/ce-declaration/e-stop.g"
 
 ; Led
-M950 E0 C"led" Q3000000 T1 U33 ; create ARGB leds in waterpump and hood
+M950 E0 C"led" Q3000000 T1 U60 ; create ARGB leds in waterpump and hood
 M98 P"0:/sys/meltingplot/set_led_color" C"yellow"
 
 ; Network Ethernet
