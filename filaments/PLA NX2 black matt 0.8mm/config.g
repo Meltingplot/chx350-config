@@ -1,6 +1,6 @@
 M207 S0.4 R0.0 F1250 T1250 Z0.4          ; retraction
 M572 D0 S0.0155                          ; pressure advance
-M309 P0 S0.03 T6 A0                    ; heater feed forward
+M309 P0 S0.03 T0 A0                    ; heater feed forward
 
 set global.filament_max_flow_rate = 35
 
