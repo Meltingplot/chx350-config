@@ -1,13 +1,24 @@
+var last_axis_motion_time = vector(4, 0)
+var last_extruder_motion_time = vector(2, 0)
+
 while state.status != "halted" && global.daemon_reload == false
-  var start_time = state.upTime + state.msUpTime / 1000
+  var now = state.upTime + state.msUpTime / 1000
 
   while iterations < #global.axis_is_moving
     var diff = global.last_machine_position[iterations] - move.axes[iterations].machinePosition
-    set global.axis_is_moving[iterations] = var.diff
+    if var.diff != 0
+      set global.axis_is_moving[iterations] = var.diff
+      set var.last_axis_motion_time[iterations] = var.now
+    elif (var.now - var.last_axis_motion_time[iterations]) >= 0.25
+      set global.axis_is_moving[iterations] = 0
 
   while iterations < #move.extruders
     var diff = global.last_extruder_position[iterations] - move.extruders[iterations].position
-    set global.extruder_is_moving[iterations] = var.diff
+    if var.diff != 0
+      set global.extruder_is_moving[iterations] = var.diff
+      set var.last_extruder_motion_time[iterations] = var.now
+    elif (var.now - var.last_extruder_motion_time[iterations]) >= 0.25
+      set global.extruder_is_moving[iterations] = 0
 
   if sensors.gpIn[2].value == 0
     if global.door_left_open == false
@@ -80,7 +91,6 @@ while state.status != "halted" && global.daemon_reload == false
       set global.mfm_pwm_max = max(global.mfm_pwm_max, heat.heaters[1].avgPwm)
 
     ; --- Fixed 500ms time base for MFM checks ---
-    var now = state.upTime + state.msUpTime / 1000
     if (var.now - global.mfm_last_check_time) >= 0.5
       set global.mfm_last_check_time = var.now
 
@@ -156,7 +166,7 @@ while state.status != "halted" && global.daemon_reload == false
   while iterations < #global.last_machine_position
     set global.last_machine_position[iterations] = move.axes[iterations].machinePosition
 
-  set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.start_time
+  set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100 ; wait 100ms
 
 if global.debug
