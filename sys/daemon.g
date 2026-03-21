@@ -133,8 +133,8 @@ while state.status != "halted" && global.daemon_reload == false
               elif global.mfm_swing_count >= 2
                 ; Tier 2: sustained oscillation — long suppression
                 if global.debug
-                  echo "MFM: oscillation detected — suppressing for 10 min"
-                set global.mfm_suppress_until = state.upTime + 600
+                  echo "MFM: oscillation detected — suppressing for 60s"
+                set global.mfm_suppress_until = state.upTime + 60
                 set global.ignoreMFMevents = true
                 set global.mfm_swing_count = 0
                 M220 S100
