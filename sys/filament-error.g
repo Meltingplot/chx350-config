@@ -53,10 +53,15 @@ if param.P == 5
         M92 E{move.extruders[0].stepsPerMm-0.5}
         echo "E-Steps: " ^ {move.extruders[0].stepsPerMm} ^ ""
     else
-        echo "Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."
-        M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
-        G11 ; unretract
-        M25 ; pause print
+        if exists(global.mfm_swing_count) && global.mfm_swing_count > 0
+            echo "MFM: P=5 suppressed — likely rebound from large swing (count=" ^ global.mfm_swing_count ^ ")"
+            M220 S100
+            set global.mfmbackoff = 3
+        else
+            echo "Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."
+            M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
+            G11 ; unretract
+            M25 ; pause print
         
     M99 ; leave macro
 

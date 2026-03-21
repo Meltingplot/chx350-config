@@ -75,7 +75,6 @@ while state.status != "halted" && global.daemon_reload == false
     if global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until
       set global.mfm_suppress_until = 0
       set global.ignoreMFMevents = false
-      set global.mfm_swing_count = 0
       set global.mfm_last_pct = null
       echo "MFM: suppression period ended, monitoring resumed"
 
@@ -114,14 +113,22 @@ while state.status != "halted" && global.daemon_reload == false
 
           ; Oscillation detection (swing-based)
           if global.mfm_last_pct != null
+            ; Reset swing count if window has expired
+            if (state.upTime - global.mfm_window_start) > 300
+              set global.mfm_swing_count = 0
+              set global.mfm_window_start = state.upTime
             var swing = abs(var.currentPct - global.mfm_last_pct)
             if var.swing >= 80
               echo "MFM: large swing (" ^ {global.mfm_last_pct} ^ "% → " ^ {var.currentPct} ^ "%)"
-              if (state.upTime - global.mfm_window_start) > 300
-                set global.mfm_swing_count = 0
-                set global.mfm_window_start = state.upTime
               set global.mfm_swing_count = global.mfm_swing_count + 1
-              if global.mfm_swing_count >= 2
+              if global.mfm_swing_count == 1
+                ; Tier 1: brief suppression to cover measurement accumulation artifact
+                set global.mfm_suppress_until = state.upTime + 15
+                set global.ignoreMFMevents = true
+                M220 S100
+                set global.mfmbackoff = 3
+              elif global.mfm_swing_count >= 2
+                ; Tier 2: sustained oscillation — long suppression
                 echo "MFM: oscillation detected — suppressing for 10 min"
                 set global.mfm_suppress_until = state.upTime + 600
                 set global.ignoreMFMevents = true
