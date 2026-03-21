@@ -2,8 +2,8 @@ M566 X720.0 Y720.0 Z72.00 U720.0 E1000.00 P1            ; set maximum instantane
 M203 X50000.00 Y60000.00 Z1800.00 U60000 E3600.00       ; set maximum speeds (mm/min)
 M201 X6000.00 Y6000.00 Z400.00 U6000 E1000.00           ; set accelerations (mm/s^2)
 M201.1 X500 Y500 U500 Z100 E1000                        ; set homing accelerations (mm/s^2)
-M204 P12000 T20000                                      ; Set printing and travel accelerations
-M906 X2500 Y2500 Z1500 U2500 E1300                      ; set motor currents (mA) and motor idle factor in per cent
+M204 P4000 T6000                                        ; Set printing and travel accelerations
+M906 X2500 Y2500 Z1500 U2500 E1400                      ; set motor currents (mA) and motor idle factor in per cent
 M84 S30                                                 ; Set idle timeout
 
 M917 X{200/move.axes[0].current*100} Y{200/move.axes[1].current*100} U{200/move.axes[3].current*100} ; set idle current to 200mA for X, Y and U
