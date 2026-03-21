@@ -1,0 +1,10 @@
+; Apply current babystepping to szp_touch_z_offset permanently
+; Positive babystep = nozzle away from bed → make H more negative
+; Negative babystep = nozzle closer to bed → make H less negative
+if move.axes[2].babystep == 0
+  M291 P"No babystepping to apply" S1 T3
+  M99
+var babystep = move.axes[2].babystep
+set global.szp_touch_z_offset = global.szp_touch_z_offset - var.babystep
+M290 R0 S0                               ; clear babystepping
+M291 P{"Applied " ^ var.babystep ^ "mm babystep. New offset: " ^ global.szp_touch_z_offset ^ "mm"} S1 T5

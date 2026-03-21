@@ -37,6 +37,7 @@ global sensorless_z_homing = false
 global z_motor_stall_count = vector(4,0)
 global z_motor_stall_time = 0
 global z_motor_stall_time_max = 5
+global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)
 
 ; machine state
 global machine_mode = "default"
