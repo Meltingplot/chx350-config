@@ -76,7 +76,8 @@ while state.status != "halted" && global.daemon_reload == false
       set global.mfm_suppress_until = 0
       set global.ignoreMFMevents = false
       set global.mfm_last_pct = null
-      echo "MFM: suppression period ended, monitoring resumed"
+      if global.debug
+        echo "MFM: suppression period ended, monitoring resumed"
 
     ; --- Heater PWM tracking (10s rolling window) ---
     if (state.upTime - global.mfm_pwm_window_start) > 10
@@ -101,7 +102,8 @@ while state.status != "halted" && global.daemon_reload == false
           ; Backoff fast-track recovery
           if global.mfmbackoff < 3
             if var.currentPct > 80 && var.currentPct < 150
-              echo "MFM: reading normal (" ^ {var.currentPct} ^ "%) — fast-track speed restore"
+              if global.debug
+                echo "MFM: reading normal (" ^ {var.currentPct} ^ "%) — fast-track speed restore"
               M220 S100
               set global.mfmbackoff = 3
               set global.lastMFMBackoffCheck = state.upTime
@@ -119,7 +121,8 @@ while state.status != "halted" && global.daemon_reload == false
               set global.mfm_window_start = state.upTime
             var swing = abs(var.currentPct - global.mfm_last_pct)
             if var.swing >= 80
-              echo "MFM: large swing (" ^ {global.mfm_last_pct} ^ "% → " ^ {var.currentPct} ^ "%)"
+              if global.debug
+                echo "MFM: large swing (" ^ {global.mfm_last_pct} ^ "% → " ^ {var.currentPct} ^ "%)"
               set global.mfm_swing_count = global.mfm_swing_count + 1
               if global.mfm_swing_count == 1
                 ; Tier 1: brief suppression to cover measurement accumulation artifact
@@ -129,7 +132,8 @@ while state.status != "halted" && global.daemon_reload == false
                 set global.mfmbackoff = 3
               elif global.mfm_swing_count >= 2
                 ; Tier 2: sustained oscillation — long suppression
-                echo "MFM: oscillation detected — suppressing for 10 min"
+                if global.debug
+                  echo "MFM: oscillation detected — suppressing for 10 min"
                 set global.mfm_suppress_until = state.upTime + 600
                 set global.ignoreMFMevents = true
                 set global.mfm_swing_count = 0

@@ -17,7 +17,8 @@ if !exists(global.lastMFMBackoffCheck)
   global lastMFMBackoffCheck = state.upTime
 
 if param.P == 2 || param.P == 6
-    echo "Filament Sensor Error: " ^ param.P ^ "  sensor : " ^ param.D ^ " - continue printing"
+    if global.debug
+      echo "MFM: sensor error P=" ^ param.P ^ " (sensor " ^ param.D ^ ") — continuing"
     M99
 
 if param.P == 4
@@ -25,7 +26,8 @@ if param.P == 4
         M92 E{move.extruders[0].stepsPerMm+0.5}
         echo "E-Steps: " ^ {move.extruders[0].stepsPerMm} ^ ""
     else
-        echo "Filament Sensor " ^ param.D ^ ": Too little Filament movement - Possible Reasons: Filament empty, grinding or clogged nozzle."
+        if global.debug
+          echo "MFM: P=4 too little movement (sensor " ^ param.D ^ ")"
         
         set global.lastMFMBackoffCheck = state.upTime
 
@@ -44,7 +46,8 @@ if param.P == 4
         else
             M220 S{20*global.mfmbackoff} ; reduce speed in steps 3*20=60% 2*20=40% 1*20=20%
             set global.mfmbackoff = global.mfmbackoff - 1
-            echo "Filament Sensor Backoffcounter: " ^ global.mfmbackoff ^ ""
+            if global.debug
+              echo "MFM: backoff counter " ^ global.mfmbackoff
         
     M99 ; leave macro
 
@@ -54,11 +57,13 @@ if param.P == 5
         echo "E-Steps: " ^ {move.extruders[0].stepsPerMm} ^ ""
     else
         if exists(global.mfm_swing_count) && global.mfm_swing_count > 0
-            echo "MFM: P=5 suppressed — likely rebound from large swing (count=" ^ global.mfm_swing_count ^ ")"
+            if global.debug
+              echo "MFM: P=5 suppressed — rebound from large swing (count=" ^ global.mfm_swing_count ^ ")"
             M220 S100
             set global.mfmbackoff = 3
         else
-            echo "Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."
+            if global.debug
+              echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
             M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
             G11 ; unretract
             M25 ; pause print
