@@ -64,9 +64,15 @@ if param.P == 5
         else
             if global.debug
               echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
-            M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
-            G11 ; unretract
-            M25 ; pause print
+            ; Auto-recovery: verify filament before pausing
+            set global.result = 0
+            M98 P"0:/sys/meltingplot/mfm_auto_recovery"
+            if global.result != 0
+              ; Recovery failed — real issue, pause for customer
+              M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
+              G11 ; unretract
+              M25 ; pause print
+            ; else: false positive confirmed, print continues
         
     M99 ; leave macro
 
