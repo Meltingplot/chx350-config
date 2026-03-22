@@ -68,6 +68,14 @@ while state.status != "halted" && global.daemon_reload == false
     M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
     M112
 
+  ; === MFM auto-resume — deferred from filament-error.g ===
+  ; Placed before MFM monitoring: when paused the "processing" block is skipped anyway,
+  ; so M24 blocking here does not waste daemon cycle time for active printing.
+  if global.auto_resume && state.status == "paused"
+    set global.auto_resume = false
+    echo "MFM: auto-resuming after false positive recovery"
+    M24
+
   ; === MFM monitoring — only during printing (calibration uses ignoreMFMevents separately) ===
   if state.status == "processing" && job.file.fileName != null
 
