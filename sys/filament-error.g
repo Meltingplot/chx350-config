@@ -22,18 +22,10 @@ if param.P == 2 || param.P == 6
     M99
 
 if param.P == 4
-    if exists(global.mfmcalibration) && global.mfmcalibration == true
-        M92 E{move.extruders[0].stepsPerMm+0.5}
-        echo "E-Steps: " ^ {move.extruders[0].stepsPerMm} ^ ""
-        M99
     if global.debug
       echo "MFM: P=4 too little movement (sensor " ^ param.D ^ ")"
 
 if param.P == 5
-    if exists(global.mfmcalibration) && global.mfmcalibration == true
-        M92 E{move.extruders[0].stepsPerMm-0.5}
-        echo "E-Steps: " ^ {move.extruders[0].stepsPerMm} ^ ""
-        M99
     if exists(global.mfm_swing_count) && global.mfm_swing_count > 0
         if global.debug
           echo "MFM: P=5 suppressed — rebound from large swing (count=" ^ global.mfm_swing_count ^ ")"
