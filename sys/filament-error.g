@@ -64,15 +64,26 @@ if param.P == 5
         else
             if global.debug
               echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
-            ; Auto-recovery: verify filament before pausing
-            set global.result = 0
-            M98 P"0:/sys/meltingplot/mfm_auto_recovery"
-            if global.result != 0
-              ; Recovery failed — real issue, pause for customer
-              M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
-              G11 ; unretract
-              M25 ; pause print
-            ; else: false positive confirmed, print continues
+
+            set global.lastMFMBackoffCheck = state.upTime
+
+            if global.mfmbackoff == 0
+                set global.mfmbackoff = 3
+                M220 S100 ; revert speed change to 100%
+                ; Auto-recovery: verify filament before pausing
+                set global.result = 0
+                M98 P"0:/sys/meltingplot/mfm_auto_recovery"
+                if global.result != 0
+                  ; Recovery failed — real issue, pause for customer
+                  M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
+                  G11 ; unretract
+                  M25 ; pause print
+                ; else: false positive confirmed, print continues
+            else
+                M220 S{20*global.mfmbackoff} ; reduce speed in steps 3*20=60% 2*20=40% 1*20=20%
+                set global.mfmbackoff = global.mfmbackoff - 1
+                if global.debug
+                  echo "MFM: P=5 backoff counter " ^ global.mfmbackoff
         
     M99 ; leave macro
 
