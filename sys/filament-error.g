@@ -64,36 +64,9 @@ if param.P == 4 || param.P == 5
           M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
         M99
 
-    ; False positive confirmed — resume inline
-    ; Re-activate heater (pause.g set standby via T-1 P0)
-    M568 P0 A2
-    M106 R1                              ; restore fan to pre-pause state
-    G90
-    G1 R1 X0 Y0 U0 F60000              ; pre-position while heater warms up
-
+    ; False positive confirmed — resume (resume.g handles heater, fan, positioning, doors)
     if global.debug
-      echo "MFM: false positive — re-heating and pre-positioning for auto-resume"
-
-    ; Wait for heater to reach active temp (with timeout and door checks)
-    var deadline = state.upTime + 600    ; 10 min timeout
-    while heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active
-      if iterations > 6000
-        break
-      if state.upTime >= var.deadline
-        M291 P"Auto-resume timed out after 10 minutes. Check filament and resume manually." S1 T0
-        M99
-      if global.door_left_open || global.door_right_open
-        M291 P"Auto-resume cancelled — door was opened. Resume manually when ready." S1 T0
-        M99
-      G4 P100                            ; poll every 100ms
-
-    ; Final door check before resuming
-    if global.door_left_open || global.door_right_open
-      M291 P"Auto-resume cancelled — door was opened. Resume manually when ready." S1 T0
-      M99
-
-    if global.debug
-      echo "MFM: auto-resuming after false positive recovery"
+      echo "MFM: false positive — auto-resuming"
     M24
     M99
 
