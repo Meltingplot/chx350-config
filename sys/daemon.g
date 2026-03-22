@@ -72,14 +72,20 @@ while state.status != "halted" && global.daemon_reload == false
   ; Actively bring the printer into a resumable state so M24 never blocks:
   ;   - Re-activate heater (pause.g sets standby via T-1 P0)
   ;   - Re-enable part fan
+  ;   - Pre-position printhead to pre-pause XY/U (while heater warms)
   ;   - Only call M24 once heater is at temp and doors are OK
   if global.auto_resume && state.status == "paused"
     ; Re-activate tool 0 heater without tool change (no tpre/tpost blocking)
     if heat.heaters[tools[0].heaters[0]].state != "active"
       M568 P0 A2           ; switch heater from standby to active
       M106 R1              ; restore fan to last state
+      ; Move printhead back to pre-pause XY/U while heater warms up
+      ; G1 is queued (returns immediately, does not block daemon loop)
+      ; Z stays at elevated pause position — resume.g handles the Z approach
+      G90
+      G1 R1 X0 Y0 U0 F60000
       if global.debug
-        echo "MFM: pre-heating for auto-resume"
+        echo "MFM: pre-heating and pre-positioning for auto-resume"
     elif global.door_left_switch_checked && global.door_right_switch_checked && !global.door_left_open && !global.door_right_open && heat.heaters[tools[0].heaters[0]].current >= heat.heaters[tools[0].heaters[0]].active
       ; All conditions met — resume won't block
       set global.auto_resume = false
