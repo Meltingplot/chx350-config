@@ -68,6 +68,45 @@ while state.status != "halted" && global.daemon_reload == false
     M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
     M112
 
+  ; === MFM auto-resume — deferred from filament-error.g ===
+  ; Actively bring the printer into a resumable state so M24 never blocks:
+  ;   - Re-activate heater (pause.g sets standby via T-1 P0)
+  ;   - Re-enable part fan
+  ;   - Pre-position printhead to pre-pause XY/U (while heater warms)
+  ;   - Only call M24 once heater is at temp and doors are OK
+  ;   - Cancel if 10 min timeout expires or a door is opened
+  if global.auto_resume && state.status == "paused"
+    ; Cancel auto-resume if timeout expired or a door was opened
+    if state.upTime >= global.auto_resume_deadline
+      set global.auto_resume = false
+      if global.debug
+        echo "MFM: auto-resume cancelled — 10 min timeout expired"
+      M291 P"Auto-resume timed out after 10 minutes. Check filament and resume manually." S1 T0
+    elif global.door_left_open || global.door_right_open
+      set global.auto_resume = false
+      if global.debug
+        echo "MFM: auto-resume cancelled — door opened"
+      M291 P"Auto-resume cancelled — door was opened. Resume manually when ready." S1 T0
+    ; Re-activate tool 0 heater without tool change (no tpre/tpost blocking)
+    elif heat.heaters[tools[0].heaters[0]].state != "active"
+      M568 P0 A2           ; switch heater from standby to active
+      M106 R1              ; restore fan to last state
+      ; Move printhead back to pre-pause XY/U while heater warms up
+      ; G1 is queued (returns immediately, does not block daemon loop)
+      ; Z stays at elevated pause position — resume.g handles the Z approach
+      G90
+      G1 R1 X0 Y0 U0 F60000
+      if global.debug
+        echo "MFM: pre-heating and pre-positioning for auto-resume"
+    elif global.door_left_switch_checked && global.door_right_switch_checked && !global.door_left_open && !global.door_right_open && heat.heaters[tools[0].heaters[0]].current >= heat.heaters[tools[0].heaters[0]].active
+      ; All conditions met — resume won't block
+      set global.auto_resume = false
+      if global.debug
+        echo "MFM: auto-resuming after false positive recovery"
+      M24
+    elif global.debug
+      echo "MFM: auto-resume waiting — doors or heater not ready"
+
   ; === MFM monitoring — only during printing (calibration uses ignoreMFMevents separately) ===
   if state.status == "processing" && job.file.fileName != null
 

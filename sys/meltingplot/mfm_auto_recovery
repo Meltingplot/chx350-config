@@ -1,5 +1,6 @@
 ; MFM auto-recovery: verify filament movement after suspected error
-; Sets global.result: 0 = false positive (resume), 1+ = real issue (pause)
+; Called AFTER print is paused (pause.g has retracted and parked)
+; Sets global.result: 0 = false positive (resume), 1+ = real issue (stay paused)
 
 echo "MFM: starting auto-recovery..."
 
@@ -15,13 +16,14 @@ if heat.heaters[1].avgPwm < 0.15
   M99
 
 ; PWM above threshold (inconclusive) — do test extrusion to verify
-G91                                        ; relative mode
-G1 E-5 F120                               ; retract
+; Print is already paused (retracted and parked by pause.g)
+G90                                        ; absolute mode
+G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400
-G4 S3                                      ; settle
 
 ; Reset MFM for clean measurement
 var extruder = 0
+M83                                        ; relative extrusion
 M591 D{var.extruder} S0                    ; disable
 M400
 G4 S1
@@ -29,7 +31,7 @@ M591 D{var.extruder} A1 S2 E1             ; enable in measurement mode
 M400
 G4 S1
 
-; Test extrusion (also re-primes after retract)
+; Test extrusion
 G1 E10 F60                                ; 10mm at 1mm/s = 2 MFM samples
 M400
 G4 S1
@@ -47,6 +49,15 @@ elif sensors.filamentMonitors[var.extruder].avgPercentage > 50
 else
   echo "MFM: auto-recovery FAILED (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — real issue"
   set global.result = 2
+
+; Retract test extrusion so filament state matches what resume.g expects
+G1 E-10 F120
+M400
+
+; Clean nozzle after test extrusion
+G90                                        ; absolute mode
+M400
+M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 
 ; Restore normal MFM config
 M98 P"0:/sys/meltingplot/machine-override"
