@@ -69,12 +69,19 @@ while state.status != "halted" && global.daemon_reload == false
     M112
 
   ; === MFM auto-resume — deferred from filament-error.g ===
-  ; Placed before MFM monitoring: when paused the "processing" block is skipped anyway,
-  ; so M24 blocking here does not waste daemon cycle time for active printing.
+  ; Pre-check all conditions that resume.g requires so M24 never blocks the daemon:
+  ;   1. state is actually paused (M24 is valid)
+  ;   2. door switches have been exercised (ensure_safety won't prompt)
+  ;   3. doors are closed (check_doors_closed won't prompt)
+  ;   4. hotend is at or above active temp (M116 won't wait)
+  ; If any condition is unmet we skip and retry next cycle.
   if global.auto_resume && state.status == "paused"
-    set global.auto_resume = false
-    echo "MFM: auto-resuming after false positive recovery"
-    M24
+    if global.door_left_switch_checked && global.door_right_switch_checked && !global.door_left_open && !global.door_right_open && heat.heaters[tools[0].heaters[0]].current >= heat.heaters[tools[0].heaters[0]].active
+      set global.auto_resume = false
+      echo "MFM: auto-resuming after false positive recovery"
+      M24
+    elif global.debug
+      echo "MFM: auto-resume waiting — doors or heater not ready"
 
   ; === MFM monitoring — only during printing (calibration uses ignoreMFMevents separately) ===
   if state.status == "processing" && job.file.fileName != null
