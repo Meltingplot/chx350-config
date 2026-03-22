@@ -69,16 +69,22 @@ while state.status != "halted" && global.daemon_reload == false
     M112
 
   ; === MFM auto-resume — deferred from filament-error.g ===
-  ; Pre-check all conditions that resume.g requires so M24 never blocks the daemon:
-  ;   1. state is actually paused (M24 is valid)
-  ;   2. door switches have been exercised (ensure_safety won't prompt)
-  ;   3. doors are closed (check_doors_closed won't prompt)
-  ;   4. hotend is at or above active temp (M116 won't wait)
-  ; If any condition is unmet we skip and retry next cycle.
+  ; Actively bring the printer into a resumable state so M24 never blocks:
+  ;   - Re-activate heater (pause.g sets standby via T-1 P0)
+  ;   - Re-enable part fan
+  ;   - Only call M24 once heater is at temp and doors are OK
   if global.auto_resume && state.status == "paused"
-    if global.door_left_switch_checked && global.door_right_switch_checked && !global.door_left_open && !global.door_right_open && heat.heaters[tools[0].heaters[0]].current >= heat.heaters[tools[0].heaters[0]].active
+    ; Re-activate tool 0 heater without tool change (no tpre/tpost blocking)
+    if heat.heaters[tools[0].heaters[0]].state != "active"
+      M568 P0 A2           ; switch heater from standby to active
+      M106 R1              ; restore fan to last state
+      if global.debug
+        echo "MFM: pre-heating for auto-resume"
+    elif global.door_left_switch_checked && global.door_right_switch_checked && !global.door_left_open && !global.door_right_open && heat.heaters[tools[0].heaters[0]].current >= heat.heaters[tools[0].heaters[0]].active
+      ; All conditions met — resume won't block
       set global.auto_resume = false
-      echo "MFM: auto-resuming after false positive recovery"
+      if global.debug
+        echo "MFM: auto-resuming after false positive recovery"
       M24
     elif global.debug
       echo "MFM: auto-resume waiting — doors or heater not ready"
