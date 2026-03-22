@@ -20,8 +20,19 @@ G1 E-5 F120                               ; retract
 M400
 G4 S3                                      ; settle
 
+; Save position and move to X min before test extrusion to protect the part
+G90                                        ; absolute mode
+M400
+var save_x = move.axes[0].machinePosition
+var save_y = move.axes[1].machinePosition
+var save_z = move.axes[2].machinePosition
+
+G1 X{move.axes[0].min} F60000             ; move to X min
+M400
+
 ; Reset MFM for clean measurement
 var extruder = 0
+G91                                        ; relative mode for extrusion
 M591 D{var.extruder} S0                    ; disable
 M400
 G4 S1
@@ -48,18 +59,12 @@ else
   echo "MFM: auto-recovery FAILED (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — real issue"
   set global.result = 2
 
-; Move to X min and clean nozzle after test extrusion
+; Clean nozzle after test extrusion
 G90                                        ; absolute mode
-M400
-var save_x = move.axes[0].machinePosition
-var save_y = move.axes[1].machinePosition
-var save_z = move.axes[2].machinePosition
-
-G1 X{move.axes[0].min} F60000             ; move to X min
 M400
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 
-; Return to pre-cleaning position
+; Return to pre-recovery position
 G53 G1 X{var.save_x} Y{var.save_y} F60000
 G53 G1 Z{var.save_z} F60000
 M400
