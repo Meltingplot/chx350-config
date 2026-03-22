@@ -58,8 +58,6 @@ global last_extruder_position = vector(2,0)
 global extruder_is_moving = vector(2,0)
 
 ; pause and resume
-global auto_resume = false
-global auto_resume_deadline = 0
 global ramp_up_after_pause = true
 global ramp_up_step = 0
 

@@ -1,5 +1,5 @@
 ; MFM auto-recovery: verify filament movement after suspected error
-; Called AFTER print is paused (pause.g has retracted and parked)
+; Called with tool already selected; caller is responsible for tool select/deselect
 ; Sets global.result: 0 = false positive (resume), 1+ = real issue (stay paused)
 
 echo "MFM: starting auto-recovery..."
@@ -16,7 +16,6 @@ if heat.heaters[1].avgPwm < 0.15
   M99
 
 ; PWM above threshold (inconclusive) — do test extrusion to verify
-; Print is already paused (retracted and parked by pause.g)
 G90                                        ; absolute mode
 G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400
