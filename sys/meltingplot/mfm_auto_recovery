@@ -1,5 +1,5 @@
 ; MFM auto-recovery: verify filament movement after suspected error
-; Called AFTER print is paused (pause.g has retracted and parked)
+; Called with tool already selected; caller is responsible for tool select/deselect
 ; Sets global.result: 0 = false positive (resume), 1+ = real issue (stay paused)
 
 echo "MFM: starting auto-recovery..."
@@ -16,9 +16,6 @@ if heat.heaters[1].avgPwm < 0.15
   M99
 
 ; PWM above threshold (inconclusive) — do test extrusion to verify
-; Print is already paused (retracted and parked by pause.g)
-; Re-select tool for test extrusion (pause.g deselects via T-1 P0)
-T R1 P0                                   ; restore last tool without tpre/tpost
 G90                                        ; absolute mode
 G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400
@@ -60,9 +57,6 @@ M400
 G90                                        ; absolute mode
 M400
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-
-; Deselect tool so resume.g can re-select via T R1
-T-1 P0
 
 ; Restore normal MFM config
 M98 P"0:/sys/meltingplot/machine-override"

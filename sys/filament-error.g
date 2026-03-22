@@ -52,19 +52,24 @@ if param.P == 4 || param.P == 5
     M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)
     M400                                 ; wait for pause.g to complete
 
+    ; Re-select tool for auto-recovery (pause.g deselects via T-1 P0)
+    T R1 P0                                ; restore last tool without tpre/tpost
+
     ; Auto-recovery: verify filament while paused
     set global.result = 0
     M98 P"0:/sys/meltingplot/mfm_auto_recovery"
 
     if global.result != 0
-        ; Recovery failed — real issue, stay paused for operator
+        ; Recovery failed — deselect tool so resume.g can re-select, stay paused for operator
+        T-1 P0
         if param.P == 4
           M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed. Check filament and resume."} S1 T0
         else
           M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
         M99
 
-    ; False positive confirmed — resume (resume.g handles heater, fan, positioning, doors)
+    ; False positive confirmed — deselect tool so resume.g can re-select via T R1
+    T-1 P0
     if global.debug
       echo "MFM: false positive — auto-resuming"
     M24
