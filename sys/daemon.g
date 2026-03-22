@@ -74,9 +74,21 @@ while state.status != "halted" && global.daemon_reload == false
   ;   - Re-enable part fan
   ;   - Pre-position printhead to pre-pause XY/U (while heater warms)
   ;   - Only call M24 once heater is at temp and doors are OK
+  ;   - Cancel if 10 min timeout expires or a door is opened
   if global.auto_resume && state.status == "paused"
+    ; Cancel auto-resume if timeout expired or a door was opened
+    if state.upTime >= global.auto_resume_deadline
+      set global.auto_resume = false
+      if global.debug
+        echo "MFM: auto-resume cancelled — 10 min timeout expired"
+      M291 P"Auto-resume timed out after 10 minutes. Check filament and resume manually." S1 T0
+    elif global.door_left_open || global.door_right_open
+      set global.auto_resume = false
+      if global.debug
+        echo "MFM: auto-resume cancelled — door opened"
+      M291 P"Auto-resume cancelled — door was opened. Resume manually when ready." S1 T0
     ; Re-activate tool 0 heater without tool change (no tpre/tpost blocking)
-    if heat.heaters[tools[0].heaters[0]].state != "active"
+    elif heat.heaters[tools[0].heaters[0]].state != "active"
       M568 P0 A2           ; switch heater from standby to active
       M106 R1              ; restore fan to last state
       ; Move printhead back to pre-pause XY/U while heater warms up

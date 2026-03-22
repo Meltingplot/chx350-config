@@ -44,6 +44,7 @@ if param.P == 4
               ; False positive confirmed — defer resume to daemon.g
               ; (M24 here would fail: pause.g may not have completed yet)
               set global.auto_resume = true
+              set global.auto_resume_deadline = state.upTime + 600  ; 10 min timeout
             else
               ; Recovery failed — real issue, stay paused for customer
               M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed. Check filament and resume."} S1 T0
@@ -83,6 +84,7 @@ if param.P == 5
                 if global.result == 0
                   ; False positive confirmed — defer resume to daemon.g
                   set global.auto_resume = true
+                  set global.auto_resume_deadline = state.upTime + 600  ; 10 min timeout
                 else
                   ; Recovery failed — real issue, stay paused for customer
                   M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
