@@ -50,7 +50,7 @@ if param.P == 4 || param.P == 5
     set global.mfmbackoff = 3
     M220 S100                            ; revert speed change to 100%
     M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)
-    G4 S2                                ; let pause.g settle
+    M400                                 ; wait for pause.g to complete
 
     ; Auto-recovery: verify filament while paused
     set global.result = 0
