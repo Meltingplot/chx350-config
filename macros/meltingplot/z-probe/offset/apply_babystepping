@@ -9,4 +9,4 @@ set global.szp_touch_z_offset = global.szp_touch_z_offset - var.babystep
 M290 R0 S0                               ; clear babystepping
 M291 P{"Applied " ^ var.babystep ^ "mm babystep. New offset: " ^ global.szp_touch_z_offset ^ "mm"} S1 T5
 
-M98 P"0:/sys/meltingplot/z-probe/offset/save"
+M98 P"0:/macros/meltingplot/z-probe/offset/save"
