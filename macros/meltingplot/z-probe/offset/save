@@ -1,0 +1,2 @@
+echo >"0:/sys/meltingplot/z-probe/szp_touch_z_offset.g" "; This file contains the current Z offset for the SZP touch mode."
+echo >>"0:/sys/meltingplot/z-probe/szp_touch_z_offset.g" {"set global.szp_touch_z_offset = " ^ global.szp_touch_z_offset}

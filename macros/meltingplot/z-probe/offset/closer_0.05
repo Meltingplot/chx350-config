@@ -2,3 +2,5 @@
 ; Adjusts global.szp_touch_z_offset (M558.3 H param)
 set global.szp_touch_z_offset = global.szp_touch_z_offset + 0.05
 M291 P{"SZP touch Z offset: " ^ global.szp_touch_z_offset ^ "mm (closer)"} S1 T5
+
+M98 P"0:/sys/meltingplot/z-probe/offset/save"
