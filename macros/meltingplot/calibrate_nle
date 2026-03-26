@@ -1,5 +1,5 @@
 var tool = exists(param.T) ? param.T : 0            ; tool number
-var calDistance = exists(param.D) ? param.D : 30    ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear and double the distance of the melt zone
+var calDistance = exists(param.D) ? param.D : 60    ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear and double the distance of the melt zone
 var tolerance = exists(param.S) ? param.S : 0.05    ; tolerance in %
 var requestedVolumetricFlowRate = global.filament_max_flow_rate ; requested volumetric flow rate in mm^3/s
 var filamentDiameter = 2.85 ; filament diameter in mm
