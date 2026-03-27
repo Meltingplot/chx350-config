@@ -4,14 +4,24 @@ if global.debug
   echo "global.machine_mode: " ^ global.machine_mode
 
 if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_switch_checked == true && global.door_right_switch_checked == true)
-  if (heat.heaters[0].active > 0)
+  M400
+  G4 P500 ; wait for the switch to automatic mode
+  while global.machine_mode != "automatic" && iterations < 5
     M400
-    G4 P500 ; wait for the switch to automatic mode
-    while global.machine_mode != "automatic" && iterations < 5
-      M400
-      G4 P500
-    if global.machine_mode == "automatic" && (heat.heaters[0].state != "active" || heat.heaters[1].state != "active")
-      M291 R"Heizelemente" P"Druckbettheizung und Hotend aktivieren?" K{"Ja","Nein"} S4 T30 F1 J2
-      if (input == 0)
-        M144 P0 S1 ; activate bed heater
-        M568 P0 A2 ; activate hotend heater
+    G4 P500
+  if global.machine_mode == "automatic"
+    ; restore bed heater to saved state
+    if global.saved_bed_heater_state == "active"
+      M144 P0 S1
+    elif global.saved_bed_heater_state == "standby"
+      M144 P0 S0
+    ; restore tool heaters to saved state
+    while iterations < #tools
+      if global.saved_tool_heater_states[iterations] == "active"
+        M568 P{iterations} A2
+      elif global.saved_tool_heater_states[iterations] == "standby"
+        M568 P{iterations} A1
+    ; clear saved state
+    set global.saved_bed_heater_state = "off"
+    while iterations < #tools
+      set global.saved_tool_heater_states[iterations] = "off"
