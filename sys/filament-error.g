@@ -38,15 +38,30 @@ if param.P == 5
 ; --- Common backoff / pause / auto-recovery for P=4 and P=5 ---
 if param.P == 4 || param.P == 5
     set global.lastMFMBackoffCheck = state.upTime
+    set global.mfm_normal_since = 0
 
-    if global.mfmbackoff > 0
+    ; Track extruder distance since first error in this sequence
+    if global.mfm_error_extruder_ref == null
+      set global.mfm_error_extruder_ref = move.extruders[0].position
+
+    var error_dist = abs(move.extruders[0].position - global.mfm_error_extruder_ref)
+
+    ; Within safety margin and backoff attempts remaining — reduce speed
+    if var.error_dist < 40 && global.mfmbackoff > 0
         M220 S{20*global.mfmbackoff} ; reduce speed in steps 3*20=60% 2*20=40% 1*20=20%
         set global.mfmbackoff = global.mfmbackoff - 1
         if global.debug
-          echo "MFM: backoff counter " ^ global.mfmbackoff
+          echo "MFM: backoff counter " ^ global.mfmbackoff ^ " (dist=" ^ var.error_dist ^ "mm)"
         M99
 
-    ; Backoff exhausted — pause, auto-recover, resume if successful
+    ; Hard pause — backoff exhausted or 40mm safety distance exceeded
+    if global.debug
+      if var.error_dist >= 40
+        echo "MFM: " ^ var.error_dist ^ "mm extruded during error sequence — hard pause"
+      else
+        echo "MFM: backoff exhausted — pause"
+    set global.mfm_error_extruder_ref = null
+    set global.mfm_normal_since = 0
     set global.mfmbackoff = 3
     M220 S100                            ; revert speed change to 100%
     M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)

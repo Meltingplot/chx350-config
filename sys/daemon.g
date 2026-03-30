@@ -113,6 +113,19 @@ while state.status != "halted" && global.daemon_reload == false
               set global.mfmbackoff = global.mfmbackoff + 1
               set global.lastMFMBackoffCheck = state.upTime
 
+          ; Sustained normal tracking — clear error distance after 30s of clean readings
+          if global.mfm_error_extruder_ref != null
+            if var.currentPct > 80 && var.currentPct < 150
+              if global.mfm_normal_since == 0
+                set global.mfm_normal_since = state.upTime
+              elif (state.upTime - global.mfm_normal_since) >= 30
+                if global.debug
+                  echo "MFM: 30s sustained normal — error tracking cleared"
+                set global.mfm_error_extruder_ref = null
+                set global.mfm_normal_since = 0
+            else
+              set global.mfm_normal_since = 0
+
           ; Oscillation detection (swing-based)
           if global.mfm_last_pct != null
             ; Reset swing count if window has expired
@@ -124,6 +137,7 @@ while state.status != "halted" && global.daemon_reload == false
               if global.debug
                 echo "MFM: large swing (" ^ {global.mfm_last_pct} ^ "% → " ^ {var.currentPct} ^ "%)"
               set global.mfm_swing_count = global.mfm_swing_count + 1
+              set global.mfm_normal_since = 0
               if global.mfm_swing_count == 1
                 ; Tier 1: brief suppression to cover measurement accumulation artifact
                 set global.mfm_suppress_until = state.upTime + 15

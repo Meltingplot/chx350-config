@@ -29,6 +29,8 @@ set global.mfm_pwm_range = 0.0
 set global.mfm_pwm_window_start = 0
 set global.mfmbackoff = 3
 set global.ignoreMFMevents = false
+set global.mfm_error_extruder_ref = null
+set global.mfm_normal_since = 0
 
 set global.door_left_switch_checked = false               ; set to unsafe state
 set global.door_right_switch_checked = false              ; set to unsafe state
