@@ -1,3 +1,12 @@
+if global.machine_mode != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+
+T0 ; select tool
+M291 R"Filament Temperature" P"Please select the Filament Extrusion temperature" S5
+M400
+M109 S{input}
+
 if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active
   M116 P0                 ; wait for T0 only if we need to heat up
 if state.currentTool == 0
