@@ -10,7 +10,7 @@
 if exists(global.ignoreMFMevents) && global.ignoreMFMevents == true
   ; During suppression, still enforce distance limit for stuck spool detection
   if (param.P == 4 || param.P == 5) && global.mfm_error_extruder_ref != null
-    if abs(move.extruders[0].position - global.mfm_error_extruder_ref) >= 40
+    if abs(move.extruders[0].position - global.mfm_error_extruder_ref) >= 30
       ; Distance exceeded during suppression — cancel suppression, fall through to hard pause
       set global.ignoreMFMevents = false
       set global.mfm_suppress_until = 0
@@ -56,7 +56,7 @@ if param.P == 4 || param.P == 5
     var error_dist = abs(move.extruders[0].position - global.mfm_error_extruder_ref)
 
     ; Within safety margin and backoff attempts remaining — reduce speed
-    if var.error_dist < 40 && global.mfmbackoff > 0
+    if var.error_dist < 30 && global.mfmbackoff > 0
         M220 S{20*global.mfmbackoff} ; reduce speed in steps 3*20=60% 2*20=40% 1*20=20%
         set global.mfmbackoff = global.mfmbackoff - 1
         if global.debug
