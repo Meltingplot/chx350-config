@@ -101,7 +101,7 @@ M593 P"zvddd" F37 S0.05                                 ; cancle ringing at 37Hz
 
 ; Axis Limits
 M208 X0 Y0 Z0 U0 S1                                     ; set axis minima
-M208 X880 Y422 Z950 U422 S0                             ; set axis maxima
+M208 X880 Y422 Z945 U422 S0                             ; set axis maxima
 
 ; Endstops
 M574 X2 S3                                              ; configure sensorless endstop on high end on X
