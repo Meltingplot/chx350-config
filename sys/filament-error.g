@@ -8,7 +8,16 @@
 ; 8 = Magnet to strong
 
 if exists(global.ignoreMFMevents) && global.ignoreMFMevents == true
-  M99
+  ; During suppression, still enforce distance limit for stuck spool detection
+  if (param.P == 4 || param.P == 5) && global.mfm_error_extruder_ref != null
+    if abs(move.extruders[0].position - global.mfm_error_extruder_ref) >= 40
+      ; Distance exceeded during suppression — cancel suppression, fall through to hard pause
+      set global.ignoreMFMevents = false
+      set global.mfm_suppress_until = 0
+    else
+      M99
+  else
+    M99
 
 if !exists(global.mfmbackoff)
   global mfmbackoff = 3
