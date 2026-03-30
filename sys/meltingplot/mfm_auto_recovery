@@ -7,15 +7,7 @@ echo "MFM: starting auto-recovery..."
 set global.ignoreMFMevents = true          ; prevent re-triggering during test
 M400                                       ; wait for queued moves
 
-; Heater PWM fast-fail: if PWM below threshold — definitely not extruding — real issue
-; (above threshold is inconclusive due to boost modes)
-if heat.heaters[1].avgPwm < 0.15
-  echo "MFM: heater PWM low (" ^ {heat.heaters[1].avgPwm} ^ ") — confirms real issue"
-  set global.result = 2
-  set global.ignoreMFMevents = false
-  M99
-
-; PWM above threshold (inconclusive) — do test extrusion to verify
+; PWM fast-fail is now checked in filament-error.g before pause (standby drops avgPwm)
 G90                                        ; absolute mode
 G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400

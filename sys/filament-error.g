@@ -64,6 +64,17 @@ if param.P == 4 || param.P == 5
     set global.mfm_normal_since = 0
     set global.mfmbackoff = 3
     M220 S100                            ; revert speed change to 100%
+
+    ; Heater PWM fast-fail: check before pause (standby drops avgPwm)
+    ; Below threshold = definitely not extruding = real issue; above is inconclusive
+    if heat.heaters[1].avgPwm < 0.15
+      echo "MFM: heater PWM low (" ^ {heat.heaters[1].avgPwm} ^ ") — confirms real issue"
+      M25
+      M400
+      T-1 P0
+      M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed (heater PWM low). Check filament and resume."} S1 T0
+      M99
+
     M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)
     M400                                 ; wait for pause.g to complete
 
