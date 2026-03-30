@@ -49,6 +49,9 @@ else
   echo "MFM: auto-recovery FAILED (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — real issue"
   set global.result = 2
 
+; Save recovery result before cleanup (clean.g overwrites global.result)
+var recovery_result = global.result
+
 ; Retract test extrusion so filament state matches what resume.g expects
 G1 E-10 F120
 M400
@@ -61,3 +64,4 @@ M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 ; Restore normal MFM config
 M98 P"0:/sys/meltingplot/machine-override"
 set global.ignoreMFMevents = false
+set global.result = var.recovery_result
