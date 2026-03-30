@@ -31,7 +31,7 @@ M400
 G4 S1
 
 ; Test extrusion
-G1 E10 F60                                ; 10mm at 1mm/s = 2 MFM samples
+G1 E15 F60                                ; 15mm at 1mm/s — enough for MFM calibration
 M400
 G4 S1
 
@@ -53,7 +53,7 @@ else
 var recovery_result = global.result
 
 ; Retract test extrusion so filament state matches what resume.g expects
-G1 E-10 F120
+G1 E-15 F120
 M400
 
 ; Clean nozzle after test extrusion
