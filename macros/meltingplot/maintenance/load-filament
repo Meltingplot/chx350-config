@@ -12,3 +12,4 @@ if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]]
 if state.currentTool == 0
   set global.deferred_filament_load_t0 = true
 M703
+M400 ; sbc specific

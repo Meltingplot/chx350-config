@@ -18,3 +18,5 @@ M83                       ; relative extruder moves
 if state.currentTool != -1
   G11                       ; unretract
   G1 E12.7 F2000            ; extrude 12.7mm of filament to revert retraction of pause
+
+M400 ; sbc specific

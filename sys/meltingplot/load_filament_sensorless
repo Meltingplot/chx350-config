@@ -5,13 +5,15 @@ M98 P"0:/sys/meltingplot/ensure_safety"
 
 if state.currentTool == -1
   echo "No tool selected - abort!"
+  M400 ; sbc specific
   M99
 
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].homed == false
   G28 X ; home x axis -> will also home y and u axis
 
-if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 5)
-  G90 G1 Z{move.axes[2].max-5} ; raise printbed to the bottom to prevent damage while feeding filament
+; the z-height must be hight enough to allow the cleaner to raise 50mm
+if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 55)
+  G90 G1 Z{move.axes[2].max-55} ; raise printbed to the bottom to prevent damage while feeding filament
 
 ; this position is better suited to feed filament because the extruder is closer to the middle
 ; of the bed and the filament can be fed in straighter which is better for the filament sensors
@@ -126,3 +128,5 @@ if global.filament_loading_error
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 
 M291 P"Clean the printbed" S2
+
+M400 ; sbc specific

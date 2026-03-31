@@ -16,3 +16,4 @@ G4 P0               ; wait for moves to finish
 M400                ; wait for moves to finish
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 M291 P"Remove the Filament." S1
+M400 ; sbc specific

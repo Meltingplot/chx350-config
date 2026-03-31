@@ -17,3 +17,4 @@ T-1 P0                                                              ; put curren
 
 G90
 G53 G1 X{(move.axes[0].max-5)} Y{(move.axes[1].min)} U{(move.axes[3].max)} F60000
+M400 ; sbc specific

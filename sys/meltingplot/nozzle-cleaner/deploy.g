@@ -10,6 +10,7 @@ set global.result = 0
 if job.file.fileName != null && (move.axes[2].max - move.axes[2].machinePosition) < var.clearanceHeight
   echo "Error: not enough clearance to deploy nozzle cleaner."
   set global.result = 1
+  M400 ; sbc specific
   M99
 
 G1 F6000
@@ -27,3 +28,4 @@ M42 P6 S1 ; enable servo
 
 M280 P6 S14
 G4 P500
+M400 ; sbc specific

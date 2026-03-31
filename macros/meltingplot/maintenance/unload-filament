@@ -11,3 +11,4 @@ M98 P"0:/sys/meltingplot/unload_filament"   ; unload filament
 
 T-1
 M568 P0 A0
+M400 ; sbc specific
