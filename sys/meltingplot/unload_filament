@@ -8,12 +8,14 @@ if move.axes[2].homed == true && global.machine_mode == "automatic"
 M17 E0 ; activate tool board motor! bug in 3.6.1
 
 G1 E16 F120          ; extrude 12mm
-G1 E-10 F600          ; retract 10mm @ 10mm/sec
+G1 E-10 F600         ; retract 10mm @ 10mm/sec
+M400                 ; wait for moves to finish
 G1 E-30 F60          ; retract 30mm @ 1mm/s to let filament tip harden
-G1 E-100 F120       ; retract 100mm @ 2mm/sec
-G1 E-100 F180       ; fast retract any additional filament
-G4 P0               ; wait for moves to finish
-M400                ; wait for moves to finish
+G4 S1                ; wait 1 second for filament to harden
+G1 E-100 F120        ; retract 100mm @ 2mm/sec
+G1 E-100 F180        ; fast retract any additional filament
+G4 P0                ; wait for moves to finish
+M400                 ; wait for moves to finish
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 M291 P"Remove the Filament." S1
 M400 ; sbc specific
