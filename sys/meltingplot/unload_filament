@@ -1,15 +1,41 @@
+if global.debug
+  echo "unload_filament"
+
+set global.result = 0 ; 0 = success, 1 = failure
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 
-M83                 ; relative extrusion
+if state.currentTool == -1
+  echo "No tool selected - abort!"
+  set global.result = 1
+  M400 ; sbc specific
+  M99
 
-if move.axes[2].homed == true && global.machine_mode == "automatic"
-  G91 G1 Z30          ; raise printbed 30mm
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].homed == false
+  G28 X ; home x axis -> will also home y and u axis
+  if result != 0 || global.result != 0
+    echo "Homing failed - abort!"
+    set global.result = 1
+    M400 ; sbc specific
+    M99
 
-M17 E0 ; activate tool board motor! bug in 3.6.1
+; the z-height must be hight enough to allow the cleaner to raise 50mm
+if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 55)
+  G90 G1 Z{move.axes[2].max-55} ; raise printbed to the bottom to prevent damage while feeding filament
+
+; this position is better suited to unfeed filament because the extruder is closer to the middle
+; of the bed and the filament can be fed in straighter which is better for the filament sensors
+G1 X300 Y0 F60000 ; move to the middle of the bed
+
+M83                  ; relative extrusion
+
+M17 E0               ; activate tool board motor! bug in 3.6.1
 
 G1 E16 F120          ; extrude 12mm
+G1 E-1 F600          ; retract 1mm
+G4 S5                ; wait 5 seconds for filament to soften
 G1 E-10 F600         ; retract 10mm @ 10mm/sec
-M400                 ; wait for moves to finish
+G4 S1                ; wait 1 second for filament to harden
 G1 E-30 F60          ; retract 30mm @ 1mm/s to let filament tip harden
 G4 S1                ; wait 1 second for filament to harden
 G1 E-100 F120        ; retract 100mm @ 2mm/sec
