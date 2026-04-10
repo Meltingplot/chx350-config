@@ -23,10 +23,15 @@ if move.axes[2].homed == false            ; check if z is homed
   set global.result = 1                   ; indicate error
   M99
 
+M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+if global.result != 0
+  echo "Error: bed.g failed to set z-probe to touch mode"
+  M99
+
 G90                                       ; absolute positioning
 G1 Z20 F6000                              ; lift Z to safe height
 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
-G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
+G1 Z{sensors.probes[0].diveHeights[0]} F600 ; drive close to dive height
 
 var bhi = heat.bedHeaters[0]
 while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > (global.szp_warm_threshold + 15) && sensors.analog[4].lastReading < global.szp_warm_threshold
