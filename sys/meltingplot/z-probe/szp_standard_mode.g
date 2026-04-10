@@ -5,7 +5,7 @@
 if global.debug
   echo "szp_standard_mode.g"
 
-if sensors.analog[4].lastReading > 40
+if sensors.analog[4].lastReading > global.szp_warm_threshold
   M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode_calibration_warm.g" T{sensors.analog[4].lastReading}
 else
   M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode_calibration_cold.g"

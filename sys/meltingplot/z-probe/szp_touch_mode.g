@@ -1,7 +1,7 @@
 if global.debug
   echo "szp_touch_mode.g"
 
-if sensors.analog[4].lastReading > 40
+if sensors.analog[4].lastReading > global.szp_warm_threshold
   M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_warm.g"
 else
   M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode_calibration_cold.g"

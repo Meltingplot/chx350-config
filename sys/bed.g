@@ -23,22 +23,32 @@ if move.axes[2].homed == false            ; check if z is homed
   set global.result = 1                   ; indicate error
   M99
 
-M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
-if global.result != 0
-  echo "Error: bed.g failed to set z-probe to standard mode"
-  M99
-
 G90                                       ; absolute positioning
 G1 Z20 F6000                              ; lift Z to safe height
 G1 U{move.axes[3].max} F60000             ; move u away
 G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
 
-var pos_variation_x = mod(state.msUpTime,16) ; 0 - 15
-var pos_variation_y = (mod(state.msUpTime,16)+8)-16 ; -8 - +7
+var bhi = heat.bedHeaters[0]
+while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > global.szp_warm_threshold && sensors.analog[4].lastReading < global.szp_warm_threshold
+  G4 S1 ; wait for z-probe to warm up
+  if global.debug
+    echo "Waiting for z-probe to warm up..."
+  if iterations > 30
+    echo "Error: bed.g z-probe failed to warm up"
+    set global.result = 1                   ; indicate error
+    M99
+
+M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+if global.result != 0
+  echo "Error: bed.g failed to set z-probe to standard mode"
+  M99
 
 set global.result = 0
 
 while true
+  var pos_variation_x = mod(state.msUpTime,16) ; 0 - 15
+  var pos_variation_y = (mod(state.msUpTime,16)+8)-16 ; -8 - +7
+
   G30 P0 X{move.axes[0].min + 50 + var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[0]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
   if result != 0
     echo "Warning: G32 - repeat p0"
