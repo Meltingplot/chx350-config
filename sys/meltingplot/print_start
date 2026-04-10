@@ -8,6 +8,12 @@ T0                                          ; select tool 0
 M83                                         ; use relative distances for extrusion
 G90                                         ; use absolute coordinates
 
+if state.status == "simulating"
+  if global.machine_mode != "automatic"
+    echo "Error: simulation requires automatic mode - close both doors and verify door switches first"
+    M2
+  M99
+
 set global.door_ignore_trigger = true ; do not pause the print while we check the door switches!
 while ( global.door_left_switch_checked == false || global.door_right_switch_checked == false )
   if iterations > 5

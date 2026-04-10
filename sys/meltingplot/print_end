@@ -1,3 +1,5 @@
+if state.status == "simulating"
+  M99
 
 G10                                                       ; Retract the filament
 M568 P0 R0 S0 A0                                          ; disable hotend
