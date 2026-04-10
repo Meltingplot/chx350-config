@@ -25,22 +25,22 @@ if move.axes[2].homed == false            ; check if z is homed
 
 G90                                       ; absolute positioning
 G1 Z20 F6000                              ; lift Z to safe height
-G1 U{move.axes[3].max} F60000             ; move u away
+G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z{sensors.probes[0].diveHeights[0] + sensors.probes[0].triggerHeight} F600 ; drive close to dive height
 
 var bhi = heat.bedHeaters[0]
-while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > global.szp_warm_threshold && sensors.analog[4].lastReading < global.szp_warm_threshold
+while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > (global.szp_warm_threshold + 15) && sensors.analog[4].lastReading < global.szp_warm_threshold
   G4 S1 ; wait for z-probe to warm up
   if global.debug
-    echo "Waiting for z-probe to warm up..."
-  if iterations > 30
+    echo "Waiting for z-probe to warm up. Current temp: " ^ sensors.analog[4].lastReading
+  if iterations > 300
     echo "Error: bed.g z-probe failed to warm up"
     set global.result = 1                   ; indicate error
     M99
 
-M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
 if global.result != 0
-  echo "Error: bed.g failed to set z-probe to standard mode"
+  echo "Error: bed.g failed to set z-probe to touch mode"
   M99
 
 set global.result = 0
