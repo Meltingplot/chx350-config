@@ -13,7 +13,7 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].ho
 
 ; the z-height must be hight enough to allow the cleaner to raise 50mm
 if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 55)
-  G90 G1 Z{move.axes[2].max-55} ; raise printbed to the bottom to prevent damage while feeding filament
+  G90 G1 Z{move.axes[2].max-55} F6000; raise printbed to the bottom to prevent damage while feeding filament
 
 ; this position is better suited to feed filament because the extruder is closer to the middle
 ; of the bed and the filament can be fed in straighter which is better for the filament sensors
