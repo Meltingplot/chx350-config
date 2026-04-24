@@ -9,6 +9,14 @@ M109 S{input}
 
 if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active
   M116 P0                 ; wait for T0 only if we need to heat up
+
+; ask user whether to purge old material between filament sensor and extruder gear
+M291 R"Purge old material" P"Purge old material? (50mm between sensor and extruder gear)" S4 K{"Yes","No"}
+if input == 0
+  G91                      ; relative positioning
+  G1 E50 F120              ; extrude 50mm to purge old material
+  G90                      ; absolute positioning
+
 if state.currentTool == 0
   set global.deferred_filament_load_t0 = true
 M703
