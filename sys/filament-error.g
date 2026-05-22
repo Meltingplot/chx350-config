@@ -8,8 +8,12 @@
 ; 8 = Magnet to strong
 
 if exists(global.ignoreMFMevents) && global.ignoreMFMevents == true
-  ; During suppression, still enforce distance limit for stuck spool detection
-  if (param.P == 4 || param.P == 5) && global.mfm_error_extruder_ref != null
+  ; During suppression, still enforce distance limit for stuck spool detection —
+  ; but only when an active running job could actually be hard-paused. Otherwise
+  ; (calibration, manual loading, paused state) the bypass's side effects would
+  ; leak: it clears ignoreMFMevents/mfm_suppress_until and falls through to the
+  ; backoff path which calls M220 — that would corrupt the calibration feedrate.
+  if (param.P == 4 || param.P == 5) && global.mfm_error_extruder_ref != null && job.file.fileName != null && state.status != "paused"
     if abs(move.extruders[0].position - global.mfm_error_extruder_ref) >= 30
       ; Distance exceeded during suppression — cancel suppression, fall through to hard pause
       set global.ignoreMFMevents = false
@@ -74,6 +78,13 @@ if param.P == 4 || param.P == 5
     set global.mfmbackoff = 3
     M220 S100                            ; revert speed change to 100%
 
+    ; Only proceed to M25 + auto-recovery when an active running job exists
+    ; (state.status "processing" is also true for macros, so gate on job file)
+    if job.file.fileName == null || state.status == "paused"
+      if global.debug
+        echo "MFM: hard-pause skipped (state=" ^ state.status ^ ", no active job)"
+      M99
+
     ; Heater PWM fast-fail: check before pause (standby drops avgPwm)
     ; Below threshold = definitely not extruding = real issue; above is inconclusive
     if heat.heaters[1].avgPwm < 0.15
@@ -111,6 +122,11 @@ if param.P == 4 || param.P == 5
     M99
 
 ; Fallback for other error types (P=3, P=7, P=8)
+if job.file.fileName == null || state.status == "paused"
+  if global.debug
+    echo "MFM: fallback pause skipped (state=" ^ state.status ^ ", no active job)"
+  M99
+
 echo "Filament error: " ^ param.P ^ " on sensor " ^ param.D ^ " - paused"
 M291 P{"Filament Sensor " ^ param.D ^ ": " ^ param.S ^ " - Paused"} S1 T0
 M25 ; pause
