@@ -54,6 +54,39 @@ while state.status != "halted" && global.daemon_reload == false
   else
     set global.potential_unsafe_state = false
 
+  ; === Idle heater cutoff ===
+  if global.idle_since == 0
+    set global.idle_since = state.upTime
+
+  var is_active = (state.status == "processing") || var.motion_detected
+  if var.is_active
+    set global.idle_since = state.upTime
+    if global.idle_hotend_cutoff_done || global.idle_bed_cutoff_done
+      set global.idle_hotend_cutoff_done = false
+      set global.idle_bed_cutoff_done = false
+
+  var idle_duration = state.upTime - global.idle_since
+  var paused_with_job = (state.status == "paused" && job.file.fileName != null)
+
+  ; Hotend cutoff — applies to both idle and paused-with-job
+  if var.idle_duration >= global.idle_hotend_timeout && global.idle_hotend_cutoff_done == false
+    var any_hotend_on = false
+    while iterations < #tools
+      if heat.heaters[tools[iterations].heaters[0]].state != "off"
+        set var.any_hotend_on = true
+    if var.any_hotend_on
+      echo "Idle cutoff: hotends off after " ^ {floor(var.idle_duration/60)} ^ " min idle"
+      while iterations < #tools
+        M568 P{iterations} A0
+    set global.idle_hotend_cutoff_done = true
+
+  ; Bed cutoff — only when truly idle, NEVER when paused with active job
+  if var.idle_duration >= global.idle_bed_timeout && global.idle_bed_cutoff_done == false && var.paused_with_job == false
+    if heat.heaters[0].state != "off"
+      echo "Idle cutoff: bed off after " ^ {floor(var.idle_duration/60)} ^ " min idle"
+      M140 P0 S-273.15
+    set global.idle_bed_cutoff_done = true
+
   if (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50)
     set global.machine_is_hot = true
   else
