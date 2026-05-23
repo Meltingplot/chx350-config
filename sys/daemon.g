@@ -179,6 +179,18 @@ while state.status != "halted" && global.daemon_reload == false
   if global.machine_is_hot && global.machine_mode != "automatic"
     if global.led_color != 4
       M98 P"0:/sys/meltingplot/set_led_color" C"red"
+  elif state.status == "paused" && global.potential_unsafe_state == false
+    ; Pulse white to signal pause-safe — distinct from any solid color in the
+    ; CE color spec; signals "active job, user may open doors", not a steady
+    ; safety state. Direct M150 bypasses set_led_color's hot-override logic
+    ; (irrelevant here: mode is automatic so override wouldn't fire anyway).
+    if mod(state.upTime, 2) == 0
+      if global.led_color != 5
+        M150 E0 U200 R200 B200 P255 S60
+        set global.led_color = 5
+    elif global.led_color != 6
+      M150 E0 U200 R200 B200 P50 S60
+      set global.led_color = 6
   elif global.machine_mode == "automatic"
     if job.file.fileName == null
       if global.led_color != 2
