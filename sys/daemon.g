@@ -127,7 +127,13 @@ while state.status != "halted" && global.daemon_reload == false
     set global.door_right_state_transition = false
     set var.door_right_state_transition = false
 
-  var motion_detected = (var.axis_is_moving[0] != 0 || var.axis_is_moving[1] != 0 || var.axis_is_moving[2] != 0 || var.axis_is_moving[3] != 0 || var.extruder_is_moving[0] != 0 || var.extruder_is_moving[1] != 0)
+  var motion_detected = false
+  while iterations < var.n_axes
+    if var.axis_is_moving[iterations] != 0
+      set var.motion_detected = true
+  while iterations < var.n_extruders
+    if var.extruder_is_moving[iterations] != 0
+      set var.motion_detected = true
   set global.potential_unsafe_state = var.motion_detected
 
   if (var.bed_current > 50 || var.hotend_current > 50 || var.ambient > 50)
