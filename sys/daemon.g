@@ -3,6 +3,13 @@
 ; and add create+delete overhead. Read OM/globals directly; only declare a
 ; local var when atomicity across multiple lines is required.
 var iter_start = 0
+; Daemon-private switch_checked mirror — globals are exposed via DWC and can
+; be manually set to true to fake-trigger automatic mode; script-vars cannot.
+; Daemon flips var to true ONLY on a real door-open edge. Mismatch with global
+; clears both to false: unauthorized upgrade reverted, legitimate downgrade
+; (e.g. print_end resetting to false) accepted in the same step.
+var left_checked = global.door_left_switch_checked
+var right_checked = global.door_right_switch_checked
 
 while state.status != "halted" && global.daemon_reload == false
   set var.iter_start = state.upTime + state.msUpTime/1000
@@ -33,6 +40,7 @@ while state.status != "halted" && global.daemon_reload == false
     set global.door_left_open = true
     set global.door_left_state_transition = true
     set global.door_left_switch_checked = true
+    set var.left_checked = true
   elif sensors.gpIn[2].value != 0 && global.door_left_open == true
     set global.door_left_open = false
     set global.door_left_state_transition = true
@@ -43,11 +51,19 @@ while state.status != "halted" && global.daemon_reload == false
     set global.door_right_open = true
     set global.door_right_state_transition = true
     set global.door_right_switch_checked = true
+    set var.right_checked = true
   elif sensors.gpIn[3].value != 0 && global.door_right_open == true
     set global.door_right_open = false
     set global.door_right_state_transition = true
   elif global.door_right_state_transition
     set global.door_right_state_transition = false
+
+  if global.door_left_switch_checked != var.left_checked
+    set global.door_left_switch_checked = false
+    set var.left_checked = false
+  if global.door_right_switch_checked != var.right_checked
+    set global.door_right_switch_checked = false
+    set var.right_checked = false
 
   set global.machine_is_hot = (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50)
 
