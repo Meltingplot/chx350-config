@@ -10,6 +10,7 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
     M400
     G4 P500
   if global.machine_mode == "automatic"
+    var last_active_tool = state.currentTool
     ; restore bed heater to saved state
     if global.saved_bed_heater_state == "active"
       M144 P0 S1
@@ -17,6 +18,10 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
       M144 P0 S0
     ; restore tool heaters to saved state
     while iterations < #tools
+      ; select tool without macros
+      T T{iterations} P0
+      ; run /filaments/<filament name>/config.g
+      M703 
       if global.saved_tool_heater_states[iterations] == "active"
         M568 P{iterations} A2
       elif global.saved_tool_heater_states[iterations] == "standby"
@@ -25,3 +30,5 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
     set global.saved_bed_heater_state = "off"
     while iterations < #tools
       set global.saved_tool_heater_states[iterations] = "off"
+    ; restore last active tool
+    T T{var.last_active_tool} P0
