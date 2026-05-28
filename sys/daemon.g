@@ -67,7 +67,7 @@ while state.status != "halted" && global.daemon_reload == false
 
   set global.machine_is_hot = (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50)
 
-  if state.status == "processing" || global.potential_unsafe_state
+  if state.status == "processing" || state.status == "tuning" || global.potential_unsafe_state
     set global.idle_since = state.upTime
     set global.idle_hotend_cutoff_done = false
     set global.idle_bed_cutoff_done = false
