@@ -69,20 +69,27 @@ while state.status != "halted" && global.daemon_reload == false
 
   if state.status == "processing" || state.status == "busy" || state.status == "changingTool" || global.potential_unsafe_state
     set global.idle_since = state.upTime
-    set global.idle_hotend_cutoff_done = false
-    set global.idle_bed_cutoff_done = false
+    while iterations < #global.idle_heater_cutoff_done
+      set global.idle_heater_cutoff_done[iterations] = false
 
-  if (state.upTime - global.idle_since) >= global.idle_hotend_timeout && global.idle_hotend_cutoff_done == false
-    echo "Idle cutoff: hotends off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
-    while iterations < #tools
-      M568 P{iterations} A0
-    set global.idle_hotend_cutoff_done = true
-
-  if (state.upTime - global.idle_since) >= global.idle_bed_timeout && global.idle_bed_cutoff_done == false && (state.status != "paused" || job.file.fileName == null)
-    if heat.heaters[0].state != "off"
-      echo "Idle cutoff: bed off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
-      M140 P0 S-273.15
-    set global.idle_bed_cutoff_done = true
+  ; Per-heater idle cutoff. Once cut off, the setpoint is 0 — any positive value means
+  ; the user re-enabled it: re-arm with a fresh timeout. Reading .active is gated behind
+  ; the done-flag, so it costs nothing during normal operation. The only heater-type
+  ; distinction is the off-command itself (no generic per-index heater-off M-code exists):
+  ; heater 0 = bed (M140), heaters 1..#tools = tool heaters (M568 on tool h-1).
+  while iterations < #global.idle_heater_timeout
+    if global.idle_heater_cutoff_done[iterations]
+      if heat.heaters[iterations].active > 0
+        set global.idle_since = state.upTime
+        set global.idle_heater_cutoff_done[iterations] = false
+    elif (state.upTime - global.idle_since) >= global.idle_heater_timeout[iterations] && (global.idle_heater_pause_hold[iterations] == false || state.status != "paused" || job.file.fileName == null)
+      if heat.heaters[iterations].active > 0
+        echo "Idle cutoff: heater " ^ {iterations} ^ " off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
+        if iterations == 0
+          M140 P0 S-273.15
+        else
+          M568 P{iterations - 1} A0
+      set global.idle_heater_cutoff_done[iterations] = true
 
   if global.filament_loading_error == true && move.extruders[0].filament != ""
     M702 P0

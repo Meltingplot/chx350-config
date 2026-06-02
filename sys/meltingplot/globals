@@ -32,12 +32,13 @@ global mfm_pwm_max = 0.0                  ; max avgPwm in current window
 global mfm_pwm_range = 0.0                ; computed range from last complete window
 global mfm_pwm_window_start = 0           ; PWM window start time
 
-; idle heater cutoff timeouts (seconds)
-global idle_hotend_timeout = 1800         ; 30 min — hotends off when idle/paused
-global idle_bed_timeout = 3600            ; 60 min — bed off when idle (not paused-with-job)
-global idle_since = 0                     ; state.upTime of last detected activity (0 = init pending)
-global idle_hotend_cutoff_done = false    ; edge flag — set true after cutoff, cleared on activity
-global idle_bed_cutoff_done = false       ; edge flag — set true after cutoff, cleared on activity
+; idle heater cutoff — per-heater, indexed by heater number. Heater 0 = bed by
+; definition; heaters 1..#tools = tool heaters (heater h ↔ tool h-1); further
+; heaters may follow. Sized explicitly because globals load before heaters exist.
+global idle_heater_timeout = {3600, 1800}                                   ; cutoff timeout (s): [0]=bed 60min, [1]=hotend 30min
+global idle_heater_pause_hold = {true, false}                               ; true = keep on while paused with a job loaded (bed: preserve adhesion for resume)
+global idle_heater_cutoff_done = vector(#global.idle_heater_timeout, false)  ; per-heater edge flag — set after cutoff, cleared on re-enable/activity
+global idle_since = 0                                                        ; state.upTime of last detected activity (0 = init pending)
 
 ; homing and stall detection
 global closed_loop_homing = false
