@@ -72,18 +72,21 @@ while state.status != "halted" && global.daemon_reload == false
     while iterations < #global.idle_heater_cutoff_done
       set global.idle_heater_cutoff_done[iterations] = false
 
-  ; Per-heater idle cutoff. Once cut off, the setpoint is 0 — any positive value means
-  ; the user re-enabled it: re-arm with a fresh timeout. Reading .active is gated behind
-  ; the done-flag, so it costs nothing during normal operation. The only heater-type
-  ; distinction is the off-command itself (no generic per-index heater-off M-code exists):
-  ; heater 0 = bed (M140), heaters 1..#tools = tool heaters (M568 on tool h-1).
+  ; Per-heater idle cutoff. The off-command sets the heater STATE to off but leaves the
+  ; active setpoint untouched (M568 A is required-state 0=off, not a temperature; M140
+  ; S-273.15 drives the setpoint negative). So re-enable is detected via .state != "off",
+  ; NOT .active — which keeps its old setpoint after cutoff and would re-arm every cycle,
+  ; resetting the shared idle_since and starving longer-timeout heaters. Reading .state is
+  ; gated behind the done-flag, so it costs nothing during normal operation. The only
+  ; heater-type distinction is the off-command itself (no generic per-index heater-off
+  ; M-code exists): heater 0 = bed (M140), heaters 1..#tools = tool heaters (M568 on tool h-1).
   while iterations < #global.idle_heater_timeout
     if global.idle_heater_cutoff_done[iterations]
-      if heat.heaters[iterations].active > 0
+      if heat.heaters[iterations].state != "off"
         set global.idle_since = state.upTime
         set global.idle_heater_cutoff_done[iterations] = false
     elif (state.upTime - global.idle_since) >= global.idle_heater_timeout[iterations] && (global.idle_heater_pause_hold[iterations] == false || state.status != "paused" || job.file.fileName == null)
-      if heat.heaters[iterations].active > 0
+      if heat.heaters[iterations].state != "off"
         echo "Idle cutoff: heater " ^ {iterations} ^ " off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
         if iterations == 0
           M140 P0 S-273.15
