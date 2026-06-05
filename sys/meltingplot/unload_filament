@@ -43,7 +43,7 @@ G1 E-100 F180        ; fast retract any additional filament
 G4 P0                ; wait for moves to finish
 M400                 ; wait for moves to finish
 M291 P"Is the filament free? Press OK if yes, No to retract another 100mm." R"Filament Check" K{"Yes","No"} S4
-if result != 0
+if input != 0
   G1 E-100 F300        ; additional retract 100mm if filament is not free
   M400
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
