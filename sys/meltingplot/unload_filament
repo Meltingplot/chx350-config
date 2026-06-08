@@ -42,10 +42,11 @@ G1 E-100 F120        ; retract 100mm @ 2mm/sec
 G1 E-100 F180        ; fast retract any additional filament
 G4 P0                ; wait for moves to finish
 M400                 ; wait for moves to finish
+M291 P"Remove the Filament." S1
 M291 P"Is the filament free? Press OK if yes, No to retract another 100mm." R"Filament Check" K{"Yes","No"} S4
 if input != 0
   G1 E-100 F300        ; additional retract 100mm if filament is not free
   M400
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-M291 P"Remove the Filament." S1
+M568 P{state.currentTool} A0 ; disable hotend
 M400 ; sbc specific

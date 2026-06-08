@@ -19,7 +19,8 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
     ; restore tool heaters to saved state
     while iterations < #tools
       ; select tool without macros
-      T T{iterations} P0
+      if var.last_active_tool != iterations
+        T T{iterations} P0
       ; run /filaments/<filament name>/config.g
       M703 
       if global.saved_tool_heater_states[iterations] == "active"
@@ -31,4 +32,5 @@ if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && global.door_left_
     while iterations < #tools
       set global.saved_tool_heater_states[iterations] = "off"
     ; restore last active tool
-    T T{var.last_active_tool} P0
+    if state.currentTool != var.last_active_tool
+      T T{var.last_active_tool} P0
