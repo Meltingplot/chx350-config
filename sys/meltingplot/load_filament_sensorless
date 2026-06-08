@@ -11,6 +11,9 @@ if state.currentTool == -1
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].homed == false
   G28 X ; home x axis -> will also home y and u axis
 
+if move.axes[2].homed == false
+  G28 Z;
+
 ; the z-height must be hight enough to allow the cleaner to raise 50mm
 if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].max - 55)
   G90 G1 Z{move.axes[2].max-55} F6000; raise printbed to the bottom to prevent damage while feeding filament
