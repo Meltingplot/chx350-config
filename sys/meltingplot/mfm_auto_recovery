@@ -34,7 +34,10 @@ if sensors.filamentMonitors[var.extruder].avgPercentage == null
 elif sensors.filamentMonitors[var.extruder].avgPercentage > 50
   echo "MFM: auto-recovery OK (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — false positive"
   set global.result = 0
-  set global.mfm_suppress_until = state.upTime + 600
+  ; Short suppress window to ride out the resume transient / same off-the-wheel
+  ; readings. Both gates (daemon suppress_until AND firmware ignoreMFMevents) are
+  ; armed together below so the firmware P=4/P=5 path can't immediately re-pause.
+  set global.mfm_suppress_until = state.upTime + 30
   M220 S100
   set global.mfmbackoff = 3
 else
@@ -55,5 +58,17 @@ M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 
 ; Restore normal MFM config
 M98 P"0:/sys/meltingplot/machine-override"
-set global.ignoreMFMevents = false
+; On a false positive (result 0) keep events suppressed for the suppress window
+; set above — otherwise the same off-the-wheel readings re-trigger filament-error.g
+; immediately and loop back into recovery. The daemon clears both ignoreMFMevents
+; and mfm_suppress_until when the window expires (daemon.g). On a real issue
+; (result != 0) we stay paused, so re-enable events for the operator resume.
+if var.recovery_result == 0
+  set global.ignoreMFMevents = true
+  ; Arm the 30mm distance guard (filament-error.g) from the final post-recovery
+  ; extruder position — captured here, AFTER the test retract and nozzle clean,
+  ; so the guard measures real extrusion since resume, not the test move.
+  set global.mfm_error_extruder_ref = move.extruders[0].position
+else
+  set global.ignoreMFMevents = false
 set global.result = var.recovery_result
