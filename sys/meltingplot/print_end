@@ -33,11 +33,12 @@ set global.mfmbackoff = 3
 set global.ignoreMFMevents = false
 set global.mfm_error_extruder_ref = null
 set global.mfm_normal_since = 0
-; Restore e-steps if the MFM flow-bias detector adaptively re-centered them this print —
-; no silent cross-print leak; each print re-derives the bounded correction from the baseline.
+; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
+; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
 if global.mfm_esteps_baseline != 0
   M92 E{global.mfm_esteps_baseline}
 set global.mfm_esteps_baseline = 0.0
+set global.mfm_esteps_suggested = 0
 set global.mfm_esteps_done = false
 set global.mfm_esteps_drift_since = 0
 set global.mfm_esteps_drift_avg = 0

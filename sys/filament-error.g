@@ -7,6 +7,19 @@
 ; 7 = Magnet to weak
 ; 8 = Magnet to strong
 
+; Apply a pending daemon-detected flow-bias e-steps correction FIRST, before any other handling.
+; Must be here (not after the pause): a resume reloads e-steps from the filament config and would
+; wipe an M92 applied later, so it is applied on the first error — typically still in the backoff
+; phase, which does not pause/resume — so it sticks and can resolve the bias before it escalates to
+; a hard pause. M92 blocks (LockAllMovementSystemsAndWaitForStandstill): it stalls this trigger
+; until the move queue drains, which is harmless because filament-error.g runs out of band — but it
+; would freeze the safety loop and MUST NEVER run in daemon.g. Bounded ±5% (clamped at detection),
+; applied once per print (mfm_esteps_baseline == 0 guard); print_end restores the baseline.
+if global.mfm_esteps_suggested != 0 && global.mfm_esteps_baseline == 0
+  set global.mfm_esteps_baseline = move.extruders[0].stepsPerMm
+  M92 E{global.mfm_esteps_suggested}
+  echo "MFM: applied flow-bias e-steps correction " ^ global.mfm_esteps_baseline ^ " -> " ^ global.mfm_esteps_suggested
+
 if exists(global.ignoreMFMevents) && global.ignoreMFMevents == true
   ; During suppression, still enforce distance limit for stuck spool detection —
   ; but only when an active running job could actually be hard-paused. Otherwise
