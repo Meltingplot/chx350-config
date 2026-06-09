@@ -26,6 +26,12 @@ global mfm_last_check_time = 0.0          ; last MFM check timestamp (sub-second
 ; MFM persistent error tracking (survives swing suppressions and fast-track resets)
 global mfm_error_extruder_ref = null      ; extruder position at first error in sequence (null = no active tracking)
 global mfm_normal_since = 0               ; upTime when sustained normal readings began
+; MFM systematic flow-bias (e-steps) one-shot adaptive re-center, ±5% absolute vs baseline
+global mfm_esteps_baseline = 0.0          ; configured e-steps captured before correction (0 = none)
+global mfm_esteps_done = false            ; one-shot guard for this print, reset in print_end
+global mfm_esteps_check_time = 0          ; last flow-bias sample timestamp (upTime)
+global mfm_esteps_drift_since = 0         ; upTime when the current settle window started (0 = inside deadband/no drift)
+global mfm_esteps_drift_avg = 0           ; avgPercentage at the start of the settle window (flatness reference)
 ; heater PWM tracking for extrusion verification
 global mfm_pwm_min = 0.0                  ; min avgPwm in current window
 global mfm_pwm_max = 0.0                  ; max avgPwm in current window
