@@ -19,4 +19,14 @@ if state.currentTool != -1
   G11                       ; unretract
   G1 E12.7 F2000            ; extrude 12.7mm of filament to revert retraction of pause
 
+; Re-assert a pending MFM flow-bias e-steps correction. Resuming re-selects the tool (T R1 above),
+; which reloads e-steps from the filament config and wipes any M92 applied in filament-error.g — so
+; re-apply the corrected value here, after the reload, to make it win. Idempotent (suggested is the
+; fixed, clamped target); capture the baseline (now the reloaded config value) if not yet recorded
+; so print_end can restore it. Standstill here, so the blocking M92 is fine.
+if global.mfm_esteps_suggested != 0
+  if global.mfm_esteps_baseline == 0
+    set global.mfm_esteps_baseline = move.extruders[0].stepsPerMm
+  M92 E{global.mfm_esteps_suggested}
+
 M400 ; sbc specific
