@@ -97,7 +97,7 @@ M83                                                     ; ...but relative extrud
 
 M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/default.g"
 
-M593 P"zvddd" F37 S0.05                                 ; cancle ringing at 37Hz zvddd will cover a range from around 20 - 60 hz
+M593 P"ei2" F37 S0.05                                 ; cancle ringing at 37Hz zvddd will cover a range from around 20 - 60 hz
 
 ; Axis Limits
 M208 X0 Y0 Z0 U0 S1                                     ; set axis minima
