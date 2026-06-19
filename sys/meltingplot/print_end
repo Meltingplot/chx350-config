@@ -1,11 +1,13 @@
 if state.status == "simulating"
   M99
 
-G10                                                       ; Retract the filament
-M568 P0 R0 S0 A0                                          ; disable hotend
-M140 S0 R0                                                ; set bed heater to 0°
-M140 P0 S-273                                             ; disable bed heater
-T-1                                                       ; deselect all tools
+if state.currentTool != -1
+  if global.door_left_switch_checked == true && global.door_right_switch_checked == true
+    G10                                                       ; Retract the filament
+  M568 P0 R0 S0 A0                                          ; disable hotend
+  M140 S0 R0                                                ; set bed heater to 0°
+  M140 P0 S-273                                             ; disable bed heater
+  T-1                                                       ; deselect all tools
 
 ; do not run this after mode switch is initialized
 if global.door_left_switch_checked == true && global.door_right_switch_checked == true
