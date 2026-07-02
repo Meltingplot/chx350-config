@@ -84,11 +84,11 @@ M669 K5 X1:1:0:-1 Y0:1:0:0 Z0:0:1:0 U0:0:0:1 S10 T0.1   ; select CoreIDX mode an
 
 M400                                                    ; SBC specific wait
 
-M350 E64 I1                                             ; configure microstepping with interpolation
+M350 E16 I1                                             ; configure microstepping with interpolation
 M350 Z32 I1                                             ; configure microstepping with interpolation
 M350 X64 Y64 U64 I0                                     ; configure microstepping without interpolation
 M400                                                    ; SBC specific wait
-M92 X320 Y320 Z1600 U320 E3200                          ; set steps per mm
+M92 X320 Y320 Z1600 U320 E800                           ; set steps per mm
 M400                                                    ; SBC specific wait
 
 ; General preferences
