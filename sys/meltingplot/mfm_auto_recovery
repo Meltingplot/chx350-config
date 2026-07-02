@@ -47,6 +47,30 @@ else
 ; Save recovery result before cleanup (clean.g overwrites global.result)
 var recovery_result = global.result
 
+; On a pass, purge the suspect section past the drive gear. The notch ground into the
+; filament at error time sits at the gear; the pause retract parks it ~12.5mm upstream,
+; and the symmetric 15mm test + retract + resume feed-forward would land the gear teeth
+; back IN the notch (net +0.2mm) — no grip at print force, immediate regrind. A +25mm
+; net advance parks it ~25mm downstream in the guide/melt zone instead, where it just
+; melts through. Slow (test speed) so a marginal section is not reground here. The MFM
+; is reset first so the purge is measured independently — this is the only phase where
+; the notch actually crosses the gear under measurement, so a collapsed reading here
+; means the gear lost grip at the notch: downgrade to real issue.
+if var.recovery_result == 0
+  M591 D{var.extruder} S0                  ; reset MFM for independent purge measurement
+  M400
+  G4 S1
+  M591 D{var.extruder} A1 S2 E1
+  M400
+  G4 S1
+  G1 E25 F60                               ; drive the ground section past the gear
+  M400
+  G4 S1
+  if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 50
+    echo "MFM: post-purge check FAILED — gear lost grip at ground section, real issue"
+    set var.recovery_result = 2
+    set global.mfm_suppress_until = 0
+
 ; Retract test extrusion so filament state matches what resume.g expects
 G1 E-15 F120
 M400

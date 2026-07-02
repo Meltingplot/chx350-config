@@ -108,6 +108,18 @@ if param.P == 4 || param.P == 5
       M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed (heater PWM low). Check filament and resume."} S1 T0
       M99
 
+    ; Loop breaker: a hard pause this soon after a successful auto-recovery means the
+    ; pass verdict didn't hold (e.g. regrind from a downstream cause the purge-through
+    ; can't fix) — skip the test, stay paused for the operator. Cleared here so the
+    ; next hard pause after an operator resume gets a fresh auto-recovery attempt.
+    if global.mfm_recovery_last_ok != 0 && (state.upTime - global.mfm_recovery_last_ok) < 300
+      set global.mfm_recovery_last_ok = 0
+      M25
+      M400
+      T-1 P0
+      M291 P{"Filament Sensor " ^ param.D ^ ": repeated error shortly after auto-recovery. Check filament for grinding and resume."} S1 T0
+      M99
+
     M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)
     M400                                 ; wait for pause.g to complete
 
@@ -129,6 +141,7 @@ if param.P == 4 || param.P == 5
 
     ; False positive confirmed — deselect tool so resume.g can re-select via T R1
     T-1 P0
+    set global.mfm_recovery_last_ok = state.upTime
     if global.debug
       echo "MFM: false positive — auto-resuming"
     M24

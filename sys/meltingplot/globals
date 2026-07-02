@@ -26,6 +26,7 @@ global mfm_last_check_time = 0.0          ; last MFM check timestamp (sub-second
 ; MFM persistent error tracking (survives swing suppressions and fast-track resets)
 global mfm_error_extruder_ref = null      ; extruder position at first error in sequence (null = no active tracking)
 global mfm_normal_since = 0               ; upTime when sustained normal readings began
+global mfm_recovery_last_ok = 0           ; upTime of last auto-recovery pass + auto-resume (0 = none); loop breaker in filament-error.g
 ; MFM systematic flow-bias (e-steps). DETECT in daemon.g (non-blocking); APPLY only at standstill
 ; in filament-error.g when the next MFM error pauses the print — M92 blocks, forbidden in daemon.g.
 global mfm_esteps_done = false            ; one-shot detection guard for this print, reset in print_end
