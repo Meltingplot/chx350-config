@@ -1,4 +1,4 @@
-M566 X720.0 Y720.0 Z72.00 U720.0 E120.00 P1            ; set maximum instantaneous speed changes (mm/min) and apply jerk on every move
+M566 X720.0 Y720.0 Z72.00 U720.0 E1800.00 P1            ; set maximum instantaneous speed changes (mm/min) and apply jerk on every move
 M203 X50000.00 Y60000.00 Z1800.00 U60000 E3600.00       ; set maximum speeds (mm/min)
 M201 X6000.00 Y6000.00 Z400.00 U6000 E3000.00           ; set accelerations (mm/s^2)
 M201.1 X500 Y500 U500 Z100 E1000                        ; set homing accelerations (mm/s^2)
