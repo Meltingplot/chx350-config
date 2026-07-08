@@ -22,6 +22,8 @@ if move.axes[2].homed == true && move.axes[2].machinePosition < (move.axes[2].ma
 ; of the bed and the filament can be fed in straighter which is better for the filament sensors
 G1 X300 Y0 F60000 ; move to the middle of the bed
 
+M400 ; wait for motion system to finish
+
 M291 P"Feed new Filament into the PTFE Tube." S2
 
 var tool = 0
