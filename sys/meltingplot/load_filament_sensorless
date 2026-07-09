@@ -24,7 +24,20 @@ G1 X300 Y0 F60000 ; move to the middle of the bed
 
 M400 ; wait for motion system to finish
 
+; when the previously unloaded material needed a high nozzle temperature, its residue
+; cannot be pushed out at a low-temp filament's loading temperature. load at 280C and
+; only drop to the filament temperature for the e-steps calibration.
+var load_temp = tools[0].active[0]
+var hightemp_purge = false
+if global.last_filament_temp >= 260 && var.load_temp < 280
+  set var.hightemp_purge = true
+  echo "Previous filament was unloaded at " ^ global.last_filament_temp ^ "C - loading at 280C to purge residue"
+  G10 P0 S280 ; heats up while the operator feeds the filament
+
 M291 P"Feed new Filament into the PTFE Tube." S2
+
+if var.hightemp_purge
+  M116 P0 ; wait for the purge temperature before filament reaches the nozzle
 
 var tool = 0
 var extruder = tools[var.tool].extruders[0]
@@ -106,6 +119,14 @@ while true
 
 set global.ignoreMFMevents = false
 M591 D{var.tool} S1 A0
+
+; loading done - drop from the 280C purge temperature back to the filament temperature
+if var.hightemp_purge
+  G10 P0 S{var.load_temp}
+  if global.filament_loading_error == false
+    M106 S255 ; part fan speeds up cooling; calibrate_e_steps turns it off again (M107)
+    M116 P0   ; wait for the nozzle to cool down before the e-steps calibration
+    M106 S0
 
 if global.filament_loading_error == false
   ; calibrate e-steps

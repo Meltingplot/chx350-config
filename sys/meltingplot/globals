@@ -8,6 +8,12 @@ global result = 0
 
 ; filament
 global filament_max_flow_rate = 20
+; nozzle temperature (C) the last filament was unloaded at - written by unload_filament,
+; used by load_filament_sensorless to detect high-temp residue in the nozzle.
+; persisted to a file because the residue survives a power cycle.
+global last_filament_temp = 0
+if fileexists("0:/sys/meltingplot/last-filament-temp.g")
+  M98 P"0:/sys/meltingplot/last-filament-temp.g"
 global filament_loading_error = false
 global deferred_filament_load_t0 = false	
 global deferred_filament_load_t1 = false	

@@ -11,6 +11,11 @@ if state.currentTool == -1
   M400 ; sbc specific
   M99
 
+; remember the unload nozzle temperature - load_filament_sensorless uses it to decide
+; whether high-temp residue must be purged at elevated temperature on the next load
+set global.last_filament_temp = tools[state.currentTool].active[0]
+echo >"0:/sys/meltingplot/last-filament-temp.g" "set global.last_filament_temp = " ^ global.last_filament_temp
+
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].homed == false
   G28 X ; home x axis -> will also home y and u axis
   if result != 0 || global.result != 0
