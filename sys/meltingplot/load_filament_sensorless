@@ -93,13 +93,15 @@ while true
 
   if var.filament_loaded && (var.avg_percantage < 20 || var.last_percentage < 10)
     echo "Filament stuck! cancle loading"
+    M98 P"0:/sys/meltingplot/unload_filament"
     set global.filament_loading_error = true
     break
 
   if iterations > 240 ; 60s
     echo "abort"
+    M98 P"0:/sys/meltingplot/unload_filament"
     set global.filament_loading_error = true
-    break 
+    break
 
   if var.drive_filament > 0
     set var.drive_filament = var.drive_filament - 1

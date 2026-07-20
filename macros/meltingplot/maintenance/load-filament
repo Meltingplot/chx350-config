@@ -18,6 +18,6 @@ if input == 0
   G90                      ; absolute positioning
 
 if state.currentTool == 0
-  set global.deferred_filament_load_t0 = true
+  set global.deferred_filament_load[state.currentTool] = true
 M703
 M400 ; sbc specific

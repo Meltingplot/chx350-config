@@ -2,12 +2,17 @@
 ; called after tool 0 has been selected
 ;
 
-; run /filaments/<filament name>/config.g
-M703
-
 var current_tool = 0
 var current_extruder = tools[var.current_tool].extruders[0]
 var current_filament = move.extruders[var.current_extruder].filament
+
+; keep filaments/<name>/config.g machine-owned: regenerate it (and auto-migrate any
+; user content into config-override.g) before M703 executes it
+if var.current_filament != ""
+  M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.current_filament}
+
+; run /filaments/<filament name>/config.g
+M703
 
 if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"})
   M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"}

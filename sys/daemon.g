@@ -10,6 +10,10 @@ var now = 0
 ; (e.g. print_end resetting to false) accepted in the same step.
 var left_checked = global.door_left_switch_checked
 var right_checked = global.door_right_switch_checked
+; filament-profile watchdog: last seen OM filament name + warn deadline (0 = disarmed).
+; Initializing from the OM makes a boot with restored filament produce no change event.
+var fil_prev = move.extruders[0].filament
+var fil_watch_until = 0
 
 while state.status != "halted" && global.daemon_reload == false
   set var.now = state.upTime + state.msUpTime/1000
@@ -95,8 +99,52 @@ while state.status != "halted" && global.daemon_reload == false
       set global.idle_heater_cutoff_done[iterations] = true
 
   if global.filament_loading_error == true && move.extruders[0].filament != ""
+    ; the physical unload already ran in load_filament_sensorless' error paths (all of
+    ; them call unload_filament before setting the flag) - force the M702 to skip it
+    ; (unload.g returns immediately) so this cannot block the daemon
+    set global.filament_forced_unload = true
     M702 P0
     set global.filament_loading_error = false
+
+  ; --- filament-profile watchdog: detect profiles missing the standard load/unload lines ---
+  ; A DWC-created profile without them fails SILENTLY: M701 registers the filament in the
+  ; OM but nothing is ever physically loaded. fileread() cannot parse G-code files, so
+  ; detection is behavioral: within 60s of a filament-name change either the physical load
+  ; must have been dispatched (marker set by load_filament_sensorless_conditionally.g) or
+  ; the profile is broken (DWC sends the consuming M703 within ~1s of M701, so 60s is
+  ; generous). On a broken profile the daemon force-unloads to compel operator intervention:
+  ; filament_forced_unload makes unload.g return immediately, so the M702 only clears the
+  ; assignment and cannot block this loop. No M98/blocking commands here - safety loop.
+  if move.extruders[0].filament != var.fil_prev
+    if move.extruders[0].filament == ""
+      ; unload: verify the physical unload actually ran (skip the check after a forced unload)
+      if global.filament_forced_unload == false && global.filament_physical_unload_done == false
+        M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was unregistered but never physically unloaded - unload.g is missing the standard line, see console."}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/unload.g must contain: M98 P""0:/sys/meltingplot/filament_unload.g"" S<temp> R<standby> - or run macro repair-filament-profile"}
+      set global.filament_forced_unload = false
+      set global.filament_physical_load_name = ""
+      set var.fil_watch_until = 0
+    else
+      set var.fil_watch_until = var.now + 60
+      set global.filament_physical_unload_done = false
+    set var.fil_prev = move.extruders[0].filament
+  if var.fil_watch_until != 0
+    if global.filament_physical_load_name == var.fil_prev
+      set var.fil_watch_until = 0 ; physical load dispatched - failures beyond this point raise filament_loading_error
+    elif var.now >= var.fil_watch_until
+      set var.fil_watch_until = 0
+      set global.filament_broken_profile = var.fil_prev
+      if global.deferred_filament_load[0]
+        ; load.g armed the deferred flag but nothing consumed it -> config.g misses the hook (or M703 was never sent)
+        set global.deferred_filament_load[0] = false
+        M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': physical load never started - config.g is missing the standard hook. Filament was unregistered, run macro repair-filament-profile, then load again."}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/config.g never ran the deferred-load hook (file broken or M703 not sent). Run macro repair-filament-profile (regenerates config.g), then load again."}
+      else
+        ; the deferred flag was never armed -> load.g is missing the standard line
+        M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was registered but never physically loaded - load.g is missing the standard line. Filament was unregistered, see console."}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/load.g must contain: M98 P""0:/sys/meltingplot/filament_load.g"" S<temp> R<standby> - or run macro repair-filament-profile"}
+      set global.filament_forced_unload = true
+      M702
 
   if global.z_motor_stall_time > 0 && state.upTime > global.z_motor_stall_time
     echo "Error: failed to home all z-motors within " ^ global.z_motor_stall_time_max ^ "s - abort!"

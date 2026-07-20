@@ -15,10 +15,17 @@ global last_filament_temp = 0
 if fileexists("0:/sys/meltingplot/last-filament-temp.g")
   M98 P"0:/sys/meltingplot/last-filament-temp.g"
 global filament_loading_error = false
-global deferred_filament_load_t0 = false	
-global deferred_filament_load_t1 = false	
-global deferred_filament_nle_calibration_t0 = false
-global deferred_filament_nle_calibration_t1 = false
+; per-tool deferred physical load, armed by filament_load.g (from load.g), consumed by
+; load_filament_sensorless_conditionally.g (from the machine-generated config.g).
+; Sized explicitly because globals load before tools exist.
+global deferred_filament_load = vector(2, false)
+; filament-profile watchdog (daemon.g): a DWC-created profile missing the standard
+; M98 lines fails silently — M701 registers the filament in the OM but nothing is
+; ever physically loaded. Detection is behavioral (fileread cannot parse G-code).
+global filament_physical_load_name = ""      ; filament whose physical load was dispatched by conditionally.g ("" = none)
+global filament_physical_unload_done = false ; set by unload_filament; checked by daemon.g on the OM name -> "" transition
+global filament_forced_unload = false        ; daemon-initiated M702: skip the physical unload, only clear the assignment
+global filament_broken_profile = ""          ; profile name captured by the watchdog before the forced unload (for the repair macro)
 global mfmbackoff = 3
 global ignoreMFMevents = false
 global lastMFMBackoffCheck = 0

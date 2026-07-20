@@ -1,0 +1,53 @@
+; repair-filament-profile
+; Repairs a filament profile that is missing the standard load/unload/config lines
+; (typically a profile freshly created in DWC). Run this after the daemon.g watchdog
+; reported a broken profile and force-unloaded the filament.
+; - config.g is always regenerated (machine-owned; existing user content is moved
+;   to config-override.g by regenerate_filament_config.g)
+; - load.g/unload.g can optionally be rewritten from the standard template. This
+;   OVERWRITES them (RRF cannot read G-code files back), hence the confirmation.
+
+; determine the profile name: currently loaded filament, else the profile the
+; watchdog captured before the forced unload, else ask the operator
+var name = move.extruders[0].filament
+if var.name == ""
+  set var.name = global.filament_broken_profile
+if var.name == ""
+  M291 R"Repair filament profile" P"Enter the exact filament profile name (directory under /filaments):" S7 J2
+  if result != 0
+    M99
+  set var.name = input
+if var.name == ""
+  M99
+
+if !fileexists("0:/filaments/" ^ var.name ^ "/load.g") && !fileexists("0:/filaments/" ^ var.name ^ "/unload.g") && !fileexists("0:/filaments/" ^ var.name ^ "/config.g") && !fileexists("0:/filaments/" ^ var.name ^ "/config-override.g")
+  M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' not found under 0:/filaments/ - create it in DWC first."} S1 T0
+  M99
+
+M291 R"Repair filament profile" P{"Repair profile '" ^ var.name ^ "'? config.g will be regenerated (existing content is moved to config-override.g)."} S4 K{"Repair","Cancel"} F0
+if input != 0
+  M99
+
+M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.name}
+
+M291 R"Repair filament profile" P"Rewrite load.g and unload.g from the standard template? This OVERWRITES any existing content." S4 K{"Rewrite","Skip"} F0
+if input == 0
+  var active = 215
+  if state.currentTool >= 0 && tools[state.currentTool].active[0] > 0
+    set var.active = floor(tools[state.currentTool].active[0])
+  M291 R"Repair filament profile" P"Active (extrusion) temperature:" S5 L150 H400 F{var.active} J2
+  if result != 0
+    M99
+  set var.active = input
+  M291 R"Repair filament profile" P"Standby temperature:" S5 L0 H300 F160 J2
+  if result != 0
+    M99
+  var standby = input
+  echo >{"0:/filaments/" ^ var.name ^ "/load.g"} "; " ^ var.name ^ " - load"
+  echo >>{"0:/filaments/" ^ var.name ^ "/load.g"} "M98 P""0:/sys/meltingplot/filament_load.g"" S" ^ var.active ^ " R" ^ var.standby
+  echo >{"0:/filaments/" ^ var.name ^ "/unload.g"} "; " ^ var.name ^ " - unload"
+  echo >>{"0:/filaments/" ^ var.name ^ "/unload.g"} "M98 P""0:/sys/meltingplot/filament_unload.g"" S" ^ var.active ^ " R" ^ var.standby
+
+set global.filament_broken_profile = ""
+M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' repaired. Load the filament again via DWC (Filaments -> Load)."} S1 T0
+M400 ; sbc specific

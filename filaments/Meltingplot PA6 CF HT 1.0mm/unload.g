@@ -1,7 +1,2 @@
-if global.debug
-  echo "filament unload.g"
-
-G10 P0 S250 R160                            ; set temperatures
-T0                                          ; Select T0
-M116 P0                                     ; wait for temp
-M98 P"0:/sys/meltingplot/unload_filament"   ; unload filament
+; Meltingplot PA6 CF HT 1.0mm - unload
+M98 P"0:/sys/meltingplot/filament_unload.g" S250 R160
