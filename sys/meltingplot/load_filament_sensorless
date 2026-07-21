@@ -32,7 +32,7 @@ var hightemp_purge = false
 if global.last_filament_temp >= 260 && var.load_temp < 280
   set var.hightemp_purge = true
   echo "Previous filament was unloaded at " ^ global.last_filament_temp ^ "C - loading at 280C to purge residue"
-  G10 P0 S280 ; heats up while the operator feeds the filament
+  M568 P0 S280 A2 ; heats up while the operator feeds the filament
 
 M291 P"Feed new Filament into the PTFE Tube." S2
 
@@ -124,7 +124,7 @@ M591 D{var.tool} S1 A0
 
 ; loading done - drop from the 280C purge temperature back to the filament temperature
 if var.hightemp_purge
-  G10 P0 S{var.load_temp}
+  M568 P0 S{var.load_temp} A2
   if global.filament_loading_error == false
     M106 S255 ; part fan speeds up cooling; calibrate_e_steps turns it off again (M107)
     M116 P0   ; wait for the nozzle to cool down before the e-steps calibration

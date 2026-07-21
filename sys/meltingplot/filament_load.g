@@ -36,7 +36,7 @@ if state.currentTool == -1
 if state.currentTool == -1
   abort "filament_load.g: no tool selected"
 
-G10 P{state.currentTool} S{var.active} R{var.standby} ; set temperatures
+M568 P{state.currentTool} S{var.active} R{var.standby} A2 ; set temperatures
 if heat.heaters[tools[state.currentTool].heaters[0]].current < heat.heaters[tools[state.currentTool].heaters[0]].active
   M116 P{state.currentTool} ; wait only when heating up (skip pointless cool-down wait)
 
