@@ -120,7 +120,7 @@ while state.status != "halted" && global.daemon_reload == false
       ; unload: verify the physical unload actually ran (skip the check after a forced unload)
       if global.filament_forced_unload == false && global.filament_physical_unload_done == false
         M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was unregistered but never physically unloaded - unload.g is missing the standard line, see console."}
-        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/unload.g must contain: M98 P""0:/sys/meltingplot/filament_unload.g"" S<temp> R<standby> - or run macro repair-filament-profile"}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/unload.g did not run the shared filament_unload.g - run macro repair-filament-profile (regenerates load.g/unload.g/config.g, temperatures go to temps.g)"}
       set global.filament_forced_unload = false
       set global.filament_physical_load_name = ""
       set var.fil_watch_until = 0
@@ -138,11 +138,11 @@ while state.status != "halted" && global.daemon_reload == false
         ; load.g armed the deferred flag but nothing consumed it -> config.g misses the hook (or M703 was never sent)
         set global.deferred_filament_load[0] = false
         M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': physical load never started - config.g is missing the standard hook. Filament was unregistered, run macro repair-filament-profile, then load again."}
-        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/config.g never ran the deferred-load hook (file broken or M703 not sent). Run macro repair-filament-profile (regenerates config.g), then load again."}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/config.g never ran the deferred-load hook (file broken or M703 not sent). Run macro repair-filament-profile (regenerates config.g/load.g/unload.g), then load again."}
       else
         ; the deferred flag was never armed -> load.g is missing the standard line
         M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was registered but never physically loaded - load.g is missing the standard line. Filament was unregistered, see console."}
-        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/load.g must contain: M98 P""0:/sys/meltingplot/filament_load.g"" S<temp> R<standby> - or run macro repair-filament-profile"}
+        M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: filaments/" ^ var.fil_prev ^ "/load.g did not run the shared filament_load.g - run macro repair-filament-profile (regenerates load.g/unload.g/config.g, temperatures go to temps.g)"}
       set global.filament_forced_unload = true
       M702
 

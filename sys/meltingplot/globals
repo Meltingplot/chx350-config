@@ -26,6 +26,14 @@ global filament_physical_load_name = ""      ; filament whose physical load was 
 global filament_physical_unload_done = false ; set by unload_filament; checked by daemon.g on the OM name -> "" transition
 global filament_forced_unload = false        ; daemon-initiated M702: skip the physical unload, only clear the assignment
 global filament_broken_profile = ""          ; profile name captured by the watchdog before the forced unload (for the repair macro)
+; per-profile temperatures, set by filaments/<name>/temps.g (executed by
+; filament_load.g/filament_unload.g when called with F"<name>"). temps.g is the
+; canonical per-material temperature store: load.g/unload.g are machine-generated
+; boilerplate and M98's R parameter is the pause flag (NOT passed to the macro),
+; so temperatures can neither live in nor be passed into those files.
+global filament_temp_active = 0              ; extrusion/load temperature
+global filament_temp_standby = 0             ; standby temperature
+global filament_temp_unload = 0              ; unload temperature (0 = same as active)
 global mfmbackoff = 3
 global ignoreMFMevents = false
 global lastMFMBackoffCheck = 0
