@@ -21,7 +21,9 @@ if var.name == ""
 if var.name == ""
   M99
 
-if !fileexists("0:/filaments/" ^ var.name ^ "/load.g") && !fileexists("0:/filaments/" ^ var.name ^ "/unload.g") && !fileexists("0:/filaments/" ^ var.name ^ "/config.g") && !fileexists("0:/filaments/" ^ var.name ^ "/config-override.g") && !fileexists("0:/filaments/" ^ var.name ^ "/temps.g")
+; keyword arguments are limited to 255 chars - keep the condition short via a prefix var
+var dir = "0:/filaments/" ^ var.name ^ "/"
+if !fileexists(var.dir ^ "load.g") && !fileexists(var.dir ^ "unload.g") && !fileexists(var.dir ^ "config.g") && !fileexists(var.dir ^ "config-override.g") && !fileexists(var.dir ^ "temps.g")
   M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' not found under 0:/filaments/ - create it in DWC first."} S1 T0
   M99
 

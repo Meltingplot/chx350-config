@@ -19,6 +19,10 @@ global filament_loading_error = false
 ; load_filament_sensorless_conditionally.g (from the machine-generated config.g).
 ; Sized explicitly because globals load before tools exist.
 global deferred_filament_load = vector(2, false)
+; legacy shim: load.g files generated before 2026-07 still set this flag. Nothing
+; consumes it anymore (the watchdog flags such profiles for repair), but it must
+; exist so an old load.g does not hard-error with "unknown variable".
+global deferred_filament_load_t0 = false
 ; filament-profile watchdog (daemon.g): a DWC-created profile missing the standard
 ; M98 lines fails silently — M701 registers the filament in the OM but nothing is
 ; ever physically loaded. Detection is behavioral (fileread cannot parse G-code).
