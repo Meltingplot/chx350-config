@@ -100,9 +100,9 @@ while state.status != "halted" && global.daemon_reload == false
 
   if global.filament_loading_error == true && move.extruders[0].filament != ""
     ; the physical unload already ran in load_filament_sensorless' error paths (all of
-    ; them call unload_filament before setting the flag) - force the M702 to skip it
-    ; (unload.g returns immediately) so this cannot block the daemon
-    set global.filament_forced_unload = true
+    ; them call unload_filament, which sets filament_physical_unload_done) - so just
+    ; drop the assignment: M702 P0 clears the loaded-filament name WITHOUT running
+    ; unload.g, so it cannot block the daemon
     M702 P0
     set global.filament_loading_error = false
 
@@ -113,15 +113,16 @@ while state.status != "halted" && global.daemon_reload == false
   ; must have been dispatched (marker set by load_filament_sensorless_conditionally.g) or
   ; the profile is broken (DWC sends the consuming M703 within ~1s of M701, so 60s is
   ; generous). On a broken profile the daemon force-unloads to compel operator intervention:
-  ; filament_forced_unload makes unload.g return immediately, so the M702 only clears the
-  ; assignment and cannot block this loop. No M98/blocking commands here - safety loop.
+  ; filament_forced_unload makes unload.g return immediately (and self-clears there), so the
+  ; M702 only clears the assignment and cannot block this loop. No M98/blocking commands here.
   if move.extruders[0].filament != var.fil_prev
     if move.extruders[0].filament == ""
-      ; unload: verify the physical unload actually ran (skip the check after a forced unload)
-      if global.filament_forced_unload == false && global.filament_physical_unload_done == false
+      ; unload: warn if no physical unload ran (unload.g missing the standard line). A
+      ; daemon-forced unload sets filament_physical_unload_done itself, so this stays
+      ; quiet after the broken-profile force-unload below.
+      if global.filament_physical_unload_done == false
         M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was unregistered but never physically unloaded - unload.g is missing the standard line, see console."}
         M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: unload.g did not run the shared filament_unload.g - run macro repair-filament-profile"}
-      set global.filament_forced_unload = false
       set global.filament_physical_load_name = ""
       set var.fil_watch_until = 0
     else
@@ -143,6 +144,10 @@ while state.status != "halted" && global.daemon_reload == false
         ; the deferred flag was never armed -> load.g is missing the standard line
         M291 S1 T0 R"Filament profile broken" P{"Profile '" ^ var.fil_prev ^ "': filament was registered but never physically loaded - load.g is missing the standard line. Filament was unregistered, see console."}
         M118 P0 S{"Filament profile '" ^ var.fil_prev ^ "' broken: load.g did not run the shared filament_load.g - run macro repair-filament-profile"}
+      ; nothing was physically loaded (broken profile), so mark the unload handled -
+      ; this suppresses the "unload.g broken" check when M702 clears the name next
+      ; iteration. filament_forced_unload self-clears inside the M702's unload.g.
+      set global.filament_physical_unload_done = true
       set global.filament_forced_unload = true
       M702
 

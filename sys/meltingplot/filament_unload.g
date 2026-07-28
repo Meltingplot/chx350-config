@@ -9,8 +9,10 @@
 
 ; Daemon-initiated forced unload (broken-profile watchdog / failed-load cleanup):
 ; skip the physical unload entirely so the daemon's M702 cannot block - M702 then
-; only clears the filament assignment. MUST stay the first statement.
+; only clears the filament assignment. Self-clear the one-shot flag right here (M702
+; always runs this script), so it can never get stuck set. MUST stay first.
 if global.filament_forced_unload
+  set global.filament_forced_unload = false
   M99
 
 if global.debug

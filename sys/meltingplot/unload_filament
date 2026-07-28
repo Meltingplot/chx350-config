@@ -1,6 +1,8 @@
 ; Daemon-initiated forced unload (broken-profile watchdog / failed-load cleanup):
-; skip the physical unload so the daemon's M702 cannot block. MUST stay first.
+; skip the physical unload so the daemon's M702 cannot block. Self-clear the
+; one-shot flag here so it can never get stuck set. MUST stay first.
 if global.filament_forced_unload
+  set global.filament_forced_unload = false
   M99
 
 if global.debug
