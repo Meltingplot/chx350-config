@@ -15,10 +15,16 @@ MeltingPlot CHX350 3D printer configuration repository. Contains machine configu
 ### Boot Sequence
 
 `sys/config.g` is the entry point — executed by firmware on startup. It:
-1. Loads global variables (`sys/meltingplot/globals`)
+1. Loads global variables (`sys/meltingplot/globals`, which ends by loading `global-override.g` if present)
 2. Configures hardware (motors, heaters, fans, sensors, probes)
 3. Loads CE compliance settings and machine-specific overrides
 4. Restores saved parameters from non-volatile memory (`M501`)
+
+### Machine Variants
+
+Not every CHX350 has the same optional hardware, and the difference is expressed **as a boolean, not as G-code**: a feature is present or absent, it is never reconfigured — pin assignment is identical on every machine (CE documentation) and stays in `config.g`. Every switch is *declared with its default in `sys/meltingplot/globals`* — the default always describes the machine *without* the optional part, so the variable exists on every machine and consumers never need an `exists()` guard. A machine that deviates assigns the value in `sys/meltingplot/global-override.g`, which is loaded at the end of `globals` (guarded by `fileexists`). It ships fully commented out and is on the **protected list of the DWC config plugin**, so a config update never overwrites the local edits. That file may only **assign** (`set global.<name> = …`) — declaring there would fail on the second boot — and holds values only; anything requiring actual G-code (drive directions, filament monitor, heater models) belongs in `sys/meltingplot/machine-override`. Current switches: `has_aux_fan` (fan 2 on out2), `has_exhaust_fan` (fan 3 on out1).
+
+Fan numbering follows the slicer convention so a slicer can never address an internal fan: **P0** = part cooling (tool-mapped via `M563 F0`), **P1** = part cooling #2 (an enable line — the fan has no PWM channel of its own and is driven by fan 0's PWM, so its mosfet must stay switched on, hence `H2 T10`), **P2** = auxiliary part cooling (OrcaSlicer `M106 P2`), **P3** = exhaust / chamber fan (OrcaSlicer air filtration), **P4+** = machine internals (radiators, water pump).
 
 ### Print Flow
 

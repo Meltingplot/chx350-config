@@ -1,51 +1,51 @@
-M106 P3 S1 H-1 C"water pump" ; disable thermostatic control and run at 100%
+M106 P6 S1 H-1 C"water pump" ; disable thermostatic control and run at 100%
 G4 S10
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S5
-M106 P3 S0.25 ; reduce to 25%
+M106 P6 S0.25 ; reduce to 25%
 G4 S1
-M106 P3 S1
+M106 P6 S1
 G4 S10
-M106 P3 S0 H2 T45:100 L0.75 X1.0 C"water pump"  ; enable thermostatic control again
+M106 P6 S0 H2 T45:100 L0.75 X1.0 C"water pump"  ; enable thermostatic control again

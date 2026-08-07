@@ -129,19 +129,32 @@ M307 H1 R1.962 K0.205:0.114 D5.81 E1.35 S1.00 B0 V24.0  ; disable bang-bang mode
 M570 H1 P10 T15 S10                                     ; Enable heater fault detection (Trigger Time 10sec, temp deviation 15°, cancel print after 10min)
 
 ; Fans
-M950 F1 C"out4+out4.tach" Q450                          ; create fan 1 (lower radiator fan) on pin out4 and set its frequency
-M106 P1 S0 H2 T50 L1.0 X1.0 C"lower radiator"           ; set fan 1 value. Thermostatic control is turned off
-M950 F2 C"out5+out5.tach" Q450                          ; create fan 2 (upper radiator fan) on pin out5 and set its frequency
-M106 P2 S0 H2 T50 L1.0 X1.0 C"upper radiator"           ; set fan 2 value. Thermostatic control is turned off
-M950 F3 C"!out6+out6.tach" Q250                         ; create fan 3 (water pump) on pin out6 and set its frequency
-M106 P3 S0 H2 T45:100 L0.75 X1.0 C"water pump"          ; set fan 3 value. Thermostatic control is turned off
-M950 F4 C"!20.out1+out1.tach" Q250                      ; create fan 4 (part cooling fan) on pin out4 and set its frequency
-M106 P4 S0 H-1 C"part cooling"                          ; set fan 4 value. Thermostatic control is turned off
-M950 F5 C"20.out2+out2.tach" Q250                       ; create fan 5 (part cooling fan #2) on pin out4 and set its frequency
-M106 P5 S1 H2 T10 L1.0 X1.0 C"part cooling"             ; set fan 5 value. Thermostatic control is turned off
+; Numbering follows the slicer convention: P0 = part cooling, P2 = auxiliary part
+; cooling, P3 = exhaust / chamber fan. Machine internal fans start at P4 so that a
+; slicer can never address them. P2 and P3 are optional hardware and only exist if
+; enabled by has_aux_fan / has_exhaust_fan in global-override.g.
+M950 F0 C"!20.out1+out1.tach" Q250                      ; create fan 0 (part cooling fan) on pin 20.out1 and set its frequency
+M106 P0 S0 H-1 C"part cooling"                          ; set fan 0 value. Thermostatic control is turned off
+; Part cooling fan #2 has no PWM channel of its own - it is driven by the PWM of fan 0
+; and 20.out2 only switches its lowside mosfet, i.e. it enables the fan. The mosfet must
+; therefore always be on, hence the thermostatic setting on sensor 2 with T10 (= always).
+M950 F1 C"20.out2+out2.tach" Q250                       ; create fan 1 (part cooling fan #2 enable) on pin 20.out2 and set its frequency
+M106 P1 S1 H2 T10 L1.0 X1.0 C"part cooling #2"          ; keep the enable on whenever the hotend is above 10C
+if global.has_aux_fan
+  M950 F2 C"out2" Q250                                  ; create fan 2 (aux fan) on pin out2 and set its frequency
+  M106 P2 S0 H-1 C"aux"                                 ; set fan 2 value. Thermostatic control is turned off
+if global.has_exhaust_fan
+  M950 F3 C"out1" Q250                                  ; create fan 3 (exhaust fan) on pin out1 and set its frequency
+  M106 P3 S0 H-1 C"exhaust"                             ; set fan 3 value. Thermostatic control is turned off
+M950 F4 C"out4+out4.tach" Q450                          ; create fan 4 (lower radiator fan) on pin out4 and set its frequency
+M106 P4 S0 H2 T50 L1.0 X1.0 C"lower radiator"           ; set fan 4 value. Thermostatic control on sensor 2
+M950 F5 C"out5+out5.tach" Q450                          ; create fan 5 (upper radiator fan) on pin out5 and set its frequency
+M106 P5 S0 H2 T50 L1.0 X1.0 C"upper radiator"           ; set fan 5 value. Thermostatic control on sensor 2
+M950 F6 C"!out6+out6.tach" Q250                         ; create fan 6 (water pump) on pin out6 and set its frequency
+M106 P6 S0 H2 T45:100 L0.75 X1.0 C"water pump"          ; set fan 6 value. Thermostatic control on sensor 2
 
 ; Tools
-M563 P0 D0 H1 F4                                        ; define tool 0
+M563 P0 D0 H1 F0                                        ; define tool 0
 G10 P0 X0 Y0 Z0                                         ; set tool 0 axis offsets
 M568 P0 R0 S0 A0                                        ; set initial tool 0 active and standby temperatures to 0C
 

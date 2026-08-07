@@ -118,3 +118,20 @@ global led_colors = {"white", "blue", "green", "yellow", "red"}
 
 ; daemon reload flag
 global daemon_reload = false
+
+; machine variant configuration
+; Optional hardware is selected by a boolean: present or not. It is never reconfigured -
+; pin assignment is identical on every machine (CE documentation) and stays in config.g.
+; The defaults below describe a machine WITHOUT the optional part; a machine that has it
+; sets the flag in global-override.g. Declaration and default always stay here so that
+; every variable exists on every machine and consumers never need exists() guards.
+global has_aux_fan = false              ; auxiliary part cooling fan on out2, slicer P2
+global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer P3
+
+; Per-machine overrides. Values only - anything that needs G-code (drive directions,
+; sensor wiring, ...) belongs in machine-override instead. The file is on the protected
+; list of the DWC config plugin, so an update never overwrites the local edits. It may
+; only assign (set global.<name> = ...), so a typo fails loudly at boot instead of
+; silently doing nothing. The fileexists guard keeps a machine bootable that lost it.
+if fileexists("0:/sys/meltingplot/global-override.g")
+  M98 P"0:/sys/meltingplot/global-override.g"
