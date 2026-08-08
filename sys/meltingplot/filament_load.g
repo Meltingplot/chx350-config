@@ -10,6 +10,11 @@
 ; heat-up and arms the deferred physical load. The load itself runs later via
 ; load_filament_sensorless_conditionally.g (from the machine-generated config.g)
 ; because move.extruders[n].filament is only valid AFTER load.g returns.
+; NEVER use abort in the load/unload path: it terminates the current print file too,
+; so a broken filament profile would kill a running job. Warn (M118 P0 reaches every
+; channel - echo only answers the caller) and return with M99. Returning before the
+; deferred flag is armed is the safe outcome: no physical load is dispatched, which is
+; exactly the signature the broken-profile watchdog in daemon.g detects and cleans up.
 
 if global.debug
   echo "filament_load.g"
@@ -23,18 +28,21 @@ if exists(param.F)
   if fileexists("0:/filaments/" ^ param.F ^ "/temps.g")
     M98 P{"0:/filaments/" ^ param.F ^ "/temps.g"}
   if global.filament_temp_active <= 0
-    abort "filament_load.g: filaments/" ^ param.F ^ "/temps.g missing or invalid - run macro repair-filament-profile"
+    M118 P0 S{"Error: filament_load.g: filaments/" ^ param.F ^ "/temps.g missing or invalid - run macro repair-filament-profile"}
+    M99
   set var.active = global.filament_temp_active
   set var.standby = global.filament_temp_standby
 elif exists(param.S)
   set var.active = param.S
 else
-  abort "filament_load.g: missing F (profile name) or S (active temperature) parameter"
+  M118 P0 S"Error: filament_load.g: missing F (profile name) or S (active temperature) parameter"
+  M99
 
 if state.currentTool == -1
   T0 ; console M701 without a tool selected - use the default tool
 if state.currentTool == -1
-  abort "filament_load.g: no tool selected"
+  M118 P0 S"Error: filament_load.g: no tool selected"
+  M99
 
 M568 P{state.currentTool} S{var.active} R{var.standby} A2 ; set temperatures
 if heat.heaters[tools[state.currentTool].heaters[0]].current < heat.heaters[tools[state.currentTool].heaters[0]].active
