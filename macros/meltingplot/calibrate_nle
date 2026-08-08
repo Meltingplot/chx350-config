@@ -319,9 +319,12 @@ while true
 
 echo "NLE calibration finished!"
 echo "M592 D" ^ var.extruder ^ " A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
-echo >{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-nle.g"} "; max F" ^ var.extrusionSpeeds[var.sampleCount -1] * 60 ^ " mm/min or " ^ var.extrusionSpeeds[var.sampleCount -1] * 6.38 ^ "mm³/s"
-echo >>{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-nle.g"} "; temp: " ^ var.currentTemp ^ " °C"
-echo >>{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-nle.g"} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
+; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
+var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.nozzleKey ^ ".g"
+echo >{var.autoFile} "; max F" ^ var.extrusionSpeeds[var.sampleCount -1] * 60 ^ " mm/min or " ^ var.extrusionSpeeds[var.sampleCount -1] * 6.38 ^ "mm³/s"
+echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, nozzle: " ^ var.nozzleKey ^ "mm"
+echo >>{var.autoFile} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
 M98 P"0:/sys/meltingplot/machine-override"                ; Load Machine specific overrides

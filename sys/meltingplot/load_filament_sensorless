@@ -138,7 +138,11 @@ if global.filament_loading_error == false
   var current_tool = 0
   var current_filament = move.extruders[var.current_tool].filament
 
-  if global.result == 0 && fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}) == false
+  ; NLE calibration is nozzle-specific; the unsuffixed file of profiles predating the
+  ; per-nozzle split still counts as calibrated (tpost0.g falls back to it as well)
+  var nle = "0:/filaments/" ^ var.current_filament ^ "/config-auto-nle"
+  var nleSuffix = "-" ^ take("" ^ (round(global.nozzle_diameter[var.current_tool] * 100) / 100), 4) ^ ".g"
+  if global.result == 0 && !fileexists(var.nle ^ var.nleSuffix) && !fileexists(var.nle ^ ".g")
     echo "No non linear extrusion (NLE) calibration found!"
     if job.file.fileName == null
       echo "Creating NLE calibration."

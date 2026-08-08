@@ -14,8 +14,15 @@ if var.current_filament != ""
 ; run /filaments/<filament name>/config.g
 M703
 
-if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"})
-  M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-esteps.g"}
+; calibration results are nozzle-specific (config-auto-<what>-<nozzle key>.g) - a PA or
+; NLE calibration only ever describes the nozzle it was run with. Profiles predating the
+; per-nozzle split are still picked up through the unsuffixed fallback.
+var suffix = "-" ^ take("" ^ (round(global.nozzle_diameter[var.current_tool] * 100) / 100), 4) ^ ".g"
+var auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-esteps"
+if fileexists(var.auto ^ var.suffix)
+  M98 P{var.auto ^ var.suffix}
+elif fileexists(var.auto ^ ".g")
+  M98 P{var.auto ^ ".g"}
 
 var current_esteps = move.extruders[var.current_extruder].stepsPerMm
 var validValue = 50 * move.extruders[var.current_extruder].microstepping.value
@@ -24,11 +31,17 @@ if var.current_esteps < (var.validValue * 0.8) || var.current_esteps > (var.vali
   echo "Warning: configured E-Steps of tool " ^ var.current_tool ^ " out of range, please check the configuration. Using Default."
   M92 E{var.validValue}
 
-if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"})
-  M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-nle.g"}
+set var.auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-nle"
+if fileexists(var.auto ^ var.suffix)
+  M98 P{var.auto ^ var.suffix}
+elif fileexists(var.auto ^ ".g")
+  M98 P{var.auto ^ ".g"}
 
-if fileexists({"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-pa.g"})
-  M98 P{"0:/filaments/" ^ {var.current_filament } ^ "/config-auto-pa.g"}
+set var.auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-pa"
+if fileexists(var.auto ^ var.suffix)
+  M98 P{var.auto ^ var.suffix}
+elif fileexists(var.auto ^ ".g")
+  M98 P{var.auto ^ ".g"}
 
 ; Wait for set temperatures to be reached
 if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active

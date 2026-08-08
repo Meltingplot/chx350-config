@@ -14,7 +14,7 @@ var name = move.extruders[0].filament
 if var.name == ""
   set var.name = global.filament_broken_profile
 if var.name == ""
-  M291 R"Repair filament profile" P"Enter the exact filament profile name (directory under /filaments):" S7 J2
+  M291 R"Repair filament profile" P"Enter the exact filament profile name (directory under /filaments):" S7 L1 H40 J2
   if result != 0
     M99
   set var.name = input

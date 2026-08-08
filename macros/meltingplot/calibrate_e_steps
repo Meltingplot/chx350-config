@@ -104,8 +104,11 @@ if var.newESteps < (var.validValue * 0.9) || var.newESteps > (var.validValue * 1
   set global.result = 5
   M99                                               ; exit macro
 
-echo >{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-esteps.g"} "; calibration temperature: " ^ var.currentTemp
-echo >>{"0:/filaments/" ^ {move.extruders[0].filament} ^ "/config-auto-esteps.g"} "M92 E" ^ var.newESteps
+; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
+var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-esteps-" ^ var.nozzleKey ^ ".g"
+echo >{var.autoFile} "; calibration temperature: " ^ var.currentTemp ^ ", nozzle: " ^ var.nozzleKey ^ "mm"
+echo >>{var.autoFile} "M92 E" ^ var.newESteps
 
 M92 E{var.newESteps} ; activate new e-steps
 

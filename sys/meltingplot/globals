@@ -6,6 +6,22 @@ global debug = false
 ; result variable for macros
 global result = 0
 
+; nozzle diameter - a property of the tool, not of the filament, so it is stored per
+; tool and persisted (a nozzle change must survive a power cycle): tool 0 reads
+; sys/meltingplot/nozzle0.g, tool 1 nozzle1.g, both written by macro set-nozzle-diameter.
+; The diameter also builds file names (filaments/<name>/nozzle-0.40.g, config-auto-pa-0.40.g).
+; NEVER concatenate the raw value for that: RRF keeps the decimal places the value was
+; written with, so 0.4 renders "0.4" but 0.4000 renders "0.4000" and anything computed
+; renders "0.4000000" - each a different, silently wrong file name. Always derive the key
+; as two decimal places of fixed width:
+;   take("" ^ (round(global.nozzle_diameter[<tool>] * 100) / 100), 4)   -> "0.40", "1.20"
+; Sized explicitly because globals load before tools exist.
+global nozzle_diameter = vector(2, 0.6)
+if fileexists("0:/sys/meltingplot/nozzle0.g")
+  M98 P"0:/sys/meltingplot/nozzle0.g"
+if fileexists("0:/sys/meltingplot/nozzle1.g")
+  M98 P"0:/sys/meltingplot/nozzle1.g"
+
 ; filament
 global filament_max_flow_rate = 20
 ; nozzle temperature (C) the last filament was unloaded at - written by unload_filament,

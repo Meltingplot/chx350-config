@@ -1,0 +1,149 @@
+; create-filament-profile
+; Creates a new filament profile under 0:/filaments/<name>/ from scratch:
+;   temps.g            - active/standby/unload temperature. Canonical temperature store,
+;                        read by filament_load.g/filament_unload.g (RRF cannot read values
+;                        back out of the machine-generated load.g/unload.g).
+;   config-override.g  - material parameters that do NOT depend on the nozzle (M143 ...)
+;   nozzle-<d>.g       - parameters of the installed nozzle: max volumetric flow rate,
+;                        pressure advance, firmware retraction, heater feedforward.
+;                        Selected automatically by the generated config.g through
+;                        global.nozzle_diameter of the current tool.
+;   config.g/load.g/unload.g - machine-owned, written by regenerate_filament_config.g
+; A profile describes one MATERIAL, not one material/nozzle combination. Running it again
+; for a profile that already exists adds the parameter set of the currently installed
+; nozzle (macro set-nozzle-diameter), so one PLA profile can serve 0.4, 0.6 and 0.8 mm.
+; For profiles that are broken rather than incomplete (e.g. created in DWC) use macro
+; repair-filament-profile.
+
+var tool = state.currentTool >= 0 ? state.currentTool : 0
+; two decimals of fixed width - see globals: the raw float must never build a file name
+var nozzle = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+
+M291 R"New filament profile" P"Name of the filament profile (becomes the directory name under /filaments):" S7 L1 H40 J2
+if result != 0
+  M99
+var name = input
+if var.name == ""
+  M99
+
+var dir = "0:/filaments/" ^ var.name ^ "/"
+var nfile = var.dir ^ "nozzle-" ^ var.nozzle ^ ".g"
+var addNozzleOnly = false
+
+; an existing profile is extended by the current nozzle instead of being overwritten
+if fileexists(var.dir ^ "temps.g") || fileexists(var.dir ^ "config-override.g") || fileexists(var.dir ^ "config.g")
+  if !fileexists(var.dir ^ "temps.g")
+    M291 R"New filament profile" P{"Profile '" ^ var.name ^ "' exists but is incomplete - run macro repair-filament-profile first."} S1 T0
+    M99
+  if fileexists(var.nfile)
+    M291 R"New filament profile" P{"Profile '" ^ var.name ^ "' already has values for the " ^ var.nozzle ^ "mm nozzle - edit them in DWC."} S1 T0
+    M99
+  M291 R"New filament profile" P{"Profile '" ^ var.name ^ "' exists. Add the parameters for the " ^ var.nozzle ^ "mm nozzle?"} S4 K{"Add","Cancel"} F0
+  if input != 0
+    M99
+  set var.addNozzleOnly = true
+
+; --- temperatures (temps.g) ---
+var active = 220
+var standby = 160
+var unload = 220
+
+if !var.addNozzleOnly
+  ; a leftover empty directory makes M470 fail - harmless, the temps.g write below is the
+  ; real check whether the profile directory is usable
+  M470 P{"0:/filaments/" ^ var.name}
+  M291 R{"New profile: " ^ var.name} P"Active (extrusion) temperature:" S5 L150 H450 F220 J2
+  if result != 0
+    M99
+  set var.active = input
+  M291 R{"New profile: " ^ var.name} P"Standby temperature:" S5 L0 H300 F160 J2
+  if result != 0
+    M99
+  set var.standby = input
+  M291 R{"New profile: " ^ var.name} P"Unload temperature (usually the active temperature):" S5 L150 H450 F{var.active} J2
+  if result != 0
+    M99
+  set var.unload = input
+
+  echo >{var.dir ^ "temps.g"} "; " ^ var.name ^ " - temperatures (user-editable, used by filament_load.g/filament_unload.g)"
+  echo >>{var.dir ^ "temps.g"} "set global.filament_temp_active = " ^ var.active
+  echo >>{var.dir ^ "temps.g"} "set global.filament_temp_standby = " ^ var.standby
+  echo >>{var.dir ^ "temps.g"} "set global.filament_temp_unload = " ^ var.unload
+
+  if !fileexists(var.dir ^ "temps.g")
+    M291 R"New filament profile" P{"Could not write to 0:/filaments/" ^ var.name ^ "/ - invalid profile name?"} S1 T0
+    M99
+
+; --- print parameters ---
+; defaults, overwritten below when the operator enters them
+var maxtemp = var.active + 25 > 300 ? var.active + 25 : 300
+var flow = 20
+var pa = 0.05
+var retract = 0.8
+var retractF = 1250
+var retractT = 840
+var retractZ = 0.25
+var ffPwm = 0.0
+var ffTemp = 0.0
+
+M291 R{"Profile: " ^ var.name} P"Enter the print parameters now, or write defaults and edit them later in config-override.g / nozzle-*.g?" S4 K{"Enter now","Defaults"} F0
+if input == 0
+  if !var.addNozzleOnly
+    M291 R{"Profile: " ^ var.name} P"Hotend temperature limit (M143) for this material:" S5 L{var.active} H450 F{var.maxtemp} J2
+    if result != 0
+      M99
+    set var.maxtemp = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Maximum volumetric flow rate in mm3/s (used by the NLE calibration):" S5 L1 H100 F20 J2
+  if result != 0
+    M99
+  set var.flow = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Pressure advance (M572 S) in seconds:" S6 L0 H2 F0.05 J2
+  if result != 0
+    M99
+  set var.pa = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Firmware retraction length (M207 S) in mm:" S6 L0 H10 F0.8 J2
+  if result != 0
+    M99
+  set var.retract = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Retraction speed (M207 F) in mm/min:" S5 L60 H6000 F1250 J2
+  if result != 0
+    M99
+  set var.retractF = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Un-retraction speed (M207 T) in mm/min:" S5 L60 H6000 F840 J2
+  if result != 0
+    M99
+  set var.retractT = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Z hop on retraction (M207 Z) in mm:" S6 L0 H2 F0.25 J2
+  if result != 0
+    M99
+  set var.retractZ = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Heater feedforward extrusion rate -> heater PWM (M309 S). 0 = off:" S6 L0 H1 F0 J2
+  if result != 0
+    M99
+  set var.ffPwm = input
+  M291 R{"Nozzle " ^ var.nozzle ^ "mm"} P"Heater feedforward extrusion rate -> temperature (M309 T). 0 = off:" S6 L0 H50 F0 J2
+  if result != 0
+    M99
+  set var.ffTemp = input
+
+; --- material parameters, independent of the nozzle (config-override.g) ---
+if !var.addNozzleOnly
+  echo >{var.dir ^ "config-override.g"} "; " ^ var.name ^ " - user customizations that do NOT depend on the nozzle"
+  echo >>{var.dir ^ "config-override.g"} "; nozzle-specific values (flow rate, M572, M207, M309) live in nozzle-<diameter>.g"
+  echo >>{var.dir ^ "config-override.g"} "M143 H1 S" ^ var.maxtemp ^ "     ; hotend temperature limit for this material"
+
+; --- nozzle-specific parameters (nozzle-<diameter>.g) ---
+; written unconditionally (not only when they differ from the default) because all of
+; these are global machine state: whatever the previously loaded filament set stays
+; active until this profile overwrites it
+echo >{var.nfile} "; " ^ var.name ^ " - parameters for the " ^ var.nozzle ^ "mm nozzle, selected by config.g"
+echo >>{var.nfile} "set global.filament_max_flow_rate = " ^ var.flow
+echo >>{var.nfile} "M572 D0 S" ^ var.pa ^ "     ; pressure advance"
+echo >>{var.nfile} "M207 S" ^ var.retract ^ " R0 F" ^ var.retractF ^ " T" ^ var.retractT ^ " Z" ^ var.retractZ ^ "     ; firmware retraction"
+echo >>{var.nfile} "M309 P0 S" ^ var.ffPwm ^ " T" ^ var.ffTemp ^ "     ; heater feedforward"
+
+; write the machine-owned config.g/load.g/unload.g
+M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.name}
+
+M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for the " ^ var.nozzle ^ "mm nozzle. Load it via DWC (Filaments), then run calibrate_e_steps / calibrate_pa."} S1 T0
+M400 ; sbc specific

@@ -279,17 +279,20 @@ echo "Threshold current: " ^ {var.thresholdCurrent} ^ " mA"
 if var.mfi > 0
   echo "MFI: " ^ {var.mfi} ^ " g/10min"
 
-; === WRITE config-auto-pa.g ===
+; === WRITE config-auto-pa-<nozzle>.g ===
+; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
 var filamentName = move.extruders[0].filament
-echo >{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; cold compression PA calibration"
-echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; spring constant k=" ^ {var.springK} ^ " mA/mm, threshold current: " ^ {var.thresholdCurrent} ^ "mA"
-echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; regression: displacement = " ^ {var.slope} ^ " * current + " ^ {var.intercept}
+var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+var autoFile = "0:/filaments/" ^ var.filamentName ^ "/config-auto-pa-" ^ var.nozzleKey ^ ".g"
+echo >{var.autoFile} "; cold compression PA calibration, nozzle: " ^ var.nozzleKey ^ "mm"
+echo >>{var.autoFile} "; spring constant k=" ^ {var.springK} ^ " mA/mm, threshold current: " ^ {var.thresholdCurrent} ^ "mA"
+echo >>{var.autoFile} "; regression: displacement = " ^ {var.slope} ^ " * current + " ^ {var.intercept}
 if var.mfi > 0
-  echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; MFI: " ^ {var.mfi} ^ " g/10min"
-echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "; data points: " ^ {var.compressionPoints} ^ ", cumulative displacement: " ^ {var.cumulativeDisplacement} ^ "mm"
-echo >>{"0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"} "M572 D0 S" ^ {var.paEstimate}
+  echo >>{var.autoFile} "; MFI: " ^ {var.mfi} ^ " g/10min"
+echo >>{var.autoFile} "; data points: " ^ {var.compressionPoints} ^ ", cumulative displacement: " ^ {var.cumulativeDisplacement} ^ "mm"
+echo >>{var.autoFile} "M572 D0 S" ^ {var.paEstimate}
 
-echo "Saved to: 0:/filaments/" ^ {var.filamentName} ^ "/config-auto-pa.g"
+echo "Saved to: " ^ var.autoFile
 
 ; === RAW DATA DUMP for external analysis ===
 echo ""

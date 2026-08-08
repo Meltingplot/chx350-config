@@ -1,3 +1,8 @@
 GCode dictionary _ Duet3D Documentation*
 GCode meta commands _ Duet3D Documentation*
 *:Zone.Identifier
+
+# machine-local state written by the firmware/macros, never shipped with the config
+sys/meltingplot/last-filament-temp.g
+sys/meltingplot/nozzle0.g
+sys/meltingplot/nozzle1.g

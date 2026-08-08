@@ -1,0 +1,42 @@
+; set-nozzle-diameter
+; Records which nozzle is installed on a tool. The nozzle belongs to the tool, not to the
+; filament, so the value is stored per tool in global.nozzle_diameter[tool] and persisted
+; in sys/meltingplot/nozzle<tool>.g (loaded by sys/meltingplot/globals on every boot) - a
+; nozzle change must survive a power cycle. The diameter selects, for every filament
+; profile, the nozzle-specific parameter file filaments/<name>/nozzle-<key>.g (flow rate,
+; M572, M207, M309) and the nozzle-specific calibration results (config-auto-pa-<key>.g,
+; -nle-, -esteps-), where <key> is the diameter rounded to two decimal places: 0.40, 1.20.
+
+var tool = state.currentTool >= 0 ? state.currentTool : 0
+if #tools > 1
+  M291 R"Nozzle diameter" P"Which tool has the new nozzle?" S4 K{"Tool 0","Tool 1"} F{var.tool}
+  set var.tool = input
+
+; two decimals of fixed width - see globals: the raw float must never build a file name
+var key = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+
+M291 R"Nozzle diameter" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm (currently " ^ var.key ^ "):"} S6 L0.1 H2 F{global.nozzle_diameter[var.tool]} J2
+if result != 0
+  M99
+
+set global.nozzle_diameter[var.tool] = input
+set var.key = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+
+; the tool index is built as a string explicitly so that no float formatting can leak into
+; the file name or into the array index of the generated assignment
+var idx = var.tool == 1 ? "1" : "0"
+var file = "0:/sys/meltingplot/nozzle" ^ var.idx ^ ".g"
+echo >{var.file} "; nozzle diameter of tool " ^ var.idx ^ " - written by macro set-nozzle-diameter, do not edit"
+echo >>{var.file} "set global.nozzle_diameter[" ^ var.idx ^ "] = " ^ var.key
+
+; re-run the profile of the loaded filament so the parameters of the new nozzle take
+; effect immediately instead of at the next tool change
+if state.currentTool >= 0
+  var loaded = move.extruders[tools[state.currentTool].extruders[0]].filament
+  if var.loaded != ""
+    M703
+    if !fileexists("0:/filaments/" ^ var.loaded ^ "/nozzle-" ^ var.key ^ ".g")
+      M291 R"Nozzle diameter" P{"'" ^ var.loaded ^ "' has no values for " ^ var.key ^ "mm - run create-filament-profile to add them."} S1 T0
+
+M291 R"Nozzle diameter" P{"Tool " ^ var.idx ^ " is set to " ^ var.key ^ "mm. Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
+M400 ; sbc specific
