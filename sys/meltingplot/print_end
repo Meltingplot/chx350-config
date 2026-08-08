@@ -17,7 +17,15 @@ if global.door_left_switch_checked == true && global.door_right_switch_checked =
   G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; move gantry away from camera
 
 ;M84                                                      ; turn off motors
-M106 S0                                                   ; Turn off fans
+; Turn off every fan the slicer may have switched on. Only the optional ones need a
+; guard - P0 exists on every machine, P2/P3 only if the hardware is fitted. The internal
+; fans (P4+) and the part cooling #2 enable (P1) are thermostatic and stay under firmware
+; control so the water loop keeps cooling down after the print.
+M106 P0 S0                                                ; turn off part cooling fan
+if global.has_aux_fan
+  M106 P2 S0                                              ; turn off auxiliary part cooling fan
+if global.has_exhaust_fan
+  M106 P3 S0                                              ; turn off exhaust / chamber fan
 
 M400
 G4 S1                                                     ; wait for motion system to complete moves, otherwise we will get an default mode error
