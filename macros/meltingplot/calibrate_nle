@@ -335,3 +335,7 @@ T-1                                               ; deselect tool
 T{var.previousTool}                               ; select previous tool
 
 set global.ignoreMFMevents = false                ; reactivate filament errors
+
+; the sformat.g call above left the nozzle key string in global.result - restore the
+; integer success code so the caller can compare it against the error codes set here
+set global.result = 0

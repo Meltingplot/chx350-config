@@ -314,3 +314,7 @@ T-1
 T{var.previousTool}
 
 set global.ignoreMFMevents = false
+
+; the sformat.g call above left the nozzle key string in global.result - restore the
+; integer success code so a caller cannot pick up a string where it expects a code
+set global.result = 0
