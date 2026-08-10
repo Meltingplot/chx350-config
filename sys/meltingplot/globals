@@ -13,8 +13,10 @@ global result = 0
 ; NEVER concatenate the raw value for that: RRF keeps the decimal places the value was
 ; written with, so 0.4 renders "0.4" but 0.4000 renders "0.4000" and anything computed
 ; renders "0.4000000" - each a different, silently wrong file name. Always derive the key
-; as two decimal places of fixed width:
-;   take("" ^ (round(global.nozzle_diameter[<tool>] * 100) / 100), 4)   -> "0.40", "1.20"
+; as two decimal places of fixed width, via sformat.g (which returns in global.result,
+; so read it straight after the call):
+;   M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[<tool>]} D2 W0
+;   -> "0.40", "1.20"
 ; Sized explicitly because globals load before tools exist.
 global nozzle_diameter = vector(2, 0.6)
 if fileexists("0:/sys/meltingplot/nozzle0.g")

@@ -12,15 +12,18 @@ if #tools > 1
   M291 R"Nozzle diameter" P"Which tool has the new nozzle?" S4 K{"Tool 0","Tool 1"} F{var.tool}
   set var.tool = input
 
-; two decimals of fixed width - see globals: the raw float must never build a file name
-var key = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+; two decimals of fixed width - see globals: the raw float must never build a file name.
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+var key = global.result
 
 M291 R"Nozzle diameter" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm (currently " ^ var.key ^ "):"} S6 L0.1 H2 F{global.nozzle_diameter[var.tool]} J2
 if result != 0
   M99
 
 set global.nozzle_diameter[var.tool] = input
-set var.key = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+set var.key = global.result
 
 ; the tool index is built as a string explicitly so that no float formatting can leak into
 ; the file name or into the array index of the generated assignment

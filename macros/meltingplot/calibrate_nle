@@ -320,7 +320,9 @@ while true
 echo "NLE calibration finished!"
 echo "M592 D" ^ var.extruder ^ " A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 ; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
-var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+var nozzleKey = global.result
 var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.nozzleKey ^ ".g"
 echo >{var.autoFile} "; max F" ^ var.extrusionSpeeds[var.sampleCount -1] * 60 ^ " mm/min or " ^ var.extrusionSpeeds[var.sampleCount -1] * 6.38 ^ "mm³/s"
 echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, nozzle: " ^ var.nozzleKey ^ "mm"

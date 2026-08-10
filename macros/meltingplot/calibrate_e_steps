@@ -105,7 +105,10 @@ if var.newESteps < (var.validValue * 0.9) || var.newESteps > (var.validValue * 1
   M99                                               ; exit macro
 
 ; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
-var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+; sformat.g returns the key in global.result - read it straight away, the variable is
+; only meaningful directly after the call that set it
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+var nozzleKey = global.result
 var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-esteps-" ^ var.nozzleKey ^ ".g"
 echo >{var.autoFile} "; calibration temperature: " ^ var.currentTemp ^ ", nozzle: " ^ var.nozzleKey ^ "mm"
 echo >>{var.autoFile} "M92 E" ^ var.newESteps

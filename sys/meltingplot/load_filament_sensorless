@@ -134,6 +134,7 @@ if global.filament_loading_error == false
   ; calibrate e-steps
   echo "calibrating e-steps"
   M98 P"0:/macros/meltingplot/calibrate_e_steps"
+  var esteps_result = global.result   ; global.result is only valid right after the call
 
   var current_tool = 0
   var current_filament = move.extruders[var.current_tool].filament
@@ -141,8 +142,10 @@ if global.filament_loading_error == false
   ; NLE calibration is nozzle-specific; the unsuffixed file of profiles predating the
   ; per-nozzle split still counts as calibrated (tpost0.g falls back to it as well)
   var nle = "0:/filaments/" ^ var.current_filament ^ "/config-auto-nle"
-  var nleSuffix = "-" ^ take("" ^ (round(global.nozzle_diameter[var.current_tool] * 100) / 100), 4) ^ ".g"
-  if global.result == 0 && !fileexists(var.nle ^ var.nleSuffix) && !fileexists(var.nle ^ ".g")
+  ; sformat.g returns the key in global.result - read it straight away
+  M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.current_tool]} D2 W0
+  var nleSuffix = "-" ^ global.result ^ ".g"
+  if var.esteps_result == 0 && !fileexists(var.nle ^ var.nleSuffix) && !fileexists(var.nle ^ ".g")
     echo "No non linear extrusion (NLE) calibration found!"
     if job.file.fileName == null
       echo "Creating NLE calibration."

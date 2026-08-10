@@ -18,8 +18,9 @@ if param.S == ""
 
 ; M703 can run without a tool selected - fall back to tool 0 rather than indexing with -1
 var t = max(state.currentTool, 0)
-var key = take("" ^ (round(global.nozzle_diameter[var.t] * 100) / 100), 4)
-var nozzle = "0:/filaments/" ^ param.S ^ "/nozzle-" ^ var.key ^ ".g"
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.t]} D2 W0
+var nozzle = "0:/filaments/" ^ param.S ^ "/nozzle-" ^ global.result ^ ".g"
 
 if fileexists(var.nozzle)
   M98 P{var.nozzle}

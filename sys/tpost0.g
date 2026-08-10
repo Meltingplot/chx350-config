@@ -17,7 +17,9 @@ M703
 ; calibration results are nozzle-specific (config-auto-<what>-<nozzle key>.g) - a PA or
 ; NLE calibration only ever describes the nozzle it was run with. Profiles predating the
 ; per-nozzle split are still picked up through the unsuffixed fallback.
-var suffix = "-" ^ take("" ^ (round(global.nozzle_diameter[var.current_tool] * 100) / 100), 4) ^ ".g"
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.current_tool]} D2 W0
+var suffix = "-" ^ global.result ^ ".g"
 var auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-esteps"
 if fileexists(var.auto ^ var.suffix)
   M98 P{var.auto ^ var.suffix}

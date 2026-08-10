@@ -16,8 +16,10 @@
 ; repair-filament-profile.
 
 var tool = state.currentTool >= 0 ? state.currentTool : 0
-; two decimals of fixed width - see globals: the raw float must never build a file name
-var nozzle = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+; two decimals of fixed width - see globals: the raw float must never build a file name.
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+var nozzle = global.result
 
 M291 R"New filament profile" P"Name of the filament profile (becomes the directory name under /filaments):" S7 L1 H40 J2
 if result != 0

@@ -282,7 +282,9 @@ if var.mfi > 0
 ; === WRITE config-auto-pa-<nozzle>.g ===
 ; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
 var filamentName = move.extruders[0].filament
-var nozzleKey = take("" ^ (round(global.nozzle_diameter[var.tool] * 100) / 100), 4)
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+var nozzleKey = global.result
 var autoFile = "0:/filaments/" ^ var.filamentName ^ "/config-auto-pa-" ^ var.nozzleKey ^ ".g"
 echo >{var.autoFile} "; cold compression PA calibration, nozzle: " ^ var.nozzleKey ^ "mm"
 echo >>{var.autoFile} "; spring constant k=" ^ {var.springK} ^ " mA/mm, threshold current: " ^ {var.thresholdCurrent} ^ "mA"
