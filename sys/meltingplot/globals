@@ -84,6 +84,15 @@ global mfm_pwm_max = 0.0                  ; max avgPwm in current window
 global mfm_pwm_range = 0.0                ; computed range from last complete window
 global mfm_pwm_window_start = 0           ; PWM window start time
 
+; pause/resume re-prime bookkeeping: pause_extruder is the extruder drive of the tool
+; active at pause (-1 = paused without tool), pause_extruder_pos its position counter
+; (move.extruders[].position accumulates every commanded move, is not reset by G92 or
+; pause/resume — only at print start) at the end of pause.g, re-taken at the end of
+; mfm_auto_recovery so the recovery's own test/purge extrusion doesn't count as manual;
+; resume.g deducts manual forward extrusion done while paused from its fixed re-prime.
+global pause_extruder = -1
+global pause_extruder_pos = 0.0
+
 ; idle heater cutoff — per-heater, indexed by heater number. Heater 0 = bed by
 ; definition; heaters 1..#tools = tool heaters (heater h ↔ tool h-1); further
 ; heaters may follow. Sized explicitly because globals load before heaters exist.

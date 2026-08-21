@@ -95,4 +95,9 @@ if var.recovery_result == 0
   set global.mfm_error_extruder_ref = move.extruders[0].position
 else
   set global.ignoreMFMevents = false
+; Re-snapshot the pause extruder reference: the recovery's own net extrusion (+25mm
+; purge on pass, 0 on fail) is system-driven — resume.g must not deduct it from its
+; re-prime (the pass-path notch parking math above counts on the full 12.7mm feed-forward).
+if global.pause_extruder != -1
+  set global.pause_extruder_pos = move.extruders[global.pause_extruder].position
 set global.result = var.recovery_result
