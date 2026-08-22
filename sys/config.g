@@ -39,7 +39,7 @@ while #boards < 7
 ;        Z1   +------------------------------------+ Z4
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 50 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
-M569.1 P50.0 T3 E6.0:20.0 S200 R160 I200 D0.08 V320 A160000 H0.3
+M569.1 P50.0 T3 E6.0:20.0 S200 R185.14 I17907.93 D0.0391 V0 A75000 ; PID from ClosedLoopTuning auto-tune 2026-08-22 on the reference machine (RRF 3.6.3, I integrates per second since 3.5)
 if result != 0	
   echo "Error - abort!"	
   M112
@@ -47,7 +47,7 @@ if result != 0
 M569 P50.0 D2 S1 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 50 as being in open-loop drive mode (D2) and reversed (S0)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 51 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
-M569.1 P51.0 T3 E6.0:20.0 S200 R160 I200 D0.08 V320 A160000 H0.3
+M569.1 P51.0 T3 E6.0:20.0 S200 R185.14 I17907.93 D0.0391 V0 A75000 ; PID from ClosedLoopTuning auto-tune 2026-08-22 on the reference machine (RRF 3.6.3, I integrates per second since 3.5)
 if result != 0	
   echo "Error - abort!"	
   M112
@@ -55,7 +55,7 @@ if result != 0
 M569 P51.0 D2 S0 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 51 as being in open-loop drive mode (D2) reversed (S1)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 52 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
-M569.1 P52.0 T3 E6.0:20.0 S200 R160 I120 D0.1 V240 A112000 H0.3
+M569.1 P52.0 T3 E6.0:20.0 S200 R120.1 I17006.891 D0.039 V100 A0 ; PID from ClosedLoopTuning auto-tune 2026-08-22 on the reference machine (RRF 3.6.3, I integrates per second since 3.5)
 if result != 0	
   echo "Error - abort!"	
   M112
@@ -63,7 +63,7 @@ if result != 0
 M569 P52.0 D2 S0 ; Configure the motor on the Duet 3 Expansion 1HCL controller at can address 51 as being in open-loop drive mode (D2) reversed (S1)
 
 ; Configure the Duet 3 Expansion 1HCL board at CAN address 53 with a Duet 3 magnetic encoder, warn if 2 fullstep threshold exceeded, error if 4 full steps threshold exceeded.
-M569.1 P53.0 T3 E6.0:20.0 S200 R160 I120 D0.1 V240 A112000 H0.3
+M569.1 P53.0 T3 E6.0:20.0 S200 R120.1 I17006.891 D0.039 V100 A0 ; PID from ClosedLoopTuning auto-tune 2026-08-22 on the reference machine (RRF 3.6.3, I integrates per second since 3.5)
 if result != 0	
   echo "Error - abort!"	
   M112
