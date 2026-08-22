@@ -27,6 +27,19 @@ if global.has_aux_fan
 if global.has_exhaust_fan
   M106 P3 S0                                              ; turn off exhaust / chamber fan
 
+; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
+; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
+; MUST run BEFORE the M400/G4 S1 settle below: M92 rewrites the extruder motor position from
+; the rescaled step endpoint (AdjustEndpoint: lrintf(steps * ratio), float-rounded), so the
+; reported move.extruders[].position shifts by an epsilon the daemon's exact-compare motion
+; tracker reads as extruder movement. Placed after the settle, that "movement" lands inside
+; the daemon's 0.25s motion window right as the switch_checked flags are cleared at the end
+; of this file → unsafe-state M112 at print end (happened 2026-08-22). Before the settle,
+; the G4 S1 lets the window expire while the flags are still true (automatic branch, harmless).
+if global.mfm_esteps_baseline != 0
+  M92 E{global.mfm_esteps_baseline}
+set global.mfm_esteps_baseline = 0.0
+
 M400
 G4 S1                                                     ; wait for motion system to complete moves, otherwise we will get an default mode error
 
@@ -44,11 +57,7 @@ set global.ignoreMFMevents = false
 set global.mfm_error_extruder_ref = null
 set global.mfm_normal_since = 0
 set global.mfm_recovery_last_ok = 0
-; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
-; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
-if global.mfm_esteps_baseline != 0
-  M92 E{global.mfm_esteps_baseline}
-set global.mfm_esteps_baseline = 0.0
+; (the M92 e-steps baseline restore runs above, before the M400/G4 S1 settle — see comment there)
 set global.mfm_esteps_suggested = 0
 set global.mfm_esteps_done = false
 set global.mfm_esteps_drift_since = 0
