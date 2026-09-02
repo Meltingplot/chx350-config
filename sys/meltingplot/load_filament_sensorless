@@ -34,6 +34,13 @@ if global.last_filament_temp >= 260 && var.load_temp < 280
   echo "Previous filament was unloaded at " ^ global.last_filament_temp ^ "C - loading at 280C to purge residue"
   M568 P0 S280 A2 ; heats up while the operator feeds the filament
 
+; confirm the installed nozzle before anything nozzle-specific happens: the e-steps
+; calibration below writes config-auto-esteps-<key>.g and the NLE check reads
+; config-auto-nle-<key>.g, so the diameter has to be right before those run. Asked here
+; because the operator is at the machine for the feed prompt anyway, and the nozzle
+; parameters then apply to the load itself. Cancelling keeps the configured value.
+M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g"
+
 M291 P"Feed new Filament into the PTFE Tube." S2
 
 if var.hightemp_purge

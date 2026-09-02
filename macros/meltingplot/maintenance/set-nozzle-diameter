@@ -21,16 +21,14 @@ M291 R"Nozzle diameter" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm (curre
 if result != 0
   M99
 
-set global.nozzle_diameter[var.tool] = input
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
-set var.key = global.result
+var diameter = input
 
-; the tool index is built as a string explicitly so that no float formatting can leak into
-; the file name or into the array index of the generated assignment
+; assigns the global and writes sys/meltingplot/nozzle<tool>.g - shared with
+; confirm_nozzle_diameter.g, which asks the same question during a filament load.
+; It hands the two-decimal key back in global.result - read it straight away
+M98 P"0:/sys/meltingplot/store_nozzle_diameter.g" D{var.diameter} T{var.tool}
+set var.key = global.result
 var idx = var.tool == 1 ? "1" : "0"
-var file = "0:/sys/meltingplot/nozzle" ^ var.idx ^ ".g"
-echo >{var.file} "; nozzle diameter of tool " ^ var.idx ^ " - written by macro set-nozzle-diameter, do not edit"
-echo >>{var.file} "set global.nozzle_diameter[" ^ var.idx ^ "] = " ^ var.key
 
 ; re-run the profile of the loaded filament so the parameters of the new nozzle take
 ; effect immediately instead of at the next tool change
