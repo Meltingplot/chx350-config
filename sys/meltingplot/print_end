@@ -57,6 +57,8 @@ set global.ignoreMFMevents = false
 set global.mfm_error_extruder_ref = null
 set global.mfm_normal_since = 0
 set global.mfm_recovery_last_ok = 0
+set global.mfm_recovery_requested = false
+set global.mfm_recovery_last_result = -1
 ; (the M92 e-steps baseline restore runs above, before the M400/G4 S1 settle — see comment there)
 set global.mfm_esteps_suggested = 0
 set global.mfm_esteps_done = false

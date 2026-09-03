@@ -1,5 +1,6 @@
 ; MFM auto-recovery: verify filament movement after suspected error
-; Called with tool already selected; caller is responsible for tool select/deselect
+; Called from pause.g while the firmware state is still "pausing" (see there); tool already
+; selected, caller is responsible for tool select/deselect
 ; Sets global.result: 0 = false positive (resume), 1+ = real issue (stay paused)
 
 echo "MFM: starting auto-recovery..."

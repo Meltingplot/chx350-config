@@ -120,27 +120,26 @@ if param.P == 4 || param.P == 5
       M291 P{"Filament Sensor " ^ param.D ^ ": repeated error shortly after auto-recovery. Check filament for grinding and resume."} S1 T0
       M99
 
-    M25                                  ; pause print (pause.g: retract, park, standby heater, fan off)
-    M400                                 ; wait for pause.g to complete
+    ; The auto-recovery runs INSIDE pause.g (armed via mfm_recovery_requested), so the firmware
+    ; state is still "pausing" while it moves and purges: M24 is ignored and DWC is locked on every
+    ; channel until pause.g returns. Running it here, after the pause committed, let an operator
+    ; resume interleave with the purge (2026-09-03). pause.g hands the verdict back in
+    ; mfm_recovery_last_result (-1 = recovery never ran, e.g. M25 rejected).
+    set global.mfm_recovery_last_result = -1
+    set global.mfm_recovery_requested = true
+    M25                                  ; pause.g: retract, park, standby, auto-recovery, then paused
+    set global.mfm_recovery_requested = false   ; a rejected M25 must not arm the next ordinary pause
+    M400
 
-    ; Re-select tool for auto-recovery (pause.g deselects via T-1 P0)
-    T R1 P0                                ; restore last tool without tpre/tpost
-
-    ; Auto-recovery: verify filament while paused
-    set global.result = 0
-    M98 P"0:/sys/meltingplot/mfm_auto_recovery"
-
-    if global.result != 0
-        ; Recovery failed — deselect tool so resume.g can re-select, stay paused for operator
-        T-1 P0
+    if global.mfm_recovery_last_result != 0
+        ; Recovery failed or never ran — tool already deselected by pause.g, stay paused for operator
         if param.P == 4
           M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed. Check filament and resume."} S1 T0
         else
           M291 P{"Filament Sensor " ^ param.D ^ ": Too much Filament movement - Possible Reasons: Spool skipped or Filament pushed into PTFE tube."} S1 T0
         M99
 
-    ; False positive confirmed — deselect tool so resume.g can re-select via T R1
-    T-1 P0
+    ; False positive confirmed — auto-resume (resume.g re-selects the tool via T R1)
     set global.mfm_recovery_last_ok = state.upTime
     if global.debug
       echo "MFM: false positive — auto-resuming"

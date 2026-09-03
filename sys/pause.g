@@ -25,3 +25,17 @@ M400 ; sbc specific
 ; snapshot for resume.g: manual extrusion while paused is measured against this
 if global.pause_extruder != -1
   set global.pause_extruder_pos = move.extruders[global.pause_extruder].position
+
+; MFM auto-recovery runs HERE, before the pause commits: while pause.g executes the firmware
+; state is "pausing" - M24 is ignored, M25 rejected and DWC greys out resume/jog/extrude on
+; every channel. Run after the pause commits it is unprotected (2026-09-03: an operator resume
+; was accepted mid-recovery, resume.g pulled the head from X min onto the part and the 25 mm
+; purge plus the nozzle clean ran there - blob, Y collision). Tool select/deselect is ours,
+; the recovery hands its verdict back in global.result.
+if global.mfm_recovery_requested
+  set global.mfm_recovery_requested = false
+  T R1 P0                                                           ; restore point 1 is already saved when pause.g runs
+  set global.result = 0
+  M98 P"0:/sys/meltingplot/mfm_auto_recovery"
+  set global.mfm_recovery_last_result = global.result               ; global.result is only valid right after the call
+  T-1 P0                                                            ; back to standby; resume.g re-selects via T R1
