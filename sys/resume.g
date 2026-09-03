@@ -41,3 +41,16 @@ if global.mfm_esteps_suggested != 0
   M92 E{global.mfm_esteps_suggested}
 
 M400 ; sbc specific
+
+; Re-base the MFM post-recovery state to the actual restart of the print. mfm_auto_recovery arms
+; ignoreMFMevents and the extruder reference while still paused, but its purge, retract and nozzle
+; clean plus the reheat above take longer than the 30 s window: a timestamp taken back then is
+; already expired when daemon.g first sees "processing" again, so it cleared the suppression on
+; its very first iteration and the resume transient was never suppressed. Likewise the reference
+; captured before the re-prime had G11 + 12.7 mm of the 30 mm guard already used up before the
+; first print move. Both together turned an ordinary resume transient into an immediate hard pause
+; via the loop breaker in filament-error.g (2026-09-03). Standstill here (M400), positions are final.
+if global.ignoreMFMevents
+  set global.mfm_suppress_until = state.upTime + 30
+if global.mfm_error_extruder_ref != null
+  set global.mfm_error_extruder_ref = move.extruders[0].position
