@@ -156,6 +156,13 @@ while state.status != "halted" && global.daemon_reload == false
     M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
     M112
 
+  ; melt-zone peak for resume.g's re-prime: highest extruder position reached by manual
+  ; moves while paused (purge beyond it leaves the nozzle, retraction after it is the
+  ; real deficit). Only in "paused" - during "pausing" the MFM recovery's own purge runs,
+  ; and mfm_auto_recovery re-snapshots afterwards. Single OM read, non-blocking.
+  if state.status == "paused" && global.pause_extruder != -1
+    set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
+
   if state.status == "processing" && job.file.fileName != null
     if global.mfm_suppress_until > 0 && var.now >= global.mfm_suppress_until
       set global.mfm_suppress_until = 0

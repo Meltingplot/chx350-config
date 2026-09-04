@@ -22,9 +22,12 @@ G90
 G53 G1 X{(move.axes[0].max-5)} Y{(move.axes[1].min)} U{(move.axes[3].max)} F60000
 M400 ; sbc specific
 
-; snapshot for resume.g: manual extrusion while paused is measured against this
+; snapshot for resume.g: manual filament movement while paused is measured against this;
+; the peak starts at the primed mark (12.7 above the retracted position) and daemon.g raises
+; it while paused, so a purge-then-retract is seen as retracted, not as net extrusion
 if global.pause_extruder != -1
   set global.pause_extruder_pos = move.extruders[global.pause_extruder].position
+  set global.pause_extruder_peak = global.pause_extruder_pos + 12.7
 
 ; MFM auto-recovery runs HERE, before the pause commits: while pause.g executes the firmware
 ; state is "pausing" - M24 is ignored, M25 rejected and DWC greys out resume/jog/extrude on

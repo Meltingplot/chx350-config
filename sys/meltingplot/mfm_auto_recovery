@@ -105,4 +105,5 @@ else
 ; re-prime (the pass-path notch parking math above counts on the full 12.7mm feed-forward).
 if global.pause_extruder != -1
   set global.pause_extruder_pos = move.extruders[global.pause_extruder].position
+  set global.pause_extruder_peak = global.pause_extruder_pos + 12.7
 set global.result = var.recovery_result

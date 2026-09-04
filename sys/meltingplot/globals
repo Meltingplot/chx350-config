@@ -90,10 +90,15 @@ global mfm_pwm_window_start = 0           ; PWM window start time
 ; active at pause (-1 = paused without tool), pause_extruder_pos its position counter
 ; (move.extruders[].position accumulates every commanded move, is not reset by G92 or
 ; pause/resume — only at print start) at the end of pause.g, re-taken at the end of
-; mfm_auto_recovery so the recovery's own test/purge extrusion doesn't count as manual;
-; resume.g deducts manual forward extrusion done while paused from its fixed re-prime.
+; mfm_auto_recovery so the recovery's own test/purge extrusion doesn't count as manual.
+; pause_extruder_peak is the melt-zone "full" mark: the position at which the nozzle is
+; primed again (snapshot + 12.7), raised by daemon.g to the highest position reached
+; while paused. Forward extrusion beyond the mark is purge that leaves the nozzle, so
+; the net delta since the snapshot says nothing about the melt zone - only retraction
+; after the peak does. resume.g re-primes exactly peak - position (clamped to 0..12.7).
 global pause_extruder = -1
 global pause_extruder_pos = 0.0
+global pause_extruder_peak = 0.0
 
 ; idle heater cutoff — per-heater, indexed by heater number. Heater 0 = bed by
 ; definition; heaters 1..#tools = tool heaters (heater h ↔ tool h-1); further
