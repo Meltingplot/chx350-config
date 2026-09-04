@@ -4,17 +4,21 @@
 ; param.C -> led string
 ; param.I -> led code
 ; param.E -> 0 or 1 for e-stop
+;
+; One if/elif chain, no M99: in SBC mode an early M99 return is a file-abort
+; round trip over SPI, which DCS logs as "Aborted macro file" and which produces
+; "Out-of-order reply" warnings when it happens at daemon rate. This macro
+; therefore always runs through to the end of file.
 
 if global.machine_is_hot && (global.machine_mode != "automatic" || (exists(param.E) && param.E == 1))
+  ; hot machine outside automatic mode (or e-stop) always wins: red
   if global.led_color != 4
     M150 E{0} U255 R00 B00 P255 S60 ; set to color red
     set global.led_color = 4
-  M99
-
-if (exists(param.I) && param.I == 5 ) || (exists(param.C) && param.C == "pulse_white" )
+elif (exists(param.I) && param.I == 5 ) || (exists(param.C) && param.C == "pulse_white" )
   ; Pulse white — alternate full/dim brightness each second via state.upTime.
-  ; Caller must invoke every daemon iter; phase tracked via led_color 5/6 so
-  ; transitions out trigger normal M98 re-set via the usual !=N gate.
+  ; Phase tracked via led_color 5/6 so the caller can gate on the phase and
+  ; transitions out trigger the normal re-set via the usual !=N gate.
   if mod(state.upTime, 2) == 0
     if global.led_color != 5
       M150 E{0} U200 R200 B200 P255 S60 ; pulse full
@@ -22,9 +26,7 @@ if (exists(param.I) && param.I == 5 ) || (exists(param.C) && param.C == "pulse_w
   elif global.led_color != 6
     M150 E{0} U200 R200 B200 P50 S60 ; pulse dim
     set global.led_color = 6
-  M99
-
-if (exists(param.I) && param.I == 0 ) || (exists(param.C) && param.C == "white" )
+elif (exists(param.I) && param.I == 0 ) || (exists(param.C) && param.C == "white" )
   if global.led_color != 0
     M150 E{0} U200 R200 B200 P255 S60 ; set to color white
     set global.led_color = 0
@@ -36,13 +38,13 @@ elif (exists(param.I) && param.I == 2 ) || (exists(param.C) && param.C == "green
   if global.led_color != 2
     M150 E{0} U40 R200 B40 P255 S60 ; set to color green
     set global.led_color = 2
-
-; check yellow (warnung) und red(gefahr) seperate
-if (exists(param.I) && param.I == 3 ) || (exists(param.C) && param.C == "yellow" )
+elif (exists(param.I) && param.I == 3 ) || (exists(param.C) && param.C == "yellow" )
+  ; yellow = warning
   if global.led_color != 3
     M150 E{0} U255 R50 B0 P255 S60 ; set it to yellow
     set global.led_color = 3
-if (exists(param.I) && param.I == 4 ) || (exists(param.C) && param.C == "red" )
+elif (exists(param.I) && param.I == 4 ) || (exists(param.C) && param.C == "red" )
+  ; red = danger
   if global.led_color != 4
     M150 E{0} U255 R00 B00 P255 S60 ; set to color red
     set global.led_color = 4
