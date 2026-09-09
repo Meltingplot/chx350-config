@@ -80,9 +80,9 @@ if param.P == 4 || param.P == 5
           echo "MFM: backoff counter " ^ global.mfmbackoff ^ " (dist=" ^ var.error_dist ^ "mm)"
         M99
 
-    ; Hard pause — backoff exhausted or 40mm safety distance exceeded
+    ; Hard pause — backoff exhausted or 30mm safety distance exceeded
     if global.debug
-      if var.error_dist >= 40
+      if var.error_dist >= 30
         echo "MFM: " ^ var.error_dist ^ "mm extruded during error sequence — hard pause"
       else
         echo "MFM: backoff exhausted — pause"
