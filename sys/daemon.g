@@ -71,7 +71,11 @@ while state.status != "halted" && global.daemon_reload == false
 
   set global.machine_is_hot = (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50)
 
-  if state.status == "processing" || state.status == "busy" || state.status == "changingTool" || global.potential_unsafe_state
+  ; Idle is explicit: only "idle" and "paused" let the idle timer run. Every other state
+  ; (processing, busy, changingTool, pausing, resuming, ...) is activity and resets it -
+  ; enumerating the active states instead missed "resuming" and cut the bed off during
+  ; resume.g after a long pause (2026-09-08).
+  if (state.status != "idle" && state.status != "paused") || global.potential_unsafe_state
     set global.idle_since = state.upTime
     while iterations < #global.idle_heater_cutoff_done
       set global.idle_heater_cutoff_done[iterations] = false
@@ -89,7 +93,7 @@ while state.status != "halted" && global.daemon_reload == false
       if heat.heaters[iterations].state != "off"
         set global.idle_since = state.upTime
         set global.idle_heater_cutoff_done[iterations] = false
-    elif (state.upTime - global.idle_since) >= global.idle_heater_timeout[iterations] && (global.idle_heater_pause_hold[iterations] == false || state.status != "paused" || job.file.fileName == null)
+    elif (state.upTime - global.idle_since) >= global.idle_heater_timeout[iterations] && (global.idle_heater_pause_hold[iterations] == false || state.status == "idle")
       if heat.heaters[iterations].state != "off"
         echo "Idle cutoff: heater " ^ {iterations} ^ " off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
         if iterations == 0
