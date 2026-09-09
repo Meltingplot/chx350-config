@@ -13,69 +13,62 @@ G90                                        ; absolute mode
 G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400
 
-; Reset MFM for clean measurement
+; Reset MFM for a clean measurement
 var extruder = 0
 M83                                        ; relative extrusion
 M591 D{var.extruder} S0                    ; disable
 M400
 G4 S1
-M591 D{var.extruder} A1 S2 E1             ; enable in measurement mode
+M591 D{var.extruder} A1 S2 E5             ; enable in measurement mode: all moves, 5mm segments (as in print)
 M400
 G4 S1
 
-; Test extrusion
-G1 E15 F60                                ; 15mm at 1mm/s — enough for MFM calibration
+; Test extrusion and purge in ONE continuous move. The notch ground into the filament at
+; error time sits at the gear; pause.g parks it 13-15mm upstream (G10 retract + 12.5mm), so
+; a 15mm test move ends with the gear teeth sitting exactly IN the notch. The earlier layout
+; (15mm test, M591 reset at standstill, separate 25mm purge) therefore made the purge start
+; from rest with no grip: the test read 105% and the purge collapsed to "gear lost grip" on
+; filament that had just fed fine (2026-09-09). While moving, the intact section behind the
+; notch carries it across the gear, so do not stop until the ground section is well past it.
+; +40mm (-15mm retract below = +25mm net) parks it ~25mm downstream in the guide/melt zone,
+; where it just melts through. Slow (1mm/s) so a marginal section is not reground here. The
+; MFM measures the whole move: avgPercentage covers the notch crossing (a collapse there
+; means the gear lost grip at the notch = real issue), lastPercentage (final 5mm segment)
+; proves the filament is still feeding at the end, so a grind that only starts late cannot
+; hide behind a good average. Calibration takes the first 10mm; avgPercentage is null until then.
+G1 E40 F60                                ; 40mm at 1mm/s
 M400
 G4 S1
 
 ; Evaluate
-if sensors.filamentMonitors[var.extruder].avgPercentage == null
+var avg = sensors.filamentMonitors[var.extruder].avgPercentage
+var last = sensors.filamentMonitors[var.extruder].lastPercentage
+if var.avg == null || var.last == null
   echo "MFM: auto-recovery — no sensor data"
   set global.result = 1
-elif sensors.filamentMonitors[var.extruder].avgPercentage > 50
-  echo "MFM: auto-recovery OK (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — false positive"
+elif var.avg > 50 && var.last > 50
+  echo "MFM: auto-recovery OK (avg " ^ var.avg ^ "%, last " ^ var.last ^ "%) — false positive"
   set global.result = 0
   ; Short suppress window to ride out the resume transient / same off-the-wheel
   ; readings. Both gates (daemon suppress_until AND firmware ignoreMFMevents) are
   ; armed together below so the firmware P=4/P=5 path can't immediately re-pause.
-  ; The timestamp set here is only a placeholder: the purge, retract, nozzle clean
-  ; and the reheat in resume.g outlast the window, so resume.g re-bases it to the
-  ; actual restart of the print (the daemon only evaluates it while "processing").
+  ; The timestamp set here is only a placeholder: the retract, nozzle clean and the
+  ; reheat in resume.g outlast the window, so resume.g re-bases it to the actual
+  ; restart of the print (the daemon only evaluates it while "processing").
   set global.mfm_suppress_until = state.upTime + 30
   M220 S100
   set global.mfmbackoff = 3
+elif var.avg > 50
+  echo "MFM: auto-recovery FAILED (avg " ^ var.avg ^ "%, last " ^ var.last ^ "%) — fed at first, then lost grip: real issue"
+  set global.result = 2
 else
-  echo "MFM: auto-recovery FAILED (" ^ {sensors.filamentMonitors[var.extruder].avgPercentage} ^ "%) — real issue"
+  echo "MFM: auto-recovery FAILED (avg " ^ var.avg ^ "%, last " ^ var.last ^ "%) — real issue"
   set global.result = 2
 
 ; Save recovery result before cleanup (clean.g overwrites global.result)
 var recovery_result = global.result
 
-; On a pass, purge the suspect section past the drive gear. The notch ground into the
-; filament at error time sits at the gear; the pause retract parks it ~12.5mm upstream,
-; and the symmetric 15mm test + retract + resume feed-forward would land the gear teeth
-; back IN the notch (net +0.2mm) — no grip at print force, immediate regrind. A +25mm
-; net advance parks it ~25mm downstream in the guide/melt zone instead, where it just
-; melts through. Slow (test speed) so a marginal section is not reground here. The MFM
-; is reset first so the purge is measured independently — this is the only phase where
-; the notch actually crosses the gear under measurement, so a collapsed reading here
-; means the gear lost grip at the notch: downgrade to real issue.
-if var.recovery_result == 0
-  M591 D{var.extruder} S0                  ; reset MFM for independent purge measurement
-  M400
-  G4 S1
-  M591 D{var.extruder} A1 S2 E1
-  M400
-  G4 S1
-  G1 E25 F60                               ; drive the ground section past the gear
-  M400
-  G4 S1
-  if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 50
-    echo "MFM: post-purge check FAILED — gear lost grip at ground section, real issue"
-    set var.recovery_result = 2
-    set global.mfm_suppress_until = 0
-
-; Retract test extrusion so filament state matches what resume.g expects
+; Retract so the filament state matches what resume.g expects (net +25mm stays)
 G1 E-15 F120
 M400
 
@@ -100,9 +93,9 @@ if var.recovery_result == 0
   set global.mfm_error_extruder_ref = move.extruders[0].position
 else
   set global.ignoreMFMevents = false
-; Re-snapshot the pause extruder reference: the recovery's own net extrusion (+25mm
-; purge on pass, 0 on fail) is system-driven — resume.g must not deduct it from its
-; re-prime (the pass-path notch parking math above counts on the full 12.7mm feed-forward).
+; Re-snapshot the pause extruder reference: the recovery's own net extrusion (+25mm,
+; pass or fail) is system-driven — resume.g must not deduct it from its re-prime (the
+; notch parking math above counts on the full 12.7mm feed-forward).
 if global.pause_extruder != -1
   set global.pause_extruder_pos = move.extruders[global.pause_extruder].position
   set global.pause_extruder_peak = global.pause_extruder_pos + 12.7
