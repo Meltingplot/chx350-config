@@ -31,13 +31,20 @@ set var.key = global.result
 var idx = var.tool == 1 ? "1" : "0"
 
 ; re-run the profile of the loaded filament so the parameters of the new nozzle take
-; effect immediately instead of at the next tool change
+; effect immediately instead of at the next tool change. M703 applies nozzle-<key>.g when
+; the profile has one for the new diameter; when it has none, create_nozzle_config.g
+; offers to write it and load_nozzle_config.g applies it. That offer cannot live inside
+; M703: the generated config.g also runs from print_start, pause.g and resume.g, where a
+; blocking prompt would stall the print.
+; global.result of the call is only valid on the very next line: 0 = a file was written
 if state.currentTool >= 0
   var loaded = move.extruders[tools[state.currentTool].extruders[0]].filament
   if var.loaded != ""
     M703
-    if !fileexists("0:/filaments/" ^ var.loaded ^ "/nozzle-" ^ var.key ^ ".g")
-      M291 R"Nozzle diameter" P{"'" ^ var.loaded ^ "' has no values for " ^ var.key ^ "mm - run create-filament-profile to add them."} S1 T0
+    if state.currentTool == var.tool
+      M98 P"0:/sys/meltingplot/create_nozzle_config.g" S{var.loaded} T{var.tool}
+      if global.result == 0
+        M98 P"0:/sys/meltingplot/load_nozzle_config.g" S{var.loaded}
 
 M291 R"Nozzle diameter" P{"Tool " ^ var.idx ^ " is set to " ^ var.key ^ "mm. Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
 M400 ; sbc specific
