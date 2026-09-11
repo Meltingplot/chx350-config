@@ -6,3 +6,6 @@ GCode meta commands _ Duet3D Documentation*
 sys/meltingplot/last-filament-temp.g
 sys/meltingplot/nozzle0.g
 sys/meltingplot/nozzle1.g
+
+# local copy of the Duet3D wiki (https://github.com/Duet3D/wiki-content), G-code reference lookup
+.duet-wiki/
