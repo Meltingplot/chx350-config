@@ -185,7 +185,7 @@ M671 X-99.60:-99.60:940.40:940.40 Y58.85:388.50:388.50:58.85 S5          ; Z lea
 M950 S6 C"out9" ; assign GPIO port 1 to out9 (Servo header), servo mode
 M280 P6 S100  ; set 104deg servo position on GPIO port 1
 
-M929 P"0:/eventlog.log" S2                              ; Enable Event Logging
+M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Logging
 
 M501                                                    ; load saved parameters from non-volatile memory
 M98 P"0:/sys/meltingplot/machine-override"              ; Load Machine specific overrides
