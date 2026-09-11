@@ -175,8 +175,8 @@ M557 X{sensors.probes[0].offsets[0],move.axes[0].max-sensors.probes[0].offsets[0
 M376 H5                                                 ; taper out z correction over 5mm height
 
 ; Accelerometer
-M955 P20.0 I05                                          ; configure integrated accelerometer on the toolboard (CAN address 20), orientation verified on the machine
-M955 P60.0 I25                                          ; configure accelerometer on the scanning z probe (CAN address 60), orientation verified on the machine
+M955 P0 C"20.i2c.lis" I05                                          ; configure integrated accelerometer on the toolboard (CAN address 20), orientation verified on the machine
+M955 P0 C"60.i2c.lis" I25                                          ; configure accelerometer on the scanning z probe (CAN address 60), orientation verified on the machine
 
 M671 X-99.60:-99.60:940.40:940.40 Y58.85:388.50:388.50:58.85 S5          ; Z leadscrews are at (-99.60,58.85), (-99.60,388.50), (940.40,388.50) and (940.40, 58.85)
 
