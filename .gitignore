@@ -9,3 +9,6 @@ sys/meltingplot/nozzle1.g
 
 # local copy of the Duet3D wiki (https://github.com/Duet3D/wiki-content), G-code reference lookup
 .duet-wiki/
+
+# output tree of tools/gcode_crc.py, generated at deploy time
+build/
