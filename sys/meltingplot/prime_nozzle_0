@@ -2,7 +2,7 @@ G90                                                 ; absolute position
 T0                                                  ; select tool 0
 G1 Z20 F60000                                       ; lift z
 G1 U{move.axes[3].max} F60000
-G1 X{move.axes[0].min} Y{move.axes[1].min-10} F60000 ; position nozzle
+G1 X{move.axes[0].min} Y{move.axes[1].min+10} F60000 ; position nozzle
 G1 Z0.500                                           ;
 M116                                                ; wait for extruder temp
 G11                                                 ; unretract if for any reason is retracted
