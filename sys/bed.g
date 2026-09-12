@@ -33,7 +33,7 @@ G1 Z20 F6000                              ; lift Z to safe height
 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z{sensors.probes[0].diveHeights[0]} F600 ; drive close to dive height
 
-var bhi = heat.bedHeaters[0]
+var bhi = heat.bedHeaterMapping[0][0]
 while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > (global.szp_warm_threshold + 15) && sensors.analog[4].lastReading < global.szp_warm_threshold
   G4 S1 ; wait for z-probe to warm up
   if global.debug

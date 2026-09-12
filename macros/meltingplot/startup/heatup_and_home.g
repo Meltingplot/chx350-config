@@ -3,7 +3,7 @@ var tool_temp = 180.0 ; Tool temperature in °C
 
 var wait_for_heatsoak = true
 
-var bed_heater = heat.bedHeaters[0]
+var bed_heater = heat.bedHeaterMapping[0][0]
 var tool_heater = tools[0].heaters[0]
 
 if heat.heaters[var.bed_heater].active != 0
