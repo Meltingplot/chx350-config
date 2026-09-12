@@ -20,14 +20,14 @@ if global.debug
 ; Erstmal ein paar Zyklen den EMA einschwingen lassen
 while iterations < 5
   G4 S{var.interval}
-  set var.ema = (1 - var.alpha) * var.ema + var.alpha * heat.heaters[var.heater].avgPwm
+  set var.ema = {(1 - var.alpha) * var.ema + var.alpha * heat.heaters[var.heater].avgPwm}
 
 set var.emaPrev = var.ema
 
 while var.stableCount < var.requiredStable
   G4 S{var.interval}
   set var.emaPrev = var.ema
-  set var.ema = 0.7 * var.ema + 0.3 * heat.heaters[var.heater].avgPwm
+  set var.ema = {0.7 * var.ema + 0.3 * heat.heaters[var.heater].avgPwm}
 
   var slope = (var.ema - var.emaPrev) / var.interval
   if global.debug

@@ -27,9 +27,9 @@ elif fileexists(var.auto ^ ".g")
   M98 P{var.auto ^ ".g"}
 
 var current_esteps = move.extruders[var.current_extruder].stepsPerMm
-var validValue = 50 * move.extruders[var.current_extruder].microstepping.value
+var validValue = {50 * move.extruders[var.current_extruder].microstepping.value}
 
-if var.current_esteps < (var.validValue * 0.8) || var.current_esteps > (var.validValue * 1.2)
+if var.current_esteps < {var.validValue * 0.8} || var.current_esteps > {var.validValue * 1.2}
   echo "Warning: configured E-Steps of tool " ^ var.current_tool ^ " out of range, please check the configuration. Using Default."
   M92 E{var.validValue}
 

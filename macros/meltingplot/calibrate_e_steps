@@ -6,7 +6,7 @@ var repeatCount = exists(param.A) ? param.A : 3     ; number of iterations
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
 var targetTemp = exists(param.R) ? param.R : 0      ; target temperature in C
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
-var validValue = 50 * move.extruders[0].microstepping.value ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
+var validValue = {50 * move.extruders[0].microstepping.value} ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 
 if var.silent
@@ -95,7 +95,7 @@ echo "E-Steps: " ^ move.extruders[var.extruder].stepsPerMm
 var newESteps = {floor(move.extruders[var.extruder].stepsPerMm / var.avgFlow)}
 echo "New E-Steps: " ^ var.newESteps
 
-if var.newESteps < (var.validValue * 0.9) || var.newESteps > (var.validValue * 1.1)
+if var.newESteps < {var.validValue * 0.9} || var.newESteps > {var.validValue * 1.1}
   echo "Error: new E-Steps out of range, please check the configuration."
   if !var.silent
     M291 P"New E-Steps out of range, please check the configuration." S2

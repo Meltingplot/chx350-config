@@ -3,7 +3,7 @@ var calDistance = exists(param.D) ? param.D : 60    ; distance to move in mm for
 var tolerance = exists(param.S) ? param.S : 0.05    ; tolerance in %
 var requestedVolumetricFlowRate = global.filament_max_flow_rate ; requested volumetric flow rate in mm^3/s
 var filamentDiameter = 2.85 ; filament diameter in mm
-var requestedMaxSpeed = ceil(var.requestedVolumetricFlowRate / (pow(var.filamentDiameter,2) * 3.14159 / 4.0) * 2.0) / 2.0 ; volumetric flow rate in mm/s
+var requestedMaxSpeed = {ceil(var.requestedVolumetricFlowRate / (pow(var.filamentDiameter,2) * 3.14159 / 4.0) * 2.0) / 2.0} ; volumetric flow rate in mm/s
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
@@ -12,7 +12,7 @@ echo "Requested volumetric flow rate: " ^ {var.requestedVolumetricFlowRate} ^ "m
 echo "Filament diameter: " ^ {var.filamentDiameter} ^ "mm"
 echo "Requested max speed: " ^ {var.requestedMaxSpeed} ^ "mm/s"
 
-var sampleCount = floor((var.requestedMaxSpeed - 1)/0.5 + 1) * 2 ; // calculate number of samples based on requested max speed
+var sampleCount = {floor((var.requestedMaxSpeed - 1)/0.5 + 1) * 2} ; // calculate number of samples based on requested max speed
 echo "Sample count: " ^ {var.sampleCount / 2}
 var extrusionSpeeds = vector(var.sampleCount, 1.0) ; // create vector for extrusion speeds
 
@@ -34,7 +34,7 @@ else
   set global.ignoreMFMevents = true
 
 while iterations < (var.sampleCount / 2)
-  set var.extrusionSpeeds[iterations*2] = 1 + (iterations * 0.5) ; // fill vector with speeds from 0.5 to requested max speed
+  set var.extrusionSpeeds[{iterations*2}] = {1 + (iterations * 0.5)} ; // fill vector with speeds from 0.5 to requested max speed
 
 echo "Extrusion speeds: " ^ {var.extrusionSpeeds}
 
@@ -91,7 +91,7 @@ while iterations < #var.sampleValues / 2
     set var.correction = 1 ; ensure correction factor is at least 1
   elif var.correction > 1.11 && var.correction < 1.3 ; check if correction factor is within a reasonable range
     echo "Correction to high " ^ {var.correction} ^ " - stop at iteration " ^ {var.previous_index} ^ " with correction factor: " ^ {var.sampleValues[(var.previous_index)*2]}
-    set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
+    set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
     break
   elif var.correction >= 1.3
     echo "Warning: Value to high - try to recover NLE calibration - possible grinding or other issues"
@@ -110,7 +110,7 @@ while iterations < #var.sampleValues / 2
     G4 S1
     set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
     if var.correction > 0.98 && var.correction < 1.3
-      set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
+      set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
     echo "Error: Value to high - stop NLE calibration - possible grinding or other issues"
@@ -119,8 +119,8 @@ while iterations < #var.sampleValues / 2
     M99
   
   echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2]} ^ " mm/s, Correction factor: " ^ {var.correction}
-  set var.sampleValues[iterations*2] = var.correction ; calculate sample value based on correction factor
-  set var.extrusionSpeeds[iterations*2+1] = var.extrusionSpeeds[iterations*2] * var.correction ; adjust extrusion speed based on correction factor
+  set var.sampleValues[{iterations*2}] = var.correction ; calculate sample value based on correction factor
+  set var.extrusionSpeeds[{iterations*2+1}] = {var.extrusionSpeeds[iterations*2] * var.correction} ; adjust extrusion speed based on correction factor
 
 G1 E-5 F120
 G1 E20 F60
@@ -163,7 +163,7 @@ while iterations < #var.sampleValues / 2
     set var.correction = 1 ; ensure correction factor is at least 1
   elif var.correction > 1.25 && var.correction < 1.3 ; check if correction factor is within a reasonable range
     echo "Correction to high " ^ {var.correction} ^ " - stop at iteration " ^ {iterations} ^ " with correction factor: " ^ {var.sampleValues[iterations*2]}
-    set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
+    set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
     break
   elif var.correction >= 1.3 && iterations > 0
     echo "Warning: Value (" ^ var.correction ^ ") to high - try to recover NLE calibration - possible grinding or other issues"
@@ -182,7 +182,7 @@ while iterations < #var.sampleValues / 2
     G4 S1
     set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
     if var.correction > 0.98 && var.correction < 1.3
-      set var.sampleCount = iterations * 2 ; set sample count to current iteration to stop further iterations
+      set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
     echo "Error: Value (" ^ var.correction ^ ") to high - stop NLE calibration - possible grinding or other issues"
@@ -197,7 +197,7 @@ while iterations < #var.sampleValues / 2
     set global.result = 7
     M99
   echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2+1]} ^ " mm/s, Correction factor: " ^ {var.correction}
-  set var.sampleValues[iterations*2+1] = var.correction ; calculate sample value based on correction factor
+  set var.sampleValues[{iterations*2+1}] = var.correction ; calculate sample value based on correction factor
 
 while iterations < var.sampleCount
   echo "Sample " ^ {iterations} ^ ": Extrusion speed: " ^ {var.extrusionSpeeds[iterations]} ^ " mm/s, Correction factor: " ^ {var.sampleValues[iterations]}
@@ -237,16 +237,16 @@ while true
     set var.S_v2 = var.S_v2 + pow(var.extrusionSpeeds[var.x], 2)
     set var.S_v3 = var.S_v3 + pow(var.extrusionSpeeds[var.x], 3)
     set var.S_t = var.S_t + (var.sampleValues[var.x] - 1.0)
-    set var.S_tv = var.S_tv + (var.sampleValues[var.x]  - 1.0) * var.extrusionSpeeds[var.x]
+    set var.S_tv = {var.S_tv + (var.sampleValues[var.x]  - 1.0) * var.extrusionSpeeds[var.x]}
     set var.x = var.x + 1
 
   ;Delta = S_v * S_v3 - S_v2 * S_v2
   ;A = (S_t * S_v3 - S_tv * S_v2) / Delta
   ;B = (S_tv * S_v - S_t * S_v2) / Delta
 
-  var Delta = var.S_v * var.S_v3 - var.S_v2 * var.S_v2
-  set var.nle_a = (var.S_t * var.S_v3 - var.S_tv * var.S_v2) / var.Delta
-  set var.nle_b = (var.S_tv * var.S_v - var.S_t * var.S_v2) / var.Delta
+  var Delta = {var.S_v * var.S_v3 - var.S_v2 * var.S_v2}
+  set var.nle_a = {(var.S_t * var.S_v3 - var.S_tv * var.S_v2) / var.Delta}
+  set var.nle_b = {(var.S_tv * var.S_v - var.S_t * var.S_v2) / var.Delta}
   echo "S_v: " ^ {var.S_v} ^ ", S_v2: " ^ {var.S_v2} ^ ", S_v3: " ^ {var.S_v3}
   echo "S_t: " ^ {var.S_t} ^ ", S_tv: " ^ {var.S_tv}
   echo "Delta: " ^ {var.Delta} ^ ", A: " ^ {var.nle_a} ^ ", B: " ^ {var.nle_b}
@@ -295,14 +295,14 @@ while true
       set global.ignoreMFMevents = false
       set global.result = 10
       M99                                               ; exit macro
-    var correction = (100 * var.calDistance) / (sensors.filamentMonitors[var.extruder].avgPercentage * var.diffPos);
+    var correction = {(100 * var.calDistance) / (sensors.filamentMonitors[var.extruder].avgPercentage * var.diffPos)};
     ;var correction = 100 / ( ( (sensors.filamentMonitors[var.extruder].avgPercentage / 100 ) * var.diffPos) / var.calDistance * 100)
     echo "Extrusion speed: " ^ {var.extrusionSpeeds[var.x*2]} ^ " mm/s, Correction factor: " ^ {var.correction}
     if var.correction < 1
       set var.correction = 1 ; ensure correction factor is at least 1
     elif var.correction > (1/(1-var.tolerance)) ; check if correction factor is within a reasonable range
       echo "Correction to high " ^ {var.correction} ^ " - stop at iteration " ^ {var.x-1} ^ " with correction factor: " ^ {var.sampleValues[(var.x-1)*2]}
-      set var.sampleCount = max(var.x * 2 - 2, 0) ; set sample count to current iteration to stop further iterations
+      set var.sampleCount = {max(var.x * 2 - 2, 0)} ; set sample count to current iteration to stop further iterations
       if var.sampleCount == 0
         echo "Error: No more samples to remove - failed NLE calibration"
         T-1                                               ; deselect tool
@@ -324,7 +324,7 @@ echo "M592 D" ^ var.extruder ^ " A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
 var nozzleKey = global.result
 var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.nozzleKey ^ ".g"
-echo >{var.autoFile} "; max F" ^ var.extrusionSpeeds[var.sampleCount -1] * 60 ^ " mm/min or " ^ var.extrusionSpeeds[var.sampleCount -1] * 6.38 ^ "mm³/s"
+echo >{var.autoFile} "; max F" ^ {var.extrusionSpeeds[var.sampleCount -1] * 60} ^ " mm/min or " ^ {var.extrusionSpeeds[var.sampleCount -1] * 6.38} ^ "mm³/s"
 echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, nozzle: " ^ var.nozzleKey ^ "mm"
 echo >>{var.autoFile} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 

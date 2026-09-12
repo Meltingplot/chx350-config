@@ -80,7 +80,7 @@ if var.mfi > 0
 
 ; === CURRENT RAMP LOOP ===
 while iterations < var.stepCount
-  var current = var.startCurrent + (iterations * var.stepCurrent)
+  var current = {var.startCurrent + (iterations * var.stepCurrent)}
   set var.currents[iterations] = var.current
 
   ; set extruder motor current for this step
@@ -188,7 +188,7 @@ while var.i < var.validSamples
     set var.Sx = var.Sx + var.currents[var.i]
     set var.Sy = var.Sy + var.displacements[var.i]
     set var.Sxx = var.Sxx + pow(var.currents[var.i], 2)
-    set var.Sxy = var.Sxy + var.currents[var.i] * var.displacements[var.i]
+    set var.Sxy = {var.Sxy + var.currents[var.i] * var.displacements[var.i]}
   set var.i = var.i + 1
 
 ; need at least 2 points for regression
@@ -203,7 +203,7 @@ if var.N < 2
   set global.ignoreMFMevents = false
   M99
 
-var denom = var.N * var.Sxx - var.Sx * var.Sx
+var denom = {var.N * var.Sxx - var.Sx * var.Sx}
 if var.denom == 0
   echo "Error: degenerate regression (all points at same current)."
   M302 P0 S160 R90
@@ -215,8 +215,8 @@ if var.denom == 0
   set global.ignoreMFMevents = false
   M99
 
-var slope = (var.N * var.Sxy - var.Sx * var.Sy) / var.denom    ; mm/mA = 1/k
-var intercept = (var.Sy - var.slope * var.Sx) / var.N
+var slope = {(var.N * var.Sxy - var.Sx * var.Sy) / var.denom}    ; mm/mA = 1/k
+var intercept = {(var.Sy - var.slope * var.Sx) / var.N}
 
 ; spring constant k = 1/slope (mA/mm — force proxy per unit displacement)
 ; higher k = stiffer = less PA needed

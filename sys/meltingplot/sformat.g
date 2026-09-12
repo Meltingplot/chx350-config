@@ -48,7 +48,7 @@ else
   ; drag the result off (that is what breaks a plain round(value * scale)).
   var value = abs(param.F)
   var whole = floor(var.value)
-  var frac = round((var.value - var.whole) * var.scale)
+  var frac = {round((var.value - var.whole) * var.scale)}
   if var.frac >= var.scale                 ; 9.999 D2 -> 10.00
     set var.frac = var.frac - var.scale
     set var.whole = var.whole + 1

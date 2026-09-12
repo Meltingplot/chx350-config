@@ -4,7 +4,7 @@ if global.debug
 
 var motor_current = move.axes[2].percentCurrent
 var max_travel = move.axes[2].max - move.axes[2].min + 5 ; max travel + 5mm extra
-var max_time = var.max_travel / move.axes[2].speed * 1.1
+var max_time = {var.max_travel / move.axes[2].speed * 1.1}
 
 set global.sensorless_z_homing = true      ; ignore stall events on z-axis
 
