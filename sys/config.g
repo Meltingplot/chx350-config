@@ -148,11 +148,11 @@ if global.has_exhaust_fan
   M950 F3 C"out1" Q250                                  ; create fan 3 (exhaust fan) on pin out1 and set its frequency
   M106 P3 S0 H-1 C"exhaust"                             ; set fan 3 value. Thermostatic control is turned off
 M950 F4 C"out4+out4.tach" Q450                          ; create fan 4 (lower radiator fan) on pin out4 and set its frequency
-M106 P4 S0 H2 T50 L1.0 X1.0 C"lower radiator"           ; set fan 4 value. Thermostatic control on sensor 2
+M106 P4 S0 H2 T40 L1.0 X1.0 C"lower radiator"           ; set fan 4 value. Thermostatic control on sensor 2
 M950 F5 C"out5+out5.tach" Q450                          ; create fan 5 (upper radiator fan) on pin out5 and set its frequency
-M106 P5 S0 H2 T50 L1.0 X1.0 C"upper radiator"           ; set fan 5 value. Thermostatic control on sensor 2
+M106 P5 S0 H2 T40 L1.0 X1.0 C"upper radiator"           ; set fan 5 value. Thermostatic control on sensor 2
 M950 F6 C"!out6+out6.tach" Q250                         ; create fan 6 (water pump) on pin out6 and set its frequency
-M106 P6 S0 H2 T45:100 L0.75 X1.0 C"water pump"          ; set fan 6 value. Thermostatic control on sensor 2
+M106 P6 S0 H2 T40:100 L0.75 X1.0 C"water pump"          ; set fan 6 value. Thermostatic control on sensor 2
 
 ; Tools
 M563 P0 D0 H1 F0                                        ; define tool 0
