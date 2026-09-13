@@ -1,6 +1,6 @@
 ; THIS FILE CONTAINS CE RELEVANT CONFIGURATIONS, ANY CHANGES TO THIS FILE MAY RESULT IN A LOST OF THE CE DECLARATION
 
-M576 S0 F0                                              ; disable SPI slowdown
+M576 S25 F5 P4 B50 D0                                   ; disable SPI slowdown
 
 M950 J2 C"^io7.in"                                      ; create doorswitch left
 M950 J3 C"^io8.in"                                      ; create doorswitch right
