@@ -2,14 +2,24 @@
 ; is an SPI RTT. var.* caches do NOT save RTTs (same cost as direct reads)
 ; and add create+delete overhead. Read OM/globals directly; only declare a
 ; local var when atomicity across multiple lines is required.
+; Tier-1 flags are bit-flip hardened (globals, "bit-flip hardened states"): written as
+; 0x55555555 (true) / 0xAAAAAAAA (false), read ONLY as ("" ^ global.x) == "1431655765" /
+; "2863311530". The "" ^ coercion is not optional here - a direct numeric compare throws
+; an expression error on a non-numeric value, and that error aborts this loop.
+; Block order is deliberate: the interlock decision (tracker -> doors -> mirror -> hot ->
+; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
+; that follow (idle cutoff, Z watchdog, filament, MFM) can, and then only they are lost.
 var now = 0
-; Daemon-private switch_checked mirror — globals are exposed via DWC and can
-; be manually set to true to fake-trigger automatic mode; script-vars cannot.
-; Daemon flips var to true ONLY on a real door-open edge. Mismatch with global
-; clears both to false: unauthorized upgrade reverted, legitimate downgrade
-; (e.g. print_end resetting to false) accepted in the same step.
-var left_checked = global.door_left_switch_checked
-var right_checked = global.door_right_switch_checked
+; Daemon-private switch_checked mirror — globals are exposed via DWC and can be set by
+; hand to fake automatic mode; script-vars cannot. The mirror holds the rendered pattern
+; ("1431655765" checked, "2863311530" not) and is flipped to checked ONLY on a real
+; door-open edge. A mismatch with the global clears both (unauthorized upgrade reverted,
+; print_end's legitimate downgrade accepted in the same step); a global holding neither
+; pattern is corruption -> halt, see the mismatch block. The init normalises: anything
+; that is not exactly "checked" starts as "not checked", so a corrupted global at daemon
+; start mismatches on the first iteration.
+var left_checked = (("" ^ global.door_left_switch_checked) == "1431655765") ? "1431655765" : "2863311530"
+var right_checked = (("" ^ global.door_right_switch_checked) == "1431655765") ? "1431655765" : "2863311530"
 ; filament-profile watchdog: last seen OM filament name + warn deadline (0 = disarmed).
 ; Initializing from the OM makes a boot with restored filament produce no change event.
 var fil_prev = move.extruders[0].filament
@@ -18,15 +28,23 @@ var fil_watch_until = 0
 while state.status != "halted" && global.daemon_reload == false
   set var.now = state.upTime + state.msUpTime/1000
 
-  set global.potential_unsafe_state = false
+  ; Motion tracker. The timestamp check sits inside the window branch on purpose: a
+  ; timestamp in the future is impossible (upTime is monotonic), now - future is negative
+  ; and already lands here as "moving" (restrictive), so the check costs nothing outside
+  ; the 0.25 s window. Re-dating lets the window expire normally instead of leaving the
+  ; machine unsafe for years.
+  set global.potential_unsafe_state = 0xAAAAAAAA
   while iterations < #move.axes
     if global.last_machine_position[iterations] != move.axes[iterations].machinePosition
       set global.axis_is_moving[iterations] = global.last_machine_position[iterations] - move.axes[iterations].machinePosition
       set global.last_machine_position[iterations] = move.axes[iterations].machinePosition
       set global.last_axis_motion_time[iterations] = var.now
-      set global.potential_unsafe_state = true
+      set global.potential_unsafe_state = 0x55555555
     elif (var.now - global.last_axis_motion_time[iterations]) < 0.25
-      set global.potential_unsafe_state = true
+      set global.potential_unsafe_state = 0x55555555
+      if global.last_axis_motion_time[iterations] > var.now
+        M118 P0 S{"Warning: motion timestamp of axis " ^ iterations ^ " corrupted (" ^ global.last_axis_motion_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
+        set global.last_axis_motion_time[iterations] = var.now
     else
       set global.axis_is_moving[iterations] = 0
   while iterations < #move.extruders
@@ -34,51 +52,121 @@ while state.status != "halted" && global.daemon_reload == false
       set global.extruder_is_moving[iterations] = global.last_extruder_position[iterations] - move.extruders[iterations].position
       set global.last_extruder_position[iterations] = move.extruders[iterations].position
       set global.last_extruder_motion_time[iterations] = var.now
-      set global.potential_unsafe_state = true
+      set global.potential_unsafe_state = 0x55555555
     elif (var.now - global.last_extruder_motion_time[iterations]) < 0.25
-      set global.potential_unsafe_state = true
+      set global.potential_unsafe_state = 0x55555555
+      if global.last_extruder_motion_time[iterations] > var.now
+        M118 P0 S{"Warning: motion timestamp of extruder " ^ iterations ^ " corrupted (" ^ global.last_extruder_motion_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
+        set global.last_extruder_motion_time[iterations] = var.now
     else
       set global.extruder_is_moving[iterations] = 0
 
-  if sensors.gpIn[2].value == 0 && global.door_left_open == false
-    set global.door_left_open = true
+  ; Door states: 0x55555555 open, 0xAAAAAAAA closed. "closed" is only ever an exact
+  ; match, anything else reads as open. They persist between iterations, so a value that
+  ; is neither pattern means the variable changed without this loop writing it (RAM bit
+  ; flip, or someone typing into the console) - the interlock can no longer be trusted.
+  if (("" ^ global.door_left_open) != "1431655765" && ("" ^ global.door_left_open) != "2863311530") || (("" ^ global.door_right_open) != "1431655765" && ("" ^ global.door_right_open) != "2863311530")
+    echo "Error: door interlock state corrupted (left " ^ global.door_left_open ^ ", right " ^ global.door_right_open ^ ") - machine halt!"
+    M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+    M112
+
+  if sensors.gpIn[2].value == 0 && ("" ^ global.door_left_open) == "2863311530"
+    set global.door_left_open = 0x55555555
     set global.door_left_state_transition = true
-    set global.door_left_switch_checked = true
-    set var.left_checked = true
-  elif sensors.gpIn[2].value != 0 && global.door_left_open == true
-    set global.door_left_open = false
+    set global.door_left_switch_checked = 0x55555555
+    set var.left_checked = "1431655765"
+  elif sensors.gpIn[2].value != 0 && ("" ^ global.door_left_open) != "2863311530"
+    set global.door_left_open = 0xAAAAAAAA
     set global.door_left_state_transition = true
   elif global.door_left_state_transition
     set global.door_left_state_transition = false
 
-  if sensors.gpIn[3].value == 0 && global.door_right_open == false
-    set global.door_right_open = true
+  if sensors.gpIn[3].value == 0 && ("" ^ global.door_right_open) == "2863311530"
+    set global.door_right_open = 0x55555555
     set global.door_right_state_transition = true
-    set global.door_right_switch_checked = true
-    set var.right_checked = true
-  elif sensors.gpIn[3].value != 0 && global.door_right_open == true
-    set global.door_right_open = false
+    set global.door_right_switch_checked = 0x55555555
+    set var.right_checked = "1431655765"
+  elif sensors.gpIn[3].value != 0 && ("" ^ global.door_right_open) != "2863311530"
+    set global.door_right_open = 0xAAAAAAAA
     set global.door_right_state_transition = true
   elif global.door_right_state_transition
     set global.door_right_state_transition = false
 
-  if global.door_left_switch_checked != var.left_checked
-    set global.door_left_switch_checked = false
-    set var.left_checked = false
-  if global.door_right_switch_checked != var.right_checked
-    set global.door_right_switch_checked = false
-    set var.right_checked = false
+  ; switch_checked mirror. A mismatch is print_end's legitimate clear, an operator faking
+  ; the flag, or RAM: the first two resolve to "not checked"; a value that is neither
+  ; pattern cannot have been written by any script - the automatic-mode gate is not to
+  ; be trusted, halt. Nested, so it costs nothing unless a mismatch occurs.
+  if ("" ^ global.door_left_switch_checked) != var.left_checked
+    if ("" ^ global.door_left_switch_checked) != "1431655765" && ("" ^ global.door_left_switch_checked) != "2863311530"
+      echo "Error: door switch check state corrupted (left " ^ global.door_left_switch_checked ^ ") - machine halt!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
+    set global.door_left_switch_checked = 0xAAAAAAAA
+    set var.left_checked = "2863311530"
+  if ("" ^ global.door_right_switch_checked) != var.right_checked
+    if ("" ^ global.door_right_switch_checked) != "1431655765" && ("" ^ global.door_right_switch_checked) != "2863311530"
+      echo "Error: door switch check state corrupted (right " ^ global.door_right_switch_checked ^ ") - machine halt!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
+    set global.door_right_switch_checked = 0xAAAAAAAA
+    set var.right_checked = "2863311530"
 
-  set global.machine_is_hot = (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50)
+  set global.machine_is_hot = (heat.heaters[0].current > 50 || heat.heaters[1].current > 50 || sensors.analog[4].lastReading > 50) ? 0x55555555 : 0xAAAAAAAA
+
+  ; Operating mode. Only "default" may be upgraded and only "automatic" downgraded: any
+  ; other string is corruption (only the two operating-mode scripts write it), the
+  ; physical configuration is unknown, halt. Checked inside the transition branches, so
+  ; it costs nothing in the steady state. Without the check a corrupted string would
+  ; silently re-run automatic.g - including its M400 and M703 - from this loop.
+  if ("" ^ global.door_left_open) == "2863311530" && ("" ^ global.door_right_open) == "2863311530" && ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
+    if ("" ^ global.machine_mode) != "automatic"
+      if ("" ^ global.machine_mode) != "default"
+        echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"
+        M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+        M112
+      M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/automatic.g"
+  elif ("" ^ global.machine_mode) != "default"
+    if ("" ^ global.machine_mode) != "automatic"
+      echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
+    if ("" ^ global.potential_unsafe_state) != "2863311530"
+      echo "Error: potential unsafe state in default mode detected - machine halt!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
+    M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/default.g"
+
+  if ("" ^ global.machine_is_hot) != "2863311530" && ("" ^ global.machine_mode) != "automatic"
+    if global.led_color != 4
+      M98 P"0:/sys/meltingplot/set_led_color" C"red"
+  elif state.status == "paused" && ("" ^ global.potential_unsafe_state) == "2863311530"
+    M98 P"0:/sys/meltingplot/set_led_color" C"pulse_white"
+  elif ("" ^ global.machine_mode) == "automatic"
+    if job.file.fileName == null
+      if global.led_color != 2
+        M98 P"0:/sys/meltingplot/set_led_color" C"green"
+    elif global.led_color != 0
+      M98 P"0:/sys/meltingplot/set_led_color" C"white"
+  elif global.led_color != 1
+    M98 P"0:/sys/meltingplot/set_led_color" C"blue"
+
+  ; --- end of the interlock decision; from here on numeric comparisons may occur ---
 
   ; Idle is explicit: only "idle" and "paused" let the idle timer run. Every other state
   ; (processing, busy, changingTool, pausing, resuming, ...) is activity and resets it -
   ; enumerating the active states instead missed "resuming" and cut the bed off during
-  ; resume.g after a long pause (2026-09-08).
-  if (state.status != "idle" && state.status != "paused") || global.potential_unsafe_state
+  ; resume.g after a long pause (2026-09-08). upTime is monotonic, so an activity
+  ; timestamp in the future is impossible: the fire-prevention timer cannot be trusted,
+  ; date the activity back to boot, which times every heater out on this iteration
+  ; (restrictive). Only evaluated while idle/paused - while active the branch above
+  ; rewrites idle_since every iteration anyway.
+  if (state.status != "idle" && state.status != "paused") || ("" ^ global.potential_unsafe_state) != "2863311530"
     set global.idle_since = state.upTime
     while iterations < #global.idle_heater_cutoff_done
-      set global.idle_heater_cutoff_done[iterations] = false
+      set global.idle_heater_cutoff_done[iterations] = 0xAAAAAAAA
+  elif global.idle_since > state.upTime
+    M118 P0 S{"Warning: idle timer corrupted (idle_since " ^ global.idle_since ^ " > upTime " ^ state.upTime ^ ") - forcing the idle cutoff"}
+    set global.idle_since = 0
 
   ; Per-heater idle cutoff. The off-command sets the heater STATE to off but leaves the
   ; active setpoint untouched (M568 A is required-state 0=off, not a temperature; M140
@@ -88,19 +176,24 @@ while state.status != "halted" && global.daemon_reload == false
   ; gated behind the done-flag, so it costs nothing during normal operation. The only
   ; heater-type distinction is the off-command itself (no generic per-index heater-off
   ; M-code exists): heater 0 = bed (M140), heaters 1..#tools = tool heaters (M568 on tool h-1).
+  ; Hardened flags: a corrupted cutoff_done falls into the elif and re-issues the off
+  ; command only if the heater is on; a corrupted pause_hold cuts off also while paused.
+  ; The timeout is capped at 7200 s so a flipped high bit cannot disable the cutoff.
   while iterations < #global.idle_heater_timeout
-    if global.idle_heater_cutoff_done[iterations]
+    if ("" ^ global.idle_heater_cutoff_done[iterations]) == "1431655765"
       if heat.heaters[iterations].state != "off"
         set global.idle_since = state.upTime
-        set global.idle_heater_cutoff_done[iterations] = false
-    elif (state.upTime - global.idle_since) >= global.idle_heater_timeout[iterations] && (global.idle_heater_pause_hold[iterations] == false || state.status == "idle")
+        set global.idle_heater_cutoff_done[iterations] = 0xAAAAAAAA
+    elif (state.upTime - global.idle_since) >= min(global.idle_heater_timeout[iterations], 7200) && (("" ^ global.idle_heater_pause_hold[iterations]) != "1431655765" || state.status == "idle")
       if heat.heaters[iterations].state != "off"
         echo "Idle cutoff: heater " ^ {iterations} ^ " off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
+        if global.idle_heater_timeout[iterations] > 7200 || global.idle_heater_timeout[iterations] < 60
+          M118 P0 S{"Warning: idle timeout of heater " ^ iterations ^ " is " ^ global.idle_heater_timeout[iterations] ^ " s - implausible, cutoff forced at the 7200 s cap"}
         if iterations == 0
           M140 P0 S-273.15
         else
           M568 P{iterations - 1} A0
-      set global.idle_heater_cutoff_done[iterations] = true
+      set global.idle_heater_cutoff_done[iterations] = 0x55555555
 
   if global.filament_loading_error == true && move.extruders[0].filament != ""
     ; the physical unload already ran in load_filament_sensorless' error paths (all of
@@ -155,10 +248,19 @@ while state.status != "halted" && global.daemon_reload == false
       set global.filament_forced_unload = true
       M702
 
-  if global.z_motor_stall_time > 0 && state.upTime > global.z_motor_stall_time
-    echo "Error: failed to home all z-motors within " ^ global.z_motor_stall_time_max ^ "s - abort!"
-    M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
-    M112
+  ; Z stall watchdog. 0 = disarmed (one access per iteration). Armed, the deadline must
+  ; lie within [upTime, upTime + 30] - driver-stall.g arms it at most 30 s ahead. Expired
+  ; (this includes a negative value) = the four Z motors did not all report; further
+  ; ahead = the variable changed without driver-stall.g writing it. Both halt.
+  if global.z_motor_stall_time != 0
+    if state.upTime > global.z_motor_stall_time
+      echo "Error: failed to home all z-motors within " ^ global.z_motor_stall_time_max ^ "s (deadline " ^ global.z_motor_stall_time ^ ") - abort!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
+    elif global.z_motor_stall_time > state.upTime + 30
+      echo "Error: Z stall watchdog deadline corrupted (" ^ global.z_motor_stall_time ^ ", upTime " ^ state.upTime ^ ") - machine halt!"
+      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
+      M112
 
   ; melt-zone peak for resume.g's re-prime: highest extruder position reached by manual
   ; moves while paused (purge beyond it leaves the nozzle, retraction after it is the
@@ -276,30 +378,6 @@ while state.status != "halted" && global.daemon_reload == false
     M220 S100
     set global.mfmbackoff = 3
     set global.lastMFMBackoffCheck = var.now
-
-  if global.door_left_open == false && global.door_right_open == false && global.door_left_switch_checked == true && global.door_right_switch_checked == true
-    if global.machine_mode != "automatic"
-      M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/automatic.g"
-  elif global.machine_mode != "default"
-    if global.potential_unsafe_state
-      echo "Error: potential unsafe state in default mode detected - machine halt!"
-      M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
-      M112
-    M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/default.g"
-
-  if global.machine_is_hot && global.machine_mode != "automatic"
-    if global.led_color != 4
-      M98 P"0:/sys/meltingplot/set_led_color" C"red"
-  elif state.status == "paused" && global.potential_unsafe_state == false
-    M98 P"0:/sys/meltingplot/set_led_color" C"pulse_white"
-  elif global.machine_mode == "automatic"
-    if job.file.fileName == null
-      if global.led_color != 2
-        M98 P"0:/sys/meltingplot/set_led_color" C"green"
-    elif global.led_color != 0
-      M98 P"0:/sys/meltingplot/set_led_color" C"white"
-  elif global.led_color != 1
-    M98 P"0:/sys/meltingplot/set_led_color" C"blue"
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100

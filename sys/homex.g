@@ -21,10 +21,7 @@ M569.1 P50.0 E4.0:2.0
 M569.1 P51.0 E4.0:2.0
 ;M569 P51.0 D2
 
-if !exists(global.closed_loop_homing)
-  global closed_loop_homing = true
-else
-  set global.closed_loop_homing = true
+set global.closed_loop_homing = 0x55555555 ; driver-error.g tolerates the closed-loop error of running into the stop (hardened true pattern, see globals)
 
 G92 X10
 G91 G1 X{(move.axes[0].max-move.axes[0].min+10)} F6000
@@ -34,7 +31,7 @@ G91 G1 X{(move.axes[0].max-move.axes[0].min+10)} F6000
 G92 X{move.axes[0].max+0.8} ; will report an error of 2 full steps -> we concider 2 additional full steps as stretch in the belt
 G90 G1 X{move.axes[0].max}
 
-set global.closed_loop_homing = false
+set global.closed_loop_homing = 0xAAAAAAAA
 
 M569 P50.0 D2
 M569 P51.0 D2

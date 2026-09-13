@@ -9,7 +9,7 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].ho
   echo "Error: Nozzle Cleaner insufficient axes homed" 
   M99
 
-if global.machine_mode != "automatic"
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
   echo "Nozzle cleaner is only used in automatic mode!"
   M99
 

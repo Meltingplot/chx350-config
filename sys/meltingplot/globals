@@ -7,7 +7,8 @@
 ;   TIER 1  safety critical. Feeds the CE door interlock, the operating-mode switch, the
 ;           heater limits, the stall watchdog or an M112 path. A wrong value can injure
 ;           the operator or wreck the machine. Every default here must fail SAFE - doors
-;           open, state unsafe, machine hot - never the convenient value.
+;           open, state unsafe, machine hot - never the convenient value. Its flags are
+;           bit-flip hardened (see there): no bools, two int patterns, type-safe reads.
 ;   TIER 2  process integrity. A wrong value ruins a print, mis-calibrates or pauses a
 ;           job; nothing becomes dangerous. Defaults are the neutral "nothing known yet".
 ;   TIER 3  cosmetic and diagnostic. LED bookkeeping, debug output, cycle timing, the
@@ -30,12 +31,63 @@
 ; TIER 1 - SAFETY CRITICAL
 ; ==============================================================================
 
+; --- bit-flip hardened states -------------------------------------------------
+; No flag in this tier is a bool. A bool is a single bit away from its opposite, so one
+; flipped RAM bit (no ECC on the Duet) turns "door open" into "door closed" without any
+; trace. Every flag is stored as one of two int patterns of maximal Hamming distance:
+;   0x55555555 = 0101 0101 ... 0101  <-> true     renders as "1431655765"
+;   0xAAAAAAAA = 1010 1010 ... 1010  <-> false    renders as "2863311530"
+; All 32 bits differ, so no single, double or triple bit flip can turn one valid pattern
+; into the other - a corrupted value is never a valid state. Verified on the machine
+; (2026-09-13): RRF parses 0xAAAAAAAA as uint32 (2863311530, not as a negative int32),
+; a global holds it type-stable, and comparisons against the int32 0x55555555 work.
+;
+; WRITING: assign the hex literal.  set global.door_left_open = 0xAAAAAAAA
+; There is deliberately no named constant for the patterns - a constant would itself be
+; a single global that a bit flip breaks for every consumer at once.
+;
+; READING: always through the string coercion "" ^ and against the rendered decimal:
+;   ("" ^ global.door_left_open) == "2863311530"            "door closed"   (permissive)
+;   ("" ^ global.potential_unsafe_state) != "2863311530"    "unsafe"        (restrictive)
+;   ("" ^ global.door_left_switch_checked) == "1431655765"  "edge seen"     (permissive)
+; The coercion is what keeps the CHECK itself alive: a direct comparison such as
+; global.x != 0xAAAAAAAA throws "expected numeric operand" the moment x is not a number
+; (verified on the machine with set global.x = true), and an expression error aborts the
+; file that evaluates it - in daemon.g that is the safety loop. "" ^ x turns any type
+; into a string (RRF meta-command reference, "Literals"), so a bool, null, float or a
+; flipped type tag is just one more string that matches neither pattern.
+; The rule is about the PERMISSIVE branch: it is reachable only by exact equality with
+; the permissive pattern; the restrictive branch is the inequality, so every corrupted
+; value lands there. Which pattern is permissive is stated at each declaration:
+;   permissive 0xAAAAAAAA (false): door_left_open, door_right_open,
+;                                  potential_unsafe_state, machine_is_hot,
+;                                  idle_heater_pause_hold[]
+;   permissive 0x55555555 (true):  door_left_switch_checked, door_right_switch_checked,
+;                                  sensorless_z_homing, closed_loop_homing,
+;                                  idle_heater_cutoff_done[], z_motor_stall_count[]
+; Never a bare "if global.x", never "== true"/"== false", never a numeric comparison
+; against a pattern. Strings in this tier (machine_mode, saved_*_heater_state*) are read
+; the same way, ("" ^ global.machine_mode) != "automatic", for the same reason.
+;
+; DETECTION: daemon.g halts (M112) when a flag that persists between iterations holds
+; neither pattern - the door states, the switch_checked flags, and machine_mode holding
+; neither of its two strings - because nothing but the daemon or the two operating-mode
+; scripts ever writes them: such a value means RAM, or an operator, is not to be trusted.
+; potential_unsafe_state and machine_is_hot are recomputed from scratch every iteration
+; and need no persistence check. Numeric values cannot be pattern-encoded (they are
+; compared with < and >); they are bounded by plausibility instead, see each of them.
+; In DWC the flags show as 1431655765 (true) and 2863311530 (false).
+
 ; --- CE operating mode --------------------------------------------------------
 ; "default" is the restricted mode of the CE declaration (keepout zone, 60 mm/min,
 ; reduced motor currents, every heater capped at 50 °C); "automatic" releases full
 ; speeds, currents and temperatures. Only daemon.g switches it, and only through
-; ce-declaration/operating-mode/{default,automatic}.g - never assign it elsewhere.
+; ce-declaration/operating-mode/{default,automatic}.g - never assign it elsewhere, so any
+; value other than the two strings is corruption and daemon.g halts on it.
 ; The upgrade requires both doors closed AND both door switches verified.
+; Read rule: whoever GATES a permissive action tests for "automatic" (either
+; == "automatic", or != "automatic" -> abort); whoever PERFORMS the downgrade (trigger4.g,
+; the daemon's elif) tests != "default", so a corrupted string still downgrades.
 global machine_mode = "default"              ; boots restricted, the daemon upgrades
 
 ; --- door interlock -----------------------------------------------------------
@@ -47,16 +99,17 @@ global machine_mode = "default"              ; boots restricted, the daemon upgr
 ; Clearing the checked flags while machine_mode is still "automatic" and
 ; potential_unsafe_state is set fires M112: see "the mode-downgrade window" in CLAUDE.md
 ; before appending anything to the tail of print_end.
-global door_left_open = true
-global door_right_open = true
-global door_left_switch_checked = false      ; real open->close edge seen (gate for automatic mode)
-global door_right_switch_checked = false
+global door_left_open = 0x55555555           ; 0x55555555 open, 0xAAAAAAAA closed (permissive)
+global door_right_open = 0x55555555
+global door_left_switch_checked = 0xAAAAAAAA ; 0x55555555 edge seen (permissive), 0xAAAAAAAA not
+global door_right_switch_checked = 0xAAAAAAAA
 ; one-cycle edge markers, set by daemon.g on every open/close change. Nothing outside
 ; the daemon consumes them today (the door triggers run off the pins via M581) - they
-; are the observable edge for anything that needs it.
+; are the observable edge for anything that needs it. Plain bools: a flip has no effect.
 global door_left_state_transition = false
 global door_right_state_transition = false
-global door_ignore_trigger = false           ; print_start suppresses the door pause while it probes the switches
+; (door_ignore_trigger was removed 2026-09: print_start set it but nothing ever read it -
+; the door triggers run off the pins via M581)
 
 ; --- unsafe-state detection (daemon motion tracker) ---------------------------
 ; potential_unsafe_state is true while anything moved within the last 0.25 s. It is what
@@ -65,55 +118,71 @@ global door_ignore_trigger = false           ; print_start suppresses the door p
 ; It flags any EXACT change of a reported position, physical motion or not: M92, G92,
 ; G10 L2/L20, T, M290, G29/M375 and M579 perturb these values by a rounding epsilon and
 ; therefore count as motion (CLAUDE.md, "the mode-downgrade window").
-; Defaults to true so a machine whose daemon has not run yet is never treated as safe.
-global potential_unsafe_state = true
+; Defaults to unsafe so a machine whose daemon has not run yet is never treated as safe.
+global potential_unsafe_state = 0x55555555   ; 0x55555555 unsafe, 0xAAAAAAAA safe (permissive)
 ; tracker state, one entry per axis (X, Y, Z, U) / per extruder. Sized explicitly.
+; Numeric, so not pattern-encoded. A flipped *_position element differs from the OM on
+; the next iteration, reads as motion and is overwritten (restrictive, self-healing). A
+; *_motion_time element flipped into the future reads as "inside the window"
+; (restrictive); daemon.g reports and re-dates it. A flip into the past is not detectable
+; and can only shorten the 0.25 s grace window of that one axis - residual risk.
 global last_machine_position = vector(4,0)
 global last_axis_motion_time = vector(4,0.0)
 global last_extruder_position = vector(2,0)
 global last_extruder_motion_time = vector(2,0.0)
 ; per-axis / per-extruder delta of the last observed move (0 = standstill). Written by
-; the daemon only - exported for diagnostics, not read back by it.
+; the daemon only - exported for diagnostics, not read back by it. A flip has no effect.
 global axis_is_moving = vector(4,0)
 global extruder_is_moving = vector(2,0)
 
 ; --- hot surfaces and heater safety -------------------------------------------
 ; machine_is_hot drives the red warning LED whenever the machine is not in automatic
-; mode. Defaults to true so the warning is on until the daemon has actually measured
+; mode. Defaults to hot so the warning is on until the daemon has actually measured
 ; bed, hotend and chamber below 50 °C.
-global machine_is_hot = true
+global machine_is_hot = 0x55555555           ; 0x55555555 hot, 0xAAAAAAAA cold (permissive)
 
 ; idle heater cutoff - fire prevention for a machine left heated. Per-heater, indexed by
 ; heater number: heater 0 = bed by definition, heaters 1..#tools = tool heaters (heater h
 ; ↔ tool h-1), further heaters may follow. Sized explicitly because globals load before
 ; heaters exist.
-global idle_heater_timeout = {3600, 1800}                                   ; cutoff timeout (s): [0]=bed 60min, [1]=hotend 30min
-global idle_heater_pause_hold = {true, false}                               ; true = keep on while paused with a job loaded (bed: preserve adhesion for resume)
-global idle_heater_cutoff_done = vector(#global.idle_heater_timeout, false)  ; per-heater edge flag — set after cutoff, cleared on re-enable/activity
-global idle_since = 0                                                        ; state.upTime of last detected activity (0 = init pending)
+; idle_heater_timeout: daemon.g caps the effective value at 7200 s, so a flipped high bit
+; cannot disable the cutoff; raise the cap in daemon.g if a longer timeout is ever wanted.
+; idle_since: upTime is monotonic, a value above state.upTime is impossible - daemon.g
+; warns and treats it as timed out.
+global idle_heater_timeout = {3600, 1800}                                   ; cutoff timeout (s): [0]=bed 60min, [1]=hotend 30min, effective max 7200
+global idle_heater_pause_hold = {0x55555555, 0xAAAAAAAA}                    ; 0x55555555 keep on while paused with a job loaded (permissive; bed: preserve adhesion for resume), 0xAAAAAAAA cut off
+global idle_heater_cutoff_done = vector(#global.idle_heater_timeout, 0xAAAAAAAA)  ; per-heater edge flag: 0x55555555 cutoff done (permissive: skip), 0xAAAAAAAA not; cleared on re-enable/activity
+global idle_since = 0                                                        ; state.upTime of last detected activity (0 = boot)
 
 ; heater states saved by trigger4.g when a door opens and restored by trigger3.g when it
 ; closes again - the door interlock turns the heaters off, these remember what to bring
 ; back. "off" is the safe default: a restore that runs without a preceding save leaves
-; everything off instead of switching an unattended heater on.
+; everything off instead of switching an unattended heater on. trigger3.g restores only
+; "active"/"standby" and warns about any other value (corrupted or an OM state such as
+; "fault"), leaving that heater off. Sized 2 like the other tool-indexed arrays.
 global saved_bed_heater_state = "off"                    ; bed heater state before door open
-global saved_tool_heater_states = vector(1, "off")       ; per-tool heater state before door open
+global saved_tool_heater_states = vector(2, "off")       ; per-tool heater state before door open
 
 ; --- stall and driver watchdog ------------------------------------------------
 ; Z homing runs the four Z motors into their stops; driver-stall.g counts the stalls and
 ; arms z_motor_stall_time as a deadline. If not all four report within
 ; z_motor_stall_time_max seconds, daemon.g halts the machine with M112 - a Z axis that
 ; keeps driving against a jammed leadscrew destroys the gantry.
-global z_motor_stall_count = vector(4,0)
+; z_motor_stall_time is numeric: armed, it must lie within [upTime, upTime + 30] - past
+; means the motors did not report, further ahead means it changed without driver-stall.g
+; writing it; daemon.g halts on both. z_motor_stall_time_max is accepted in 1..30 by
+; driver-stall.g, anything else arms 5 s with a warning.
+global z_motor_stall_count = vector(4, 0xAAAAAAAA)   ; per Z motor: 0x55555555 stalled (permissive: counts towards "all reported"), 0xAAAAAAAA not
 global z_motor_stall_time = 0            ; state.upTime deadline (0 = no homing in progress)
 global z_motor_stall_time_max = 5        ; seconds all four Z motors have to report their stall
 
 ; stall/driver-error suppression flags. They switch the machine's reaction to a stall
 ; off, so they must always be cleared again on every exit path of the macro that set
 ; them - a flag left set silently disables the watchdog for the rest of the session.
-global sensorless_z_homing = false       ; set by align_z_axis.g / set_new_z_height: expected Z stalls are not errors
-global closed_loop_homing = false        ; set by homex/homey/homeu: driver-error.g tolerates closed-loop errors while homing
-global ignore_stall_events = false       ; nothing consumes this - NOT a live suppression switch
+; Suppression is the permissive state: only the exact true pattern suppresses.
+global sensorless_z_homing = 0xAAAAAAAA  ; 0x55555555 expected Z stalls (align_z_axis.g / set_new_z_height), 0xAAAAAAAA a Z stall is an E-stop
+global closed_loop_homing = 0xAAAAAAAA   ; 0x55555555 driver-error.g tolerates closed-loop errors (homex/homey/homeu), 0xAAAAAAAA pause
+; (ignore_stall_events was removed 2026-09: nothing ever read it)
 
 
 ; ==============================================================================

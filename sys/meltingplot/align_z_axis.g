@@ -6,7 +6,7 @@ var motor_current = move.axes[2].percentCurrent
 var max_travel = move.axes[2].max - move.axes[2].min + 5 ; max travel + 5mm extra
 var max_time = {var.max_travel / move.axes[2].speed * 1.1}
 
-set global.sensorless_z_homing = true      ; ignore stall events on z-axis
+set global.sensorless_z_homing = 0x55555555  ; expected Z stalls (hardened true pattern, see globals) - cleared at the end of this file
 
 G91                                        ; relative position
 M400                                       ; make sure everything has stopped before we reset the motor currents
@@ -36,6 +36,6 @@ M400
 G4 P500
 M915 Z R2 ; enable stall events again
 
-set global.sensorless_z_homing = false      ; ignore stall events on z-axis
+set global.sensorless_z_homing = 0xAAAAAAAA  ; a Z stall is an E-stop again
 
 M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g"

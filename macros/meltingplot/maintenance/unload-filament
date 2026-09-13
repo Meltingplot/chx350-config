@@ -1,4 +1,4 @@
-if global.machine_mode != "automatic"
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
   echo "Error: machine not in automatic mode - abort!"
   M99
 

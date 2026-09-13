@@ -1,8 +1,9 @@
 if state.status == "simulating"
   M99
 
+; switch_checked flags are bit-flip hardened (see globals): "checked" only by exact match with "1431655765" (0x55555555)
 if state.currentTool != -1
-  if global.door_left_switch_checked == true && global.door_right_switch_checked == true
+  if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
     G10                                                       ; Retract the filament
   M568 P0 R0 S0 A0                                          ; disable hotend
   M140 S0 R0                                                ; set bed heater to 0°
@@ -10,7 +11,7 @@ if state.currentTool != -1
   T-1                                                       ; deselect all tools
 
 ; do not run this after mode switch is initialized
-if global.door_left_switch_checked == true && global.door_right_switch_checked == true
+if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
   G90                                                     ; absolute positioning
   if move.axes[2].homed
     G1 Z{move.axes[2].max-1} F60000                       ; lift z to clearance height 
@@ -65,5 +66,5 @@ set global.mfm_esteps_done = false
 set global.mfm_esteps_drift_since = 0
 set global.mfm_esteps_drift_avg = 0
 
-set global.door_left_switch_checked = false               ; set to unsafe state
-set global.door_right_switch_checked = false              ; set to unsafe state
+set global.door_left_switch_checked = 0xAAAAAAAA          ; set to unsafe state (hardened false pattern)
+set global.door_right_switch_checked = 0xAAAAAAAA         ; set to unsafe state

@@ -10,7 +10,8 @@
 ; "Out-of-order reply" warnings when it happens at daemon rate. This macro
 ; therefore always runs through to the end of file.
 
-if global.machine_is_hot && (global.machine_mode != "automatic" || (exists(param.E) && param.E == 1))
+; machine_is_hot / machine_mode are bit-flip hardened, read through "" ^ (see globals): "cold" only by exact match with "2863311530" (0xAAAAAAAA)
+if ("" ^ global.machine_is_hot) != "2863311530" && (("" ^ global.machine_mode) != "automatic" || (exists(param.E) && param.E == 1))
   ; hot machine outside automatic mode (or e-stop) always wins: red
   if global.led_color != 4
     M150 E{0} U255 R00 B00 P255 S60 ; set to color red

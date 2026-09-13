@@ -5,7 +5,9 @@
 if global.debug
   echo "driver error - "^{param.B}^"."^{param.D}^" : "^{param.P}^" ,"^{param.S}
 
-if exists(global.closed_loop_homing) && global.closed_loop_homing
+; closed_loop_homing is bit-flip hardened (see globals): only the exact true pattern
+; suppresses the error, a corrupted value falls through to the pause
+if ("" ^ global.closed_loop_homing) == "1431655765"
   M99
 
 if param.B > 0 && param.D == 0 && param.P == 3072 && move.axes[0].homed == false && move.axes[1].homed == false

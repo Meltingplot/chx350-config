@@ -1,5 +1,5 @@
 var motor_current = move.axes[2].percentCurrent
-set global.sensorless_z_homing = true      ; ignore stall events on z-axis
+set global.sensorless_z_homing = 0x55555555  ; expected Z stalls (hardened true pattern, see globals) - cleared at the end of this file
 
 M915 Z R2                            ; set z axis to stall detection mode
 G91                                  ; relative position
@@ -14,4 +14,4 @@ M208 Z0 S1                           ; overwrite probed z minimum to 0
 M500 P10:31                          ; store new z height in config-overwrite.g
 M915 Z R0                            ; set z axis back to normal mode
 G4 P500                              ; wait for 500ms to make sure the z axis is not moving anymore before we disable sensorless homing
-set global.sensorless_z_homing = false      ; ignore stall events on z-axis
+set global.sensorless_z_homing = 0xAAAAAAAA  ; a Z stall is an E-stop again

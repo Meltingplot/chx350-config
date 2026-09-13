@@ -17,15 +17,12 @@ M400
 M569.1 P52.0 E4.0:2.0
 M569 P52.0 D4
 
-if !exists(global.closed_loop_homing)
-  global closed_loop_homing = true
-else
-  set global.closed_loop_homing = true
+set global.closed_loop_homing = 0x55555555 ; driver-error.g tolerates the closed-loop error of running into the stop (hardened true pattern, see globals)
 
 G91 G1 H2 Y{-(move.axes[1].max-move.axes[1].min+10)} F6000
 M400
 G4 P500
-set global.closed_loop_homing = false
+set global.closed_loop_homing = 0xAAAAAAAA
 
 G92 Y{move.axes[1].min-0.8}
 G90 G1 Y0

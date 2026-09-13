@@ -8,30 +8,32 @@ T0                                          ; select tool 0
 M83                                         ; use relative distances for extrusion
 G90                                         ; use absolute coordinates
 
+; machine_mode / switch_checked are bit-flip hardened, read through "" ^ (see globals):
+; "checked" only by exact match with "1431655765" (0x55555555)
 if state.status == "simulating"
-  if global.machine_mode != "automatic"
+  if ("" ^ global.machine_mode) != "automatic"
     echo "Error: simulation requires automatic mode - close both doors and verify door switches first"
     M2
   M99
 
-set global.door_ignore_trigger = true ; do not pause the print while we check the door switches!
-while ( global.door_left_switch_checked == false || global.door_right_switch_checked == false )
+; (door_ignore_trigger removed - it was never read; the door triggers run off the pins)
+while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
   if iterations > 5
     echo "Error: unable to verify the door switches! abort! - Contact the Manufacturer for Assistance!"
-    set global.door_ignore_trigger = false
     M0
     M99
 
   if iterations > 0
-    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ global.door_left_switch_checked ^ "<br>Türstatus rechts: " ^ global.door_right_switch_checked}  R"Türkontrolle" S2
+    var links = (("" ^ global.door_left_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    var rechts = (("" ^ global.door_right_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ var.links ^ "<br>Türstatus rechts: " ^ var.rechts}  R"Türkontrolle" S2
   else
     M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
-set global.door_ignore_trigger = false
 
 M116                                        ; wait for all heaters
 M98 P"0:/sys/meltingplot/wait_for_heater" H0 ; wait for bed heater to settle
 
-while global.machine_mode != "automatic"
+while ("" ^ global.machine_mode) != "automatic"
   G4 S1 ; wait for automatic mode
   if iterations > 10
     echo "Error: machine is not in automatic mode! abort!"

@@ -1,6 +1,9 @@
-while ( global.door_left_switch_checked == false || global.door_right_switch_checked == false )
+; switch_checked flags are bit-flip hardened (see globals): "checked" only by exact match with "1431655765" (0x55555555)
+while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
   if iterations > 0
-    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ global.door_left_switch_checked ^ "<br>Türstatus rechts: " ^ global.door_right_switch_checked}  R"Türkontrolle" S2
+    var links = (("" ^ global.door_left_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    var rechts = (("" ^ global.door_right_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ var.links ^ "<br>Türstatus rechts: " ^ var.rechts}  R"Türkontrolle" S2
   else
     M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
 
