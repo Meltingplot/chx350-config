@@ -15,7 +15,11 @@ M569.1 P52.0 E1.0:4.0
 M569 P52.0 D2
 
 G91 G1 H1 Y{-(move.axes[1].max-move.axes[1].min+10)} F6000
-
+M400
+M18 Y
+M400
+M17 Y
+G92 Y{move.axes[1].min}
 M569.1 P52.0 E6.0:20.0
 M569 P52.0 D4
 M913 Y{var.motor_current}
