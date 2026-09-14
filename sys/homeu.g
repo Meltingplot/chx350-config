@@ -19,30 +19,14 @@ M98 P"0:/sys/meltingplot/ensure_safety"
 var motor_current = move.axes[3].percentCurrent
 
 M400                                                    ; wait for all moves to finish
-M913 U{800/move.axes[3].current*100}                    ; reduce motor current to 800mA for homing
-M400                                                    ; wait for all moves to finish
-M17 U
-M400
-
-M569.1 P53.0 E4.0:2.0
-M569 P53.0 D4
-
-set global.closed_loop_homing = 0x55555555 ; driver-error.g tolerates the closed-loop error of running into the stop (hardened true pattern, see globals)
-
-G91 G1 H2 U{(move.axes[3].max-move.axes[3].min+10)} F6000
-M400
-G4 P500
-set global.closed_loop_homing = 0xAAAAAAAA
-
-G92 U{move.axes[3].max+0.8}
-G90 G1 U{move.axes[3].max}
+M913 U{800/move.axes[3].current*100}
+M17 X U
+M569.1 P53.0 E1.0:4.0
 M569 P53.0 D2
-M18 U
-M17 U ; fall back to full step
-G92 U{move.axes[3].max}
-M569 P53.0 D4
-M569.1 P53.0 E6.0:20.0
-M400                                                              ; wait for all moves to finish
-M913 U{var.motor_current}                                         ; restore motor current
-M400                                                              ; wait for all moves to finish
 
+G91 G1 H1 U{(move.axes[3].max-move.axes[3].min+10)} F6000
+
+M569.1 P53.0 E6.0:20.0
+M569 P53.0 D4
+M913 U{var.motor_current}
+M400                                                              ; wait for all moves to finish

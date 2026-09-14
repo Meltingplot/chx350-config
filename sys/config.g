@@ -105,10 +105,10 @@ M208 X0 Y0 Z0 U0 S1                                     ; set axis minima
 M208 X880 Y422 Z945 U422 S0                             ; set axis maxima
 
 ; Endstops
-M574 X2 S3                                              ; configure sensorless endstop on high end on X
-M574 Y1 S3                                              ; configure sensorless endstop on low end on Y
+M574 X2 S5                                              ; configure encoder endstop on high end on X
+M574 Y1 S5                                              ; configure encoder endstop on low end on Y
 M574 Z2 S4                                              ; configure sensorless endstop on high end of Z
-M574 U2 S3                                              ; configure sensorless endstop on high end on U
+M574 U2 S5                                              ; configure encoder endstop on high end on U
 
 ; Heaters
 M950 H0 C"nil"                                          ; clear heater 0
