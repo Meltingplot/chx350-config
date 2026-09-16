@@ -6,10 +6,9 @@ M204 P4000 T6000                                        ; Set printing and trave
 M906 X2500 Y2500 Z1500 U2500 E1400                      ; set motor currents (mA) and motor idle factor in per cent
 M84 S30                                                 ; Set idle timeout
 
-M917 X{200/move.axes[0].current*100} Y{200/move.axes[1].current*100} U{200/move.axes[3].current*100} ; set idle current to 200mA for X, Y and U
-M917 Z{350/move.axes[2].current*100}                    ; set idle current to 350mA for Z
-
-M917 E50                                                ; set idle current to 50% for E
+M917 X70 Y70 U70                                        ; set reduced current for X, Y and U
+M917 Z70                                                ; set reduced current for Z
+M917 E70                                                ; set reduced current for E
 
 M915 Z S15 F1 R0                                        ; stall detection for high current
 
