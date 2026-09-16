@@ -51,8 +51,8 @@ if global.result != 0
 set global.result = 0
 
 while true
-  var pos_variation_x = mod(state.msUpTime,16) ; 0 - 15
-  var pos_variation_y = (mod(state.msUpTime,16)+8)-16 ; -8 - +7
+  var pos_variation_x = random(16)     ; 0 - 15, independent draw
+  var pos_variation_y = random(16) - 8 ; -8 - +7, independent draw
 
   G30 P0 X{move.axes[0].min + 50 + var.pos_variation_x} Y{move.kinematics.tiltCorrection.screwY[0]+var.pos_variation_y} Z-99999      ; probe near a leadscrew, half way along Y axis
   if result != 0
