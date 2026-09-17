@@ -12,3 +12,7 @@ sys/meltingplot/nozzle1.g
 
 # output tree of tools/gcode_crc.py, generated at deploy time
 build/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
