@@ -33,6 +33,13 @@ while state.status != "halted" && global.daemon_reload == false
   ; and already lands here as "moving" (restrictive), so the check costs nothing outside
   ; the 0.25 s window. Re-dating lets the window expire normally instead of leaving the
   ; machine unsafe for years.
+  ; The 1 s slack is not a fudge: var.now is NOT an atomic clock read. upTime and msUpTime
+  ; are two separate OM lookups, each sampling millis64() itself (RRF keeps the pair
+  ; consistent only WITHIN one lookup - ObjectModel.h, "startMillis"). A second rollover
+  ; between the two reads yields floor(t_first) + frac(t_second), i.e. now reads up to 1 s
+  ; in the PAST - never in the future, so a stored timestamp can appear up to 1 s ahead
+  ; with nothing corrupted. Only beyond that is it a bit flip; re-dating on the read tear
+  ; instead threw away a valid motion timestamp and cried corruption (seen 2026-09-18).
   set global.potential_unsafe_state = 0xAAAAAAAA
   while iterations < #move.axes
     if global.last_machine_position[iterations] != move.axes[iterations].machinePosition
@@ -42,7 +49,7 @@ while state.status != "halted" && global.daemon_reload == false
       set global.potential_unsafe_state = 0x55555555
     elif (var.now - global.last_axis_motion_time[iterations]) < 0.25
       set global.potential_unsafe_state = 0x55555555
-      if global.last_axis_motion_time[iterations] > var.now
+      if global.last_axis_motion_time[iterations] > var.now + 1
         M118 P0 S{"Warning: motion timestamp of axis " ^ iterations ^ " corrupted (" ^ global.last_axis_motion_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
         set global.last_axis_motion_time[iterations] = var.now
     else
@@ -55,7 +62,7 @@ while state.status != "halted" && global.daemon_reload == false
       set global.potential_unsafe_state = 0x55555555
     elif (var.now - global.last_extruder_motion_time[iterations]) < 0.25
       set global.potential_unsafe_state = 0x55555555
-      if global.last_extruder_motion_time[iterations] > var.now
+      if global.last_extruder_motion_time[iterations] > var.now + 1
         M118 P0 S{"Warning: motion timestamp of extruder " ^ iterations ^ " corrupted (" ^ global.last_extruder_motion_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
         set global.last_extruder_motion_time[iterations] = var.now
     else
