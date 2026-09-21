@@ -10,6 +10,9 @@ if global.debug
 
 ; Double-check that the doors were truly opened and not triggered by an EMI event, as this could have serious consequences and lead to a print failure.
 ; The added delay is negligible (<10 ms)
+; This is the ONE double-check that guards a RESTRICTIVE branch (globals, "CONFIRMING"):
+; it re-reads the door SENSORS, not a Tier-1 flag, and skipping the downgrade here is safe
+; only because the daemon evaluates the same interlock every iteration and performs it.
 ; Tier-1 flags are bit-flip hardened and read through the "" ^ coercion (see globals).
 ; machine_mode is tested != "default" ON PURPOSE: the body below IS the downgrade, so a
 ; corrupted mode string must run it, not skip it.

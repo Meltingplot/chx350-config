@@ -12,3 +12,11 @@ while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.doo
     M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ var.links ^ "<br>Türstatus rechts: " ^ var.rechts}  R"Türkontrolle" S2
   else
     M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
+
+; Confirm the loop exit with the inverse comparison (globals, "CONFIRMING"). This file
+; reports through global.result, so a disagreement is reported the same way the timeout
+; above is - the caller sees a failed plausibility check, which is the restrictive answer.
+if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+  echo "Error: door switches not confirmed on re-read! abort! - Contact the Manufacturer for Assistance!"
+  set global.result = 1
+  M99

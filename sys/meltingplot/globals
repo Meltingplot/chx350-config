@@ -69,6 +69,36 @@
 ; against a pattern. Strings in this tier (machine_mode, saved_*_heater_state*) are read
 ; the same way, ("" ^ global.machine_mode) != "automatic", for the same reason.
 ;
+; CONFIRMING: the patterns protect the VALUE, they do not protect the DECISION. A branch
+; body can also run because the flow that led to it was wrong - a mis-evaluated condition,
+; an EMI blip on the sensor the condition read, or the flag changing right after it was
+; read. So every branch entered because a Tier-1 flag (or a door sensor) read PERMISSIVE
+; re-reads it as its first statement, with the inverse comparison, and takes the
+; restrictive path when the two disagree:
+;   if ("" ^ global.door_left_open) == "2863311530"            ; gate: closed
+;     if ("" ^ global.door_left_open) != "2863311530"          ; confirm: still closed?
+;       <restrictive>
+; The confirm re-evaluates, it does not reuse the first result - so it catches a wrongly
+; taken branch whatever the source. For a GLOBAL the second read is also a genuinely new
+; value: nothing caches it, and a write from another channel between the two reads is
+; seen. For an OM field such as sensors.gpIn[] the second read is a second lookup, but in
+; SBC mode how much the underlying model refreshed in between is not documented - so a
+; sensor confirm is reliable against corrupted flow and only opportunistic against EMI
+; (trigger4.g is the deliberate EMI double-check on the trigger path).
+; Two rules keep the redundancy from becoming a hole itself:
+;   - it may only ever move the outcome toward the RESTRICTIVE side. Never confirm a
+;     restrictive branch - a downgrade, a heater cutoff, a halt - into a permissive one,
+;     or the second read becomes a way to skip the safe action. The one documented
+;     exception is trigger4.g, which re-reads the door SENSORS (not a flag) before the
+;     downgrade to reject EMI, and where the daemon still performs the downgrade anyway.
+;   - a disagreement is reported (M118 P0) and resolved restrictively, NOT halted. It is
+;     not provably corruption: an operator can open a door in the window between the two
+;     reads, and that legitimate race must not fire M112. Only a value that is neither
+;     pattern is provable corruption, and that is what the DETECTION below halts on.
+; Guard-style consumers (if ("" ^ global.machine_mode) != "automatic" -> abort) have their
+; permissive branch in the fall-through, so their confirm is the same guard written a
+; second time, with its own message - that is what catches the guard being skipped.
+;
 ; DETECTION: daemon.g halts (M112) when a flag that persists between iterations holds
 ; neither pattern - the door states, the switch_checked flags, and machine_mode holding
 ; neither of its two strings - because nothing but the daemon or the two operating-mode

@@ -14,6 +14,10 @@ if state.status == "simulating"
   if ("" ^ global.machine_mode) != "automatic"
     echo "Error: simulation requires automatic mode - close both doors and verify door switches first"
     M2
+  ; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+  if ("" ^ global.machine_mode) != "automatic"
+    echo "Error: automatic mode not confirmed on re-read - simulation aborted"
+    M2
   M99
 
 ; (door_ignore_trigger removed - it was never read; the door triggers run off the pins)
@@ -30,6 +34,14 @@ while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.doo
   else
     M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
 
+; Confirm the loop exit with the inverse comparison (globals, "CONFIRMING"): leaving the
+; wait above is the permissive decision that lets this file heat and move, so both flags
+; are read once more before it acts on them.
+if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+  echo "Error: door switches not confirmed on re-read! abort!"
+  M0
+  M99
+
 M116                                        ; wait for all heaters
 M98 P"0:/sys/meltingplot/wait_for_heater" H0 ; wait for bed heater to settle
 
@@ -39,6 +51,12 @@ while ("" ^ global.machine_mode) != "automatic"
     echo "Error: machine is not in automatic mode! abort!"
     M0
     M99
+
+; confirm the loop exit, see above
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read! abort!"
+  M0
+  M99
 
 M400 ; dsf specific
 G4 P500 ; dsf specific - wait for the keepout zone to remove

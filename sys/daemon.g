@@ -6,6 +6,9 @@
 ; 0x55555555 (true) / 0xAAAAAAAA (false), read ONLY as ("" ^ global.x) == "1431655765" /
 ; "2863311530". The "" ^ coercion is not optional here - a direct numeric compare throws
 ; an expression error on a non-numeric value, and that error aborts this loop.
+; Permissive branches are confirmed by a second, inverse read before they act (globals,
+; "CONFIRMING"); every confirm sits inside a transition branch, so the steady-state cost
+; stays zero and a disagreement warns and stays restrictive instead of halting.
 ; Block order is deliberate: the interlock decision (tracker -> doors -> mirror -> hot ->
 ; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
 ; that follow (idle cutoff, Z watchdog, filament, MFM) can, and then only they are lost.
@@ -80,8 +83,18 @@ while state.status != "halted" && global.daemon_reload == false
   if sensors.gpIn[2].value == 0 && ("" ^ global.door_left_open) == "2863311530"
     set global.door_left_open = 0x55555555
     set global.door_left_state_transition = true
-    set global.door_left_switch_checked = 0x55555555
-    set var.left_checked = "1431655765"
+    ; Confirm the open edge before crediting the door check (globals, "CONFIRMING"):
+    ; switch_checked is the gate for automatic mode, so it is not handed out on a single
+    ; reading of the pin. The confirm re-evaluates gpIn - reliably catching a branch that
+    ; ran although its condition was false, and rejecting an EMI blip as far as the OM
+    ; refreshed in between. Withholding the credit is the restrictive outcome and costs
+    ; nothing: door_left_open stays open, the elif below closes it again next iteration,
+    ; and the operator opens the door once more.
+    if sensors.gpIn[2].value == 0
+      set global.door_left_switch_checked = 0x55555555
+      set var.left_checked = "1431655765"
+    else
+      M118 P0 S"Warning: left door open edge not confirmed on re-read - door check not credited"
   elif sensors.gpIn[2].value != 0 && ("" ^ global.door_left_open) != "2863311530"
     set global.door_left_open = 0xAAAAAAAA
     set global.door_left_state_transition = true
@@ -91,8 +104,12 @@ while state.status != "halted" && global.daemon_reload == false
   if sensors.gpIn[3].value == 0 && ("" ^ global.door_right_open) == "2863311530"
     set global.door_right_open = 0x55555555
     set global.door_right_state_transition = true
-    set global.door_right_switch_checked = 0x55555555
-    set var.right_checked = "1431655765"
+    ; confirm the open edge on a second sample, see the left door above
+    if sensors.gpIn[3].value == 0
+      set global.door_right_switch_checked = 0x55555555
+      set var.right_checked = "1431655765"
+    else
+      M118 P0 S"Warning: right door open edge not confirmed on re-read - door check not credited"
   elif sensors.gpIn[3].value != 0 && ("" ^ global.door_right_open) != "2863311530"
     set global.door_right_open = 0xAAAAAAAA
     set global.door_right_state_transition = true
@@ -131,7 +148,17 @@ while state.status != "halted" && global.daemon_reload == false
         echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"
         M98 P"0:/sys/meltingplot/set_led_color" C"yellow" E1
         M112
-      M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/automatic.g"
+      ; Confirm all four interlock flags with the inverse comparison before releasing full
+      ; speeds, currents and temperatures (globals, "CONFIRMING"). This is the single most
+      ; permissive step the daemon takes, so the decision to take it is read twice: the
+      ; confirm catches a flag that changed after the gate above evaluated, and a body that
+      ; ran although its condition was false. Skipping the upgrade is restrictive and free
+      ; - the next iteration re-evaluates. It must NOT halt: the operator can legitimately
+      ; open a door in the window between the two reads.
+      if ("" ^ global.door_left_open) != "2863311530" || ("" ^ global.door_right_open) != "2863311530" || ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+        M118 P0 S"Warning: door interlock not confirmed on re-read - automatic mode not entered"
+      else
+        M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/automatic.g"
   elif ("" ^ global.machine_mode) != "default"
     if ("" ^ global.machine_mode) != "automatic"
       echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"

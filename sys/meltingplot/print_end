@@ -4,7 +4,12 @@ if state.status == "simulating"
 ; switch_checked flags are bit-flip hardened (see globals): "checked" only by exact match with "1431655765" (0x55555555)
 if state.currentTool != -1
   if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
-    G10                                                       ; Retract the filament
+    ; confirm before extruder motion (globals, "CONFIRMING"); skipping the retract is the
+    ; restrictive outcome and costs nothing - the hotend is switched off two lines below
+    if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+      M118 P0 S"Warning: door check not confirmed on re-read - retract skipped"
+    else
+      G10                                                     ; Retract the filament
   M568 P0 R0 S0 A0                                          ; disable hotend
   M140 S0 R0                                                ; set bed heater to 0°
   M140 P0 S-273                                             ; disable bed heater
@@ -12,10 +17,14 @@ if state.currentTool != -1
 
 ; do not run this after mode switch is initialized
 if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
-  G90                                                     ; absolute positioning
-  if move.axes[2].homed
-    G1 Z{move.axes[2].max-1} F60000                       ; lift z to clearance height 
-  G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; move gantry away from camera
+  ; confirm before the park move, see the retract above
+  if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+    M118 P0 S"Warning: door check not confirmed on re-read - park move skipped"
+  else
+    G90                                                   ; absolute positioning
+    if move.axes[2].homed
+      G1 Z{move.axes[2].max-1} F60000                     ; lift z to clearance height
+    G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; move gantry away from camera
 
 ;M84                                                      ; turn off motors
 ; Turn off every fan the slicer may have switched on. Only the optional ones need a

@@ -12,6 +12,10 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].ho
 if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
   echo "Nozzle cleaner is only used in automatic mode!"
   M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - nozzle cleaner aborted"
+  M99
 
 set global.result = 0
 M400 ; sbc specific

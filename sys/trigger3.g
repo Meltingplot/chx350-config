@@ -6,12 +6,24 @@ if global.debug
 ; Tier-1 flags are bit-flip hardened and read through the "" ^ coercion (see globals):
 ; switch_checked is "checked" only by exact match with "1431655765" (0x55555555)
 if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765")
+  ; Confirm the gate with the inverse comparison before waiting for automatic mode and
+  ; restoring the heaters (globals, "CONFIRMING"). The sensors are re-read as well - this
+  ; trigger fires on the door-closed edge, exactly where an EMI blip is plausible, though
+  ; only the flag re-reads are guaranteed fresh values.
+  ; Returning is restrictive - the daemon re-evaluates the interlock every iteration.
+  if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1 || ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+    M118 P0 S"Warning: doors not confirmed closed on re-read - heater restore skipped"
+    M99
   M400
   G4 P500 ; wait for the switch to automatic mode
   while ("" ^ global.machine_mode) != "automatic" && iterations < 5
     M400
     G4 P500
   if ("" ^ global.machine_mode) == "automatic"
+    ; confirm before re-enabling the heaters, see above
+    if ("" ^ global.machine_mode) != "automatic"
+      M118 P0 S"Warning: automatic mode not confirmed on re-read - heater restore skipped"
+      M99
     var last_active_tool = state.currentTool
     ; restore bed heater to saved state. Only "active"/"standby" are restorable; any other
     ; value (corrupted, or an OM state such as "fault"/"offline") leaves the heater off
