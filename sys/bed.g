@@ -18,7 +18,8 @@ if move.axes[1].homed == false            ; check if y is homed
   M98 P"0:/sys/homey.g"                   ; home y axis
 if move.axes[3].homed == false            ; check if u is homed
   M98 P"0:/sys/homeu.g"                   ; home u axis
-if move.axes[2].homed == false            ; check if z is homed
+; a homing file that failed left its axis unhomed rather than wrong - do not probe on a stale reference
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false
   echo "Error: bed.g insufficient axes homed"
   set global.result = 1                   ; indicate error
   M99

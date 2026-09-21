@@ -13,6 +13,12 @@ if move.axes[1].homed == false            ; check if y is homed
 if move.axes[3].homed == false            ; check if u is homed
   M98 P"0:/sys/homeu.g"                   ; home u axis
 
+; a homing file that failed left its axis unhomed rather than wrong, so this catches a failed retry too
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].homed == false
+  echo "Error: Homing Z - X, Y or U did not home"
+  set global.result = 1
+  M99
+
 G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G90 G1 Z200 F6000
 M400
