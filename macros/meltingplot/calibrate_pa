@@ -177,7 +177,7 @@ if var.thresholdIndex < 0
   ; cleanup and exit
   M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
-  M98 P"0:/sys/meltingplot/machine-override"
+  M98 P"0:/sys/overrides/machine-override"
   T-1
   T{var.previousTool}
   set global.ignoreMFMevents = false
@@ -220,7 +220,7 @@ if var.N < 2
   echo "Error: insufficient compression data points (" ^ {var.N} ^ ") for regression. Need >= 2."
   M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
-  M98 P"0:/sys/meltingplot/machine-override"
+  M98 P"0:/sys/overrides/machine-override"
   T-1
   T{var.previousTool}
   set global.ignoreMFMevents = false
@@ -231,7 +231,7 @@ if var.denom == 0
   echo "Error: degenerate regression (all points at same current)."
   M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
-  M98 P"0:/sys/meltingplot/machine-override"
+  M98 P"0:/sys/overrides/machine-override"
   T-1
   T{var.previousTool}
   set global.ignoreMFMevents = false
@@ -246,7 +246,7 @@ if var.slope <= 0
   echo "Error: non-positive slope (" ^ {var.slope} ^ ") — displacement not increasing with current. Data may be noisy."
   M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
-  M98 P"0:/sys/meltingplot/machine-override"
+  M98 P"0:/sys/overrides/machine-override"
   T-1
   T{var.previousTool}
   set global.ignoreMFMevents = false
@@ -328,7 +328,7 @@ while var.i < var.validSamples
 ; === CLEANUP ===
 M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; restore MFM config
-M98 P"0:/sys/meltingplot/machine-override"           ; reload machine overrides
+M98 P"0:/sys/overrides/machine-override"           ; reload machine overrides
 
 T-1
 T{var.previousTool}

@@ -3,7 +3,7 @@
 ; diameter step is the same one the filament load runs at its feed prompt - one call to
 ; confirm_nozzle_diameter.g: it asks with choice buttons (configured diameter
 ; preselected, "Other..." for a free value), persists a changed value per tool in
-; sys/meltingplot/nozzle<tool>.g via store_nozzle_diameter.g, offers
+; sys/generated/nozzle<tool>.g via store_nozzle_diameter.g, offers
 ; filaments/<name>/nozzle-<key>.g when the loaded profile has none for the diameter
 ; (create_nozzle_config.g) and applies it with load_nozzle_config.g. The type step
 ; (confirm_nozzle_type.g: brass, CHT, hardened, ...) persists to nozzle-type<tool>.g and

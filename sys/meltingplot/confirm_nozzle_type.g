@@ -1,7 +1,7 @@
 ; confirm_nozzle_type.g
 ; Asks which kind of nozzle is installed on a tool - material and CHT geometry - as a
 ; dropdown with the configured type preselected, and persists a change in
-; global.nozzle_type[T] and sys/meltingplot/nozzle-type<T>.g (a nozzle change must
+; global.nozzle_type[T] and sys/generated/nozzle-type<T>.g (a nozzle change must
 ; survive a power cycle; the file is machine-local state, see globals).
 ;   M98 P"0:/sys/meltingplot/confirm_nozzle_type.g" T0
 ; T<tool> is optional and defaults to the current tool. Cancelling keeps the configured
@@ -35,7 +35,7 @@ set global.nozzle_type[var.tool] = var.key
 ; the tool index is built as a string explicitly so that no float formatting can leak into
 ; the file name or into the array index of the generated assignment
 var idx = var.tool == 1 ? "1" : "0"
-var file = "0:/sys/meltingplot/nozzle-type" ^ var.idx ^ ".g"
+var file = "0:/sys/generated/nozzle-type" ^ var.idx ^ ".g"
 echo >{var.file} "; nozzle type of tool " ^ var.idx ^ " - written by confirm_nozzle_type.g, do not edit"
 echo >>{var.file} "set global.nozzle_type[" ^ var.idx ^ "] = """ ^ var.key ^ """"
 

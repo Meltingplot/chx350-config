@@ -2,7 +2,7 @@
 ; Records the spool mounted on a tool: nominal net weight as a dropdown ("Other..."
 ; takes a free value in grams), then what is left on it in grams (a full spool by
 ; default). Persists size, remaining, the spool's tare and the filament's density in
-; global.spool_*[T] and sys/meltingplot/spool<T>.g via store_spool.g - the spool stays
+; global.spool_*[T] and sys/generated/spool<T>.g via store_spool.g - the spool stays
 ; on the machine across a power cycle; the file is machine-local state, see globals.
 ;   M98 P"0:/sys/meltingplot/confirm_spool_size.g" T0 A1
 ; T<tool> is optional and defaults to the current tool. A1 marks a NEW spool (the

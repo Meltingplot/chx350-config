@@ -417,7 +417,7 @@ echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, filament-nozzle: " ^
 echo >>{var.autoFile} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
-M98 P"0:/sys/meltingplot/machine-override"                ; Load Machine specific overrides
+M98 P"0:/sys/overrides/machine-override"                ; Load Machine specific overrides
 
 T-1                                               ; deselect tool
 T{var.previousTool}                               ; select previous tool

@@ -2,7 +2,7 @@
 ; Records the filament diameter a tool is set up for after a conversion (2.85 <-> 1.75
 ; mm hotend/extruder parts) - one call to confirm_filament_diameter.g: a dropdown with
 ; the configured value preselected, persisted per tool in
-; sys/meltingplot/filament-diameter<tool>.g, applied at once with M200 and by config.g
+; sys/generated/filament-diameter<tool>.g, applied at once with M200 and by config.g
 ; at every boot. It is the first half of the calibration key (calibration_key.g): the
 ; e-steps, NLE and PA results and nozzle-<key>.g are filed per filament diameter and
 ; nozzle, so after a conversion the profiles switch to the files of the new diameter

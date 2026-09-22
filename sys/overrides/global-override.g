@@ -1,7 +1,7 @@
 ; Machine specific variant configuration.
 ; Loaded at the end of sys/meltingplot/globals, i.e. before any hardware is configured
-; in config.g. This file is on the protected list of the DWC config plugin: a config
-; update never overwrites it, so local changes survive.
+; in config.g. It lives in sys/overrides/, the directory a config update never
+; overwrites (DWC config plugin and image alike), so local changes survive.
 ;
 ; Rules:
 ;   - assignments only: set global.<name> = <value>

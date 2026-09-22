@@ -27,6 +27,11 @@
 ;     has to be declared by then
 
 
+; move the machine-owned files of a pre-3.7 configuration into sys/overrides/ and
+; sys/generated/ before anything below reads them (idempotent, see the macro;
+; dsf-config.g calls it too)
+M98 P"0:/sys/meltingplot/migrate_overrides.g"
+
 ; ==============================================================================
 ; TIER 1 - SAFETY CRITICAL
 ; ==============================================================================
@@ -223,13 +228,15 @@ global closed_loop_homing = 0xAAAAAAAA   ; 0x55555555 driver-error.g tolerates c
 ; The machine-state values in this and the following sections (nozzle, filament
 ; diameter, spool, build plate) describe what is physically installed. They share one persistence pattern: declared
 ; here with a "nothing known yet" default, then overwritten by a machine-local file in
-; sys/meltingplot/ that a confirm_*.g macro writes on change and this file runs on boot
+; sys/generated/ that a confirm_*.g macro writes on change and this file runs on boot
 ; (fileexists-guarded). Those files are written on the machine, never shipped with the
-; repo (.gitignore) and sit on the protected list of the DWC config plugin, so a config
-; update keeps them. Each holds only "set global.<name>... = <value>" lines.
+; repo (.gitignore), and sys/generated/ is a directory neither the DWC config plugin
+; nor the image ever writes to, so a config update keeps them. Nothing in there is
+; meant to be edited by hand - the operator's own files live in sys/overrides/. Each
+; holds only "set global.<name>... = <value>" lines.
 ; nozzle diameter - a property of the tool, not of the filament, so it is stored per
 ; tool and persisted (a nozzle change must survive a power cycle): tool 0 reads
-; sys/meltingplot/nozzle0.g, tool 1 nozzle1.g, both written by macro set-nozzle-diameter.
+; sys/generated/nozzle0.g, tool 1 nozzle1.g, both written by macro set-nozzle-diameter.
 ; The diameter also builds file names, paired with the filament diameter as the key
 ; "<filament>-<nozzle>" (filaments/<name>/nozzle-2.85-0.40.g, config-auto-pa-2.85-0.40.g)
 ; - always through calibration_key.g (writers) / find_calibration_file.g (readers, with
@@ -243,33 +250,33 @@ global closed_loop_homing = 0xAAAAAAAA   ; 0x55555555 driver-error.g tolerates c
 ;   -> "0.40", "1.20"
 ; Sized explicitly because globals load before tools exist.
 global nozzle_diameter = vector(2, 0.6)
-if fileexists("0:/sys/meltingplot/nozzle0.g")
-  M98 P"0:/sys/meltingplot/nozzle0.g"
-if fileexists("0:/sys/meltingplot/nozzle1.g")
-  M98 P"0:/sys/meltingplot/nozzle1.g"
+if fileexists("0:/sys/generated/nozzle0.g")
+  M98 P"0:/sys/generated/nozzle0.g"
+if fileexists("0:/sys/generated/nozzle1.g")
+  M98 P"0:/sys/generated/nozzle1.g"
 ; nozzle type - what the nozzle is made of and whether it is a high-flow (CHT) design.
 ; A key string, one of: "brass", "cht" (brass CHT), "hardened" (hardened steel, rated
 ; for abrasive filaments), "cht-hardened", "tungsten-carbide", "copper" (plated copper),
 ; "other", "unknown" (nothing recorded yet). The key is never used in a file name.
-; Same persistence as the diameter: sys/meltingplot/nozzle-type<tool>.g, written by
+; Same persistence as the diameter: sys/generated/nozzle-type<tool>.g, written by
 ; confirm_nozzle_type.g (macro set-nozzle-diameter asks for both on a nozzle change).
 global nozzle_type = vector(2, "unknown")
-if fileexists("0:/sys/meltingplot/nozzle-type0.g")
-  M98 P"0:/sys/meltingplot/nozzle-type0.g"
-if fileexists("0:/sys/meltingplot/nozzle-type1.g")
-  M98 P"0:/sys/meltingplot/nozzle-type1.g"
+if fileexists("0:/sys/generated/nozzle-type0.g")
+  M98 P"0:/sys/generated/nozzle-type0.g"
+if fileexists("0:/sys/generated/nozzle-type1.g")
+  M98 P"0:/sys/generated/nozzle-type1.g"
 
 ; --- filament diameter --------------------------------------------------------
 ; diameter of the filament each tool is built for (mm). A property of the tool like the
 ; nozzle: config.g applies it (M200 D / M404 N) and the consumption tracker turns
 ; extruded millimetres into grams with it. Machine-local: macro set-filament-diameter
-; (confirm_filament_diameter.g) persists a change in sys/meltingplot/filament-diameter<tool>.g
+; (confirm_filament_diameter.g) persists a change in sys/generated/filament-diameter<tool>.g
 ; and re-applies M200 at once, so a change survives a power cycle.
 global filament_diameter = vector(2, 2.85)
-if fileexists("0:/sys/meltingplot/filament-diameter0.g")
-  M98 P"0:/sys/meltingplot/filament-diameter0.g"
-if fileexists("0:/sys/meltingplot/filament-diameter1.g")
-  M98 P"0:/sys/meltingplot/filament-diameter1.g"
+if fileexists("0:/sys/generated/filament-diameter0.g")
+  M98 P"0:/sys/generated/filament-diameter0.g"
+if fileexists("0:/sys/generated/filament-diameter1.g")
+  M98 P"0:/sys/generated/filament-diameter1.g"
 
 ; --- mounted spool ------------------------------------------------------------
 ; The spool on each tool: nominal net filament weight in grams (int, 0 = unknown), what
@@ -277,7 +284,7 @@ if fileexists("0:/sys/meltingplot/filament-diameter1.g")
 ; unknown - lets the operator weigh the spool and enter weighed - tare), and the
 ; density (g/cm3) of the filament it carries - tare and density are copies of the
 ; profile's values, taken at load time, so the tracker never depends on which profile
-; ran last. All four are written together to sys/meltingplot/spool<tool>.g
+; ran last. All four are written together to sys/generated/spool<tool>.g
 ; by store_spool.g (the spool stays on the machine across a power cycle). Asked at the
 ; feed prompt of every filament load (confirm_spool_size.g, cancelling keeps the values)
 ; and by macro set-spool-size.
@@ -297,10 +304,10 @@ global spool_size = vector(2, 0)
 global spool_remaining = vector(2, 0.0)
 global spool_tare = vector(2, 0)
 global spool_density = vector(2, 0.0)
-if fileexists("0:/sys/meltingplot/spool0.g")
-  M98 P"0:/sys/meltingplot/spool0.g"
-if fileexists("0:/sys/meltingplot/spool1.g")
-  M98 P"0:/sys/meltingplot/spool1.g"
+if fileexists("0:/sys/generated/spool0.g")
+  M98 P"0:/sys/generated/spool0.g"
+if fileexists("0:/sys/generated/spool1.g")
+  M98 P"0:/sys/generated/spool1.g"
 global spool_track_raw = vector(2, 0.0)
 global spool_track_time = 0
 global spool_track_active = false        ; armed by print_start (job started, baseline 0), disarmed by the print_end flush - the bracket that makes print_end idempotent
@@ -310,10 +317,10 @@ global spool_track_active = false        ; armed by print_start (job started, ba
 ; "pei-textured", "pertinax" (Hartpapier / phenolic paper), "g10" (Glasfaser / FR4
 ; fiberglass), "carbon" (carbon fibre plate), "glass", "other", "unknown". Machine-wide,
 ; set by macro set-bed-surface (confirm_bed_surface.g), persisted in
-; sys/meltingplot/bed-surface.g. Not used in a file name.
+; sys/generated/bed-surface.g. Not used in a file name.
 global bed_surface = "unknown"
-if fileexists("0:/sys/meltingplot/bed-surface.g")
-  M98 P"0:/sys/meltingplot/bed-surface.g"
+if fileexists("0:/sys/generated/bed-surface.g")
+  M98 P"0:/sys/generated/bed-surface.g"
 
 ; --- filament: material parameters --------------------------------------------
 global filament_max_flow_rate = 20
@@ -321,8 +328,8 @@ global filament_max_flow_rate = 20
 ; used by load_filament_sensorless to detect high-temp residue in the nozzle.
 ; persisted to a file because the residue survives a power cycle.
 global last_filament_temp = 0
-if fileexists("0:/sys/meltingplot/last-filament-temp.g")
-  M98 P"0:/sys/meltingplot/last-filament-temp.g"
+if fileexists("0:/sys/generated/last-filament-temp.g")
+  M98 P"0:/sys/generated/last-filament-temp.g"
 ; per-profile temperatures, set by filaments/<name>/temps.g (executed by
 ; filament_load.g/filament_unload.g when called with F"<name>"). temps.g is the
 ; canonical per-material temperature store: load.g/unload.g are machine-generated
@@ -458,9 +465,9 @@ global has_aux_fan = false              ; auxiliary part cooling fan on out2, sl
 global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer P3
 
 ; Per-machine overrides. Values only - anything that needs G-code (drive directions,
-; sensor wiring, ...) belongs in machine-override instead. The file is on the protected
-; list of the DWC config plugin, so an update never overwrites the local edits. It may
+; sensor wiring, ...) belongs in machine-override instead. The file lives in
+; sys/overrides/, which no config update overwrites, so the local edits survive. It may
 ; only assign (set global.<name> = ...), so a typo fails loudly at boot instead of
 ; silently doing nothing. The fileexists guard keeps a machine bootable that lost it.
-if fileexists("0:/sys/meltingplot/global-override.g")
-  M98 P"0:/sys/meltingplot/global-override.g"
+if fileexists("0:/sys/overrides/global-override.g")
+  M98 P"0:/sys/overrides/global-override.g"

@@ -1,7 +1,7 @@
 ; confirm_bed_surface.g
 ; Asks which build plate surface is installed, as a dropdown with the configured one
 ; preselected, and persists a change in global.bed_surface and
-; sys/meltingplot/bed-surface.g (machine-local state, see globals). Machine-wide: the
+; sys/generated/bed-surface.g (machine-local state, see globals). Machine-wide: the
 ; CHX350 has one bed.
 ;   M98 P"0:/sys/meltingplot/confirm_bed_surface.g"
 ; Cancelling keeps the configured value - J2 (result = -1, execution continues), never
@@ -30,7 +30,7 @@ if var.key == global.bed_surface
 
 set global.bed_surface = var.key
 
-var file = "0:/sys/meltingplot/bed-surface.g"
+var file = "0:/sys/generated/bed-surface.g"
 echo >{var.file} "; build plate surface - written by confirm_bed_surface.g, do not edit"
 echo >>{var.file} "set global.bed_surface = """ ^ var.key ^ """"
 

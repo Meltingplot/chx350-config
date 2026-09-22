@@ -1,0 +1,10 @@
+; Machine specific overrides that need G-code, e.g. the rotation direction of a stepper
+; motor, the filament monitor or a heater model. Loaded from config.g after the standard
+; hardware setup (and re-run by the calibration macros). Values that only switch a
+; declared global belong in global-override.g instead. This file lives in sys/overrides/,
+; the directory a config update never overwrites, so local changes survive.
+
+; enable, if your printer is equippted with an rotary filament monitor
+M591 P3 C"20.io1.in" S1 D0 R60:180 E5 L25.3; filament monitor connected to io3.in endstop
+
+M309 P0 S0.05 ; heater feedforward compensation

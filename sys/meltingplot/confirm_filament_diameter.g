@@ -1,7 +1,7 @@
 ; confirm_filament_diameter.g
 ; Asks which filament diameter a tool is set up for, as a dropdown with the configured
 ; value preselected ("Other..." takes a free value), persists a change in
-; global.filament_diameter[T] and sys/meltingplot/filament-diameter<T>.g (machine-local
+; global.filament_diameter[T] and sys/generated/filament-diameter<T>.g (machine-local
 ; state, see globals) and applies it at once with M200 - the value config.g uses at boot.
 ;   M98 P"0:/sys/meltingplot/confirm_filament_diameter.g" T0
 ; T<tool> is optional and defaults to the current tool. Cancelling keeps the configured
@@ -44,7 +44,7 @@ set global.filament_diameter[var.tool] = var.diameter
 ; the tool index is built as a string explicitly so that no float formatting can leak into
 ; the file name or into the array index of the generated assignment
 var idx = var.tool == 1 ? "1" : "0"
-var file = "0:/sys/meltingplot/filament-diameter" ^ var.idx ^ ".g"
+var file = "0:/sys/generated/filament-diameter" ^ var.idx ^ ".g"
 echo >{var.file} "; filament diameter of tool " ^ var.idx ^ " - written by confirm_filament_diameter.g, do not edit"
 echo >>{var.file} "set global.filament_diameter[" ^ var.idx ^ "] = " ^ var.diameter
 

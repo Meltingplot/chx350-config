@@ -1,7 +1,7 @@
 ; set-bed-surface
 ; Records which build plate surface is installed after a plate change - one call to
 ; confirm_bed_surface.g: a dropdown with the configured surface preselected, persisted
-; machine-wide in sys/meltingplot/bed-surface.g. Cancelling keeps the configured value.
+; machine-wide in sys/generated/bed-surface.g. Cancelling keeps the configured value.
 ; Allowed while a print is paused, never while it prints.
 
 if job.file.fileName != null && state.status != "paused"

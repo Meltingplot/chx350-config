@@ -5,7 +5,7 @@
 ; a dropdown of the common sizes ("Other..." for a free value in grams), then the
 ; remaining grams (weigh the spool and subtract the tare recorded with it). With a
 ; material.g the dropdown lists the profile's own spool variants instead.
-; Persisted per tool in sys/meltingplot/spool<tool>.g together with the filament's
+; Persisted per tool in sys/generated/spool<tool>.g together with the filament's
 ; density, which the consumption tracker (spool_track.g) needs. Cancelling the first
 ; prompt keeps everything. Use it when a spool is swapped without a filament change
 ; (same material, new spool) or to correct the tracked remaining weight.

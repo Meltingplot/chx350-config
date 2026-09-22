@@ -188,5 +188,5 @@ M280 P6 S100  ; set 104deg servo position on GPIO port 1
 M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Logging
 
 M501                                                    ; load saved parameters from non-volatile memory
-M98 P"0:/sys/meltingplot/machine-override"              ; Load Machine specific overrides
+M98 P"0:/sys/overrides/machine-override"              ; Load Machine specific overrides
 M98 P"0:/sys/meltingplot/ce-declaration/ce-declaration.g" ; Load CE Requirements

@@ -110,8 +110,7 @@ argument length limit see exactly the same text as before. Three consequences:
 2. **Never number files that are edited on the machine.** Any later edit
    invalidates that line's CRC and the firmware then drops the line, and it
    shifts every following line number out of step. This
-   affects `sys/meltingplot/global-override.g` (operator-edited, on the DWC
-   protected list) and everything the machine writes itself
-   (`filaments/*/config.g`, `nozzle*.g`, `spool*.g`, `filament-diameter*.g`, `bed-surface.g`,
-   `last-filament-temp.g`). Exclude them
-   with `-x`.
+   affects everything in `sys/overrides/` (the operator templates) and
+   `sys/generated/` (what the machine writes itself, see CLAUDE.md), and the
+   machine-generated `filaments/*/config.g`. Exclude them with
+   `-x 'sys/overrides/*' -x 'sys/generated/*'`.

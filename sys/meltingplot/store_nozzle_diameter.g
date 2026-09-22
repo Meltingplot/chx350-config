@@ -1,6 +1,6 @@
 ; store_nozzle_diameter.g
 ; Persists the nozzle diameter of one tool: assigns global.nozzle_diameter[T] and writes
-; sys/meltingplot/nozzle<T>.g, which sys/meltingplot/globals runs on every boot - a nozzle
+; sys/generated/nozzle<T>.g, which sys/meltingplot/globals runs on every boot - a nozzle
 ; change must survive a power cycle. Those files are machine-local state: they are written
 ; on the machine, never shipped with the repo, and a config update must not overwrite them.
 ;   M98 P"0:/sys/meltingplot/store_nozzle_diameter.g" D0.6 T0
@@ -30,7 +30,7 @@ var key = global.result
 ; the tool index is built as a string explicitly so that no float formatting can leak into
 ; the file name or into the array index of the generated assignment
 var idx = var.tool == 1 ? "1" : "0"
-var file = "0:/sys/meltingplot/nozzle" ^ var.idx ^ ".g"
+var file = "0:/sys/generated/nozzle" ^ var.idx ^ ".g"
 echo >{var.file} "; nozzle diameter of tool " ^ var.idx ^ " - written by store_nozzle_diameter.g, do not edit"
 echo >>{var.file} "set global.nozzle_diameter[" ^ var.idx ^ "] = " ^ var.key
 

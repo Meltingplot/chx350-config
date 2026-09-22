@@ -2,17 +2,12 @@ GCode dictionary _ Duet3D Documentation*
 GCode meta commands _ Duet3D Documentation*
 *:Zone.Identifier
 
-# machine-local state written by the firmware/macros, never shipped with the config
-sys/meltingplot/last-filament-temp.g
-sys/meltingplot/nozzle0.g
-sys/meltingplot/nozzle1.g
-sys/meltingplot/nozzle-type0.g
-sys/meltingplot/nozzle-type1.g
-sys/meltingplot/spool0.g
-sys/meltingplot/spool1.g
-sys/meltingplot/filament-diameter0.g
-sys/meltingplot/filament-diameter1.g
-sys/meltingplot/bed-surface.g
+# machine-owned files, never shipped with the config: sys/generated/ is written by the
+# machine itself (nozzle, spool, filament diameter, bed surface, last filament
+# temperature), sys/overrides/ holds the three versioned operator templates plus the
+# printer name the image writes
+sys/generated/
+sys/overrides/printer-name.g
 
 # local copy of the Duet3D wiki (https://github.com/Duet3D/wiki-content), G-code reference lookup
 .duet-wiki/

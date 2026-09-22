@@ -175,7 +175,7 @@ echo >>{var.autoFile} "M92 E" ^ var.newESteps
 M92 E{var.newESteps} ; activate new e-steps
 
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
-M98 P"0:/sys/meltingplot/machine-override"                ; Load Machine specific overrides
+M98 P"0:/sys/overrides/machine-override"                ; Load Machine specific overrides
 
 T-1                                               ; deselect tool
 T{var.previousTool}                               ; select previous tool
