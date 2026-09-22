@@ -1,50 +1,23 @@
 ; set-nozzle-diameter
-; Records which nozzle is installed on a tool. The nozzle belongs to the tool, not to the
-; filament, so the value is stored per tool in global.nozzle_diameter[tool] and persisted
-; in sys/meltingplot/nozzle<tool>.g (loaded by sys/meltingplot/globals on every boot) - a
-; nozzle change must survive a power cycle. The diameter selects, for every filament
-; profile, the nozzle-specific parameter file filaments/<name>/nozzle-<key>.g (flow rate,
-; M572, M207, M309) and the nozzle-specific calibration results (config-auto-pa-<key>.g,
-; -nle-, -esteps-), where <key> is the diameter rounded to two decimal places: 0.40, 1.20.
+; Records which nozzle is installed after a nozzle change. This is the same step the
+; filament load runs at its feed prompt - one call to confirm_nozzle_diameter.g, nothing
+; else: it asks with choice buttons (configured diameter preselected, "Other..." for a
+; free value), persists a changed value per tool in sys/meltingplot/nozzle<tool>.g via
+; store_nozzle_diameter.g, offers filaments/<name>/nozzle-<key>.g when the loaded profile
+; has none for the diameter (create_nozzle_config.g) and applies it with
+; load_nozzle_config.g. Cancelling keeps the configured value. The nozzle belongs to the
+; tool, not to the filament: the diameter selects, for every profile, the nozzle file
+; and the calibration results (config-auto-pa-<key>.g, -nle-, -esteps-), <key> being the
+; diameter with two decimals: 0.40, 1.20.
+; Allowed while a print is paused (a nozzle swap after a clog), never while it prints.
 
-var tool = state.currentTool >= 0 ? state.currentTool : 0
-if #tools > 1
-  M291 R"Nozzle diameter" P"Which tool has the new nozzle?" S4 K{"Tool 0","Tool 1"} F{var.tool}
-  set var.tool = input
-
-; two decimals of fixed width - see globals: the raw float must never build a file name.
-; sformat.g returns the key in global.result - read it straight away
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
-var key = global.result
-
-M291 R"Nozzle diameter" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm (currently " ^ var.key ^ "):"} S6 L0.1 H2 F{global.nozzle_diameter[var.tool]} J2
-if result != 0
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
   M99
 
-var diameter = input
+M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g"
 
-; assigns the global and writes sys/meltingplot/nozzle<tool>.g - shared with
-; confirm_nozzle_diameter.g, which asks the same question during a filament load.
-; It hands the two-decimal key back in global.result - read it straight away
-M98 P"0:/sys/meltingplot/store_nozzle_diameter.g" D{var.diameter} T{var.tool}
-set var.key = global.result
-var idx = var.tool == 1 ? "1" : "0"
-
-; re-run the profile of the loaded filament so the parameters of the new nozzle take
-; effect immediately instead of at the next tool change. M703 applies nozzle-<key>.g when
-; the profile has one for the new diameter; when it has none, create_nozzle_config.g
-; offers to write it and load_nozzle_config.g applies it. That offer cannot live inside
-; M703: the generated config.g also runs from print_start, pause.g and resume.g, where a
-; blocking prompt would stall the print.
-; global.result of the call is only valid on the very next line: 0 = a file was written
-if state.currentTool >= 0
-  var loaded = move.extruders[tools[state.currentTool].extruders[0]].filament
-  if var.loaded != ""
-    M703
-    if state.currentTool == var.tool
-      M98 P"0:/sys/meltingplot/create_nozzle_config.g" S{var.loaded} T{var.tool}
-      if global.result == 0
-        M98 P"0:/sys/meltingplot/load_nozzle_config.g" S{var.loaded}
-
-M291 R"Nozzle diameter" P{"Tool " ^ var.idx ^ " is set to " ^ var.key ^ "mm. Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
+; sformat.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[min(max(state.currentTool, 0), 1)]} D2 W0
+M291 R"Nozzle diameter" P{"Tool " ^ min(max(state.currentTool, 0), 1) ^ " is set to " ^ global.result ^ "mm. Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
 M400 ; sbc specific

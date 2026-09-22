@@ -1,3 +1,11 @@
+; unload-filament
+; Pulls the filament of tool 0 out physically; the DWC assignment stays (load-filament
+; feeds it again). Allowed while a print is paused, never while it prints.
+
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
+  M99
+
 if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
   echo "Error: machine not in automatic mode - abort!"
   M99
@@ -6,8 +14,27 @@ if ("" ^ global.machine_mode) != "automatic"
   echo "Error: automatic mode not confirmed on re-read - abort!"
   M99
 
+var filament = move.extruders[tools[0].extruders[0]].filament
+if var.filament == null || var.filament == ""
+  echo "Error: no filament assigned to tool 0 - nothing to unload"
+  M99
+
+; default to the profile's unload temperature (temps.g: unload, 0 = active), else the
+; current setpoint
+var temp = 220
+if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+  M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+  if global.filament_temp_unload > 0
+    set var.temp = floor(global.filament_temp_unload)
+  elif global.filament_temp_active > 0
+    set var.temp = floor(global.filament_temp_active)
+elif tools[0].active[0] > 0
+  set var.temp = floor(tools[0].active[0])
+
 T0 ; select tool
-M291 R"Filament Temperature" P"Please select the Filament Extrusion temperature" S5
+M291 R"Filament Temperature" P{"Unload temperature for " ^ var.filament ^ ":"} S5 L150 H450 F{var.temp} J2
+if result != 0
+  M99
 M400
 M109 S{input}
 

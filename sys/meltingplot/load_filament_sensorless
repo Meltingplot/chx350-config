@@ -140,7 +140,7 @@ if var.hightemp_purge
 if global.filament_loading_error == false
   ; calibrate e-steps
   echo "calibrating e-steps"
-  M98 P"0:/macros/meltingplot/calibrate_e_steps"
+  M98 P"0:/macros/meltingplot/calibrate_e_steps" C0 ; C0: the nozzle was confirmed above
   var esteps_result = global.result   ; global.result is only valid right after the call
 
   var current_tool = 0
@@ -156,7 +156,7 @@ if global.filament_loading_error == false
     echo "No non linear extrusion (NLE) calibration found!"
     if job.file.fileName == null
       echo "Creating NLE calibration."
-      M98 P"0:/macros/meltingplot/calibrate_nle"
+      M98 P"0:/macros/meltingplot/calibrate_nle" C0 ; C0: the nozzle was confirmed above
     else
       echo "Warning: unable to create NLE calibration while printjob is running! Manually run the calibrate_nle macro."
 

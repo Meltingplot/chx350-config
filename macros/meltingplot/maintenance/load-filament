@@ -1,3 +1,12 @@
+; load-filament
+; Feeds the filament that is assigned to tool 0 physically - DWC (Filaments -> Load)
+; assigns and feeds in one go; this macro re-feeds after unload-filament or a failed
+; load. Allowed while a print is paused (filament change), never while it prints.
+
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
+  M99
+
 if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
   echo "Error: machine not in automatic mode - abort!"
   M99
@@ -6,8 +15,26 @@ if ("" ^ global.machine_mode) != "automatic"
   echo "Error: automatic mode not confirmed on re-read - abort!"
   M99
 
+; without an assigned filament M703 runs no profile, the armed deferred load would then
+; fire on the next M703 of whatever profile gets assigned
+var filament = move.extruders[tools[0].extruders[0]].filament
+if var.filament == null || var.filament == ""
+  echo "Error: no filament assigned to tool 0 - load one via DWC (Filaments), that feeds it as well"
+  M99
+
+; default to the profile's extrusion temperature (temps.g), else the current setpoint
+var temp = 220
+if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+  M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+  if global.filament_temp_active > 0
+    set var.temp = floor(global.filament_temp_active)
+elif tools[0].active[0] > 0
+  set var.temp = floor(tools[0].active[0])
+
 T0 ; select tool
-M291 R"Filament Temperature" P"Please select the Filament Extrusion temperature" S5
+M291 R"Filament Temperature" P{"Extrusion temperature for " ^ var.filament ^ ":"} S5 L150 H450 F{var.temp} J2
+if result != 0
+  M99
 M400
 M109 S{input}
 

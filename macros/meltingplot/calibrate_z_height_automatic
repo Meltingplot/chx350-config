@@ -1,3 +1,27 @@
+; calibrate_z_height_automatic
+; Calibrates the scanning Z probe (standard and touch mode, cold and warm) against the
+; Z height gauge. Heats the nozzle to 250 C and the bed to 90 C, so it needs automatic
+; mode (default mode keeps the heaters off and limited to 50 C), and it must start cold:
+; the cold calibration is the first half of the procedure.
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+; check if printer is cold - before aligning and homing, which take minutes and would be
+; wasted if the procedure cannot start anyway
+if sensors.analog[4].lastReading > 35
+  M291 P{"Printer temp is above 35°C - current " ^ sensors.analog[4].lastReading ^ "<br>Wait until the printer is cold and repeat."} R"Prerequirements" S2
+  M99
+
 set global.result = 0
 M98 P"0:/macros/meltingplot/align_z_axis"
 if global.result != 0
@@ -7,11 +31,6 @@ if global.result != 0
 G28 X Y U
 
 M290 R0 S0 ; clear baby stepping
-
-; check if printer is cold
-if sensors.analog[4].lastReading > 35
-  M291 P{"Printer temp is above 35°C - current " ^ sensors.analog[4].lastReading ^ "<br>Wait until the printer is cold and repeat."} R"Prerequirements" S2
-  M99
 
 ; heat nozzle for thermal expansion
 T0 ; select tool with SZP

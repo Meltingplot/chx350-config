@@ -1,3 +1,20 @@
+; heatup_and_home.g
+; Heats bed and tool to their set temperatures (or 90/180 C when nothing is set), waits
+; for the heat soak and homes. Heating needs automatic mode: default mode switches the
+; heaters off and limits them to 50 C (M143 A2), so M116 would wait forever there.
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
 var bed_temp = 90.0 ; Bed temperature in °C
 var tool_temp = 180.0 ; Tool temperature in °C
 

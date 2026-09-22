@@ -1,3 +1,21 @@
+; align_z_axis
+; Pushes both Z motors against the lower stop to square the bed (align_z_axis.g). Runs
+; the full Z travel at reduced current - not during a print and only in automatic mode,
+; where default mode would crawl the 950 mm at 60 mm/min.
+
+set global.result = 1 ; every early exit below is a failure for calibrate_z_height_automatic
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
 M98 P"0:/sys/meltingplot/ensure_safety"
 if global.result != 0
   M99

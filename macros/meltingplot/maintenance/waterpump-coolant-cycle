@@ -1,3 +1,11 @@
+; waterpump-coolant-cycle
+; Bleeds air out of the cooling loop by pulsing the water pump between 100 % and 25 %.
+; The pump is the hotend's cooling - it is never pulsed while a print is running.
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
 M106 P6 S1 H-1 C"water pump" ; disable thermostatic control and run at 100%
 G4 S10
 M106 P6 S0.25 ; reduce to 25%
@@ -48,4 +56,4 @@ M106 P6 S0.25 ; reduce to 25%
 G4 S1
 M106 P6 S1
 G4 S10
-M106 P6 S0 H2 T45:100 L0.75 X1.0 C"water pump"  ; enable thermostatic control again
+M106 P6 S0 H2 T40:100 L0.75 X1.0 C"water pump"  ; enable thermostatic control again - same line as config.g

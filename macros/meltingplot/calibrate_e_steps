@@ -1,10 +1,23 @@
+; calibrate_e_steps
+; Measures the real extruder steps/mm against the filament monitor and writes the result
+; to filaments/<name>/config-auto-esteps-<key>.g (loaded back by tpost0.g). Runs from
+; load_filament_sensorless after every load, or as a macro from DWC.
+;   M98 P"0:/macros/meltingplot/calibrate_e_steps" C0
+; C0 skips the nozzle confirmation (the load path has just asked), Q1 = silent (no
+; message boxes). An R parameter never reaches a macro (M98 consumes it as its pause
+; flag), so the calibration temperature cannot be passed in - it always comes from the
+; profile: filaments/<name>/temps.g, for a profile predating temps.g the tool's active
+; setpoint. The tool is heated to it here and the macro waits: below the cold-extrusion
+; limit the extruder does not move at all, and a measurement at standby or at a leftover
+; DWC setpoint would be filed as the profile's calibration.
+
 ; params
 var calDistance = exists(param.D) ? param.D : 25.3/2 ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear
 var tool = exists(param.T) ? param.T : 0            ; tool number
 var tolerance = exists(param.S) ? param.S : 0.25    ; tolerance in %
 var repeatCount = exists(param.A) ? param.A : 3     ; number of iterations
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
-var targetTemp = exists(param.R) ? param.R : 0      ; target temperature in C
+var confirmNozzle = exists(param.C) ? (param.C != 0) : true ; C0: the caller has already confirmed the nozzle
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
 var validValue = {50 * move.extruders[0].microstepping.value} ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
@@ -14,17 +27,53 @@ if var.silent
 
 set global.result = 0
 
-if move.extruders[0].filament == null
-  echo "Error: no filament loaded! abort!"
-  set global.result = 1
+; outside automatic mode the cold-extrusion prevention (M302 S500, operating-mode/default.g)
+; refuses every extruder move - hardened read, see globals
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  set global.result = 6
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  set global.result = 6
   M99
 
 var previousTool = state.currentTool                ; store current tool
 
 var extruder = tools[var.tool].filamentExtruder     ; get current extruder
 var currentHeater = tools[var.tool].heaters[0]      ; get current heater
-var currentTemp = heat.heaters[var.currentHeater].active ; get current temperature
+var filament = move.extruders[var.extruder].filament
 var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+
+if var.filament == null || var.filament == ""
+  echo "Error: no filament loaded! abort!"
+  set global.result = 1
+  M99
+
+; the result is filed under the installed nozzle - ask which one it is the same way the
+; filament change does (confirm_nozzle_diameter.g: choice buttons with the configured
+; diameter preselected, cancelling keeps it). The load path has just asked and passes C0.
+if var.confirmNozzle && !var.silent
+  M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g" T{var.tool}
+
+; calibration temperature: the profile's active temperature (temps.g sets
+; global.filament_temp_active). A profile predating temps.g has no configured value -
+; then the tool must already be active above the cold-extrusion limit, and that setpoint
+; is used.
+var targetTemp = 0
+if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+  M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+  set var.targetTemp = global.filament_temp_active
+elif heat.heaters[var.currentHeater].state == "active" && heat.heaters[var.currentHeater].active >= heat.coldExtrudeTemperature
+  set var.targetTemp = heat.heaters[var.currentHeater].active
+
+if var.targetTemp <= 0
+  echo "Error: no calibration temperature - filaments/" ^ var.filament ^ "/temps.g missing or invalid (run macro repair-filament-profile) and tool " ^ var.tool ^ " not heated"
+  if !var.silent
+    M291 P"No calibration temperature: temps.g of this profile is missing or invalid and the tool is not heated. Run the repair-filament-profile macro or heat the tool first." S2
+  set global.result = 7
+  M99
 
 if !exists(global.ignoreMFMevents)
   global ignoreMFMevents = true
@@ -33,6 +82,15 @@ else
 
 T-1                                                 ; deselect any tool
 T{var.tool}                                         ; select tool
+
+; bring the tool to the calibration temperature - not cold, not standby, not a leftover
+; setpoint - and wait for it; the extruder refuses to move below the cold-extrusion limit
+if heat.heaters[var.currentHeater].state != "active" || heat.heaters[var.currentHeater].active != var.targetTemp
+  echo "Heating tool " ^ var.tool ^ " to " ^ var.targetTemp ^ "C for the e-steps calibration"
+  M568 P{var.tool} S{var.targetTemp} A2
+if heat.heaters[var.currentHeater].current < heat.heaters[var.currentHeater].active
+  M116 P{var.tool}                                  ; wait only when heating up
+var currentTemp = heat.heaters[var.currentHeater].active ; calibration temperature, recorded in the result file
 
 M83                                                 ; use relative distances for extrusion
 M107                                                ; fan off

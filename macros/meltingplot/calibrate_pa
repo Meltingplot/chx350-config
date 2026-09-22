@@ -15,14 +15,40 @@ var mfi = exists(param.M) ? param.M : 0             ; Melt Flow Index (g/10min) 
 if var.silent
   set var.silent = true
 
+; preconditions: not during a print, automatic mode (default mode reduces the motor
+; currents with M917 - the ramp would measure the wrong current - and the daemon reads
+; extruder motion as unsafe while the doors are unchecked) - hardened read, see globals
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
 ; preconditions: filament must be loaded
-if move.extruders[0].filament == null
+var extruder = tools[var.tool].filamentExtruder
+var currentHeater = tools[var.tool].heaters[0]
+var filament = move.extruders[var.extruder].filament
+if var.filament == null || var.filament == ""
   echo "Error: no filament loaded! abort!"
   M99
 
-; precondition: nozzle must be cold (< 50C) to form plug
-var extruder = tools[var.tool].filamentExtruder
-var currentHeater = tools[var.tool].heaters[0]
+; the result is filed under the installed nozzle - ask which one it is the same way the
+; filament change does (confirm_nozzle_diameter.g: choice buttons, configured diameter
+; preselected, cancel keeps it). Only ever run by hand, so no skip parameter.
+if !var.silent
+  M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g" T{var.tool}
+
+; precondition: nozzle must be cold (< 50C) to form plug. Cold right now is not enough:
+; a heater that is still active or in standby would be brought back to its setpoint by
+; the tool selection below (tpost0.g waits for it) and melt the plug - switch it off first
+if heat.heaters[var.currentHeater].state != "off"
+  echo "Tool heater is on - switching it off for the cold compression test"
+  M568 P{var.tool} A0
 if heat.heaters[var.currentHeater].current > 50
   echo "Error: nozzle too hot (" ^ {heat.heaters[var.currentHeater].current} ^ "C). Nozzle must be below 50C for cold compression test."
   if !var.silent
@@ -32,7 +58,6 @@ if heat.heaters[var.currentHeater].current > 50
 ; store state for restoration
 var previousTool = state.currentTool
 var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance
-var previousMotorCurrent = 1100                      ; default E current from CE declaration
 
 ; suppress MFM error events during calibration
 if !exists(global.ignoreMFMevents)
@@ -59,7 +84,7 @@ M302 P1                                              ; allow cold extrusion
 var stepCount = floor((var.maxCurrent - var.startCurrent) / var.stepCurrent) + 1
 if var.stepCount < 3
   echo "Error: need at least 3 current steps. Adjust A/C/S parameters."
-  M302 P0 S160 R90                                   ; restore cold extrusion prevention
+  M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   T-1
   T{var.previousTool}
   set global.ignoreMFMevents = false
@@ -150,8 +175,7 @@ if var.thresholdIndex < 0
   echo "Error: no measurable displacement detected at any current level."
   echo "Possible causes: MFM not detecting movement, nozzle not cold enough, or filament too stiff for max current."
   ; cleanup and exit
-  M302 P0 S160 R90
-  M906 E{var.previousMotorCurrent}
+  M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
   M98 P"0:/sys/meltingplot/machine-override"
   T-1
@@ -194,8 +218,7 @@ while var.i < var.validSamples
 ; need at least 2 points for regression
 if var.N < 2
   echo "Error: insufficient compression data points (" ^ {var.N} ^ ") for regression. Need >= 2."
-  M302 P0 S160 R90
-  M906 E{var.previousMotorCurrent}
+  M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
   M98 P"0:/sys/meltingplot/machine-override"
   T-1
@@ -206,8 +229,7 @@ if var.N < 2
 var denom = {var.N * var.Sxx - var.Sx * var.Sx}
 if var.denom == 0
   echo "Error: degenerate regression (all points at same current)."
-  M302 P0 S160 R90
-  M906 E{var.previousMotorCurrent}
+  M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
   M98 P"0:/sys/meltingplot/machine-override"
   T-1
@@ -222,8 +244,7 @@ var intercept = {(var.Sy - var.slope * var.Sx) / var.N}
 ; higher k = stiffer = less PA needed
 if var.slope <= 0
   echo "Error: non-positive slope (" ^ {var.slope} ^ ") — displacement not increasing with current. Data may be noisy."
-  M302 P0 S160 R90
-  M906 E{var.previousMotorCurrent}
+  M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
   M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}
   M98 P"0:/sys/meltingplot/machine-override"
   T-1
@@ -305,8 +326,7 @@ while var.i < var.validSamples
   set var.i = var.i + 1
 
 ; === CLEANUP ===
-M302 P0 S160 R90                                    ; restore cold extrusion prevention
-M906 E{var.previousMotorCurrent}                     ; restore motor current
+M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g" ; restores M302 and M906 E of the current mode
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; restore MFM config
 M98 P"0:/sys/meltingplot/machine-override"           ; reload machine overrides
 

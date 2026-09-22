@@ -1,7 +1,8 @@
 ; confirm_nozzle_diameter.g
 ; Asks the operator which nozzle is installed, as a dropdown with the currently configured
 ; diameter preselected. Called from load_filament_sensorless right before the physical
-; load - after a filament change has been triggered, but before calibrate_e_steps runs:
+; load - after a filament change has been triggered, but before calibrate_e_steps runs -
+; and by calibrate_e_steps itself when it is started as a macro (the load path passes C0):
 ; the calibration writes filaments/<name>/config-auto-esteps-<key>.g and the NLE check
 ; right after it looks up config-auto-nle-<key>.g, so a stale diameter would file the
 ; measurement under the wrong nozzle and read back another nozzle's calibration.

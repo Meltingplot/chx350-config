@@ -1,12 +1,93 @@
+; calibrate_nle
+; Measures the non-linear extrusion correction (M592 A/B) against the filament monitor
+; over extrusion speeds up to the profile's maximum volumetric flow rate and writes
+; filaments/<name>/config-auto-nle-<key>.g (loaded back by tpost0.g). Runs from
+; load_filament_sensorless after a load without an NLE file, or as a macro from DWC.
+;   M98 P"0:/macros/meltingplot/calibrate_nle" C0
+; C0 skips the nozzle confirmation (the load path has just asked), Q1 = silent (no
+; message boxes). The calibration temperature always comes from the profile
+; (filaments/<name>/temps.g; a profile predating temps.g needs the tool active above the
+; cold-extrusion limit) and the tool is heated to it here - see calibrate_e_steps.
+
+; params
 var tool = exists(param.T) ? param.T : 0            ; tool number
 var calDistance = exists(param.D) ? param.D : 60    ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear and double the distance of the melt zone
 var tolerance = exists(param.S) ? param.S : 0.05    ; tolerance in %
-var requestedVolumetricFlowRate = global.filament_max_flow_rate ; requested volumetric flow rate in mm^3/s
 var filamentDiameter = 2.85 ; filament diameter in mm
-var requestedMaxSpeed = {ceil(var.requestedVolumetricFlowRate / (pow(var.filamentDiameter,2) * 3.14159 / 4.0) * 2.0) / 2.0} ; volumetric flow rate in mm/s
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
+var confirmNozzle = exists(param.C) ? (param.C != 0) : true ; C0: the caller has already confirmed the nozzle
+
+if var.silent
+  set var.silent = true;
+
+set global.result = 0
+
+; the samples are taken while moving X across the bed - never during a print, and only
+; in automatic mode (default mode blocks extrusion via M302 S500 and limits every axis
+; to 60 mm/min) - hardened read, see globals
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  set global.result = 12
+  M99
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  set global.result = 12
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  set global.result = 12
+  M99
+
+var previousTool = state.currentTool                ; store current tool
+
+var extruder = tools[var.tool].filamentExtruder     ; get current extruder
+var currentHeater = tools[var.tool].heaters[0]      ; get current heater
+var filament = move.extruders[var.extruder].filament
+var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+
+if var.filament == null || var.filament == ""
+  echo "Error: no filament loaded! abort!"
+  set global.result = 13
+  M99
+
+; the result is filed under the installed nozzle and the flow rate below comes from the
+; nozzle file - ask which nozzle it is the same way the filament change does
+; (confirm_nozzle_diameter.g: choice buttons, configured diameter preselected, cancel
+; keeps it). The load path has just asked and passes C0.
+if var.confirmNozzle && !var.silent
+  M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g" T{var.tool}
+
+; calibration temperature: the profile's active temperature (temps.g sets
+; global.filament_temp_active). A profile predating temps.g has no configured value -
+; then the tool must already be active above the cold-extrusion limit, and that setpoint
+; is used.
+var targetTemp = 0
+if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+  M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+  set var.targetTemp = global.filament_temp_active
+elif heat.heaters[var.currentHeater].state == "active" && heat.heaters[var.currentHeater].active >= heat.coldExtrudeTemperature
+  set var.targetTemp = heat.heaters[var.currentHeater].active
+
+if var.targetTemp <= 0
+  echo "Error: no calibration temperature - filaments/" ^ var.filament ^ "/temps.g missing or invalid (run macro repair-filament-profile) and tool " ^ var.tool ^ " not heated"
+  if !var.silent
+    M291 P"No calibration temperature: temps.g of this profile is missing or invalid and the tool is not heated. Run the repair-filament-profile macro or heat the tool first." S2
+  set global.result = 14
+  M99
+
+; the speed range ends at the profile's maximum volumetric flow rate (nozzle-<key>.g or
+; config-override.g) - read only now, after the nozzle confirmation may have re-applied it
+var requestedVolumetricFlowRate = global.filament_max_flow_rate ; requested volumetric flow rate in mm^3/s
+if var.requestedVolumetricFlowRate <= 0
+  echo "Error: no maximum volumetric flow rate configured for this filament and nozzle (global.filament_max_flow_rate) - abort!"
+  if !var.silent
+    M291 P"No maximum volumetric flow rate configured for this filament and nozzle - add it to the profile's nozzle file first." S2
+  set global.result = 15
+  M99
+var requestedMaxSpeed = {ceil(var.requestedVolumetricFlowRate / (pow(var.filamentDiameter,2) * 3.14159 / 4.0) * 2.0) / 2.0} ; volumetric flow rate in mm/s
 
 echo "Requested volumetric flow rate: " ^ {var.requestedVolumetricFlowRate} ^ "mm^3/s"
 echo "Filament diameter: " ^ {var.filamentDiameter} ^ "mm"
@@ -16,30 +97,36 @@ var sampleCount = {floor((var.requestedMaxSpeed - 1)/0.5 + 1) * 2} ; // calculat
 echo "Sample count: " ^ {var.sampleCount / 2}
 var extrusionSpeeds = vector(var.sampleCount, 1.0) ; // create vector for extrusion speeds
 
-if var.silent
-  set var.silent = true;
+while iterations < (var.sampleCount / 2)
+  set var.extrusionSpeeds[{iterations*2}] = {1 + (iterations * 0.5)} ; // fill vector with speeds from 0.5 to requested max speed
 
-set global.result = 0
+echo "Extrusion speeds: " ^ {var.extrusionSpeeds}
 
-var previousTool = state.currentTool                ; store current tool
-
-var extruder = tools[var.tool].filamentExtruder     ; get current extruder
-var currentHeater = tools[var.tool].heaters[0]      ; get current heater
-var currentTemp = heat.heaters[var.currentHeater].active ; get current temperature
-var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+; the samples move X across the bed at Z 200 - all axes have to be homed for that
+if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false
+  echo "Axes not homed - homing first"
+  G28
+  if result != 0 || global.result != 0
+    echo "Error: homing failed - abort!"
+    set global.result = 16
+    M99
 
 if !exists(global.ignoreMFMevents)
   global ignoreMFMevents = true
 else
   set global.ignoreMFMevents = true
 
-while iterations < (var.sampleCount / 2)
-  set var.extrusionSpeeds[{iterations*2}] = {1 + (iterations * 0.5)} ; // fill vector with speeds from 0.5 to requested max speed
-
-echo "Extrusion speeds: " ^ {var.extrusionSpeeds}
-
 T-1                                                 ; deselect any tool
 T{var.tool}                                         ; select tool
+
+; bring the tool to the calibration temperature - not cold, not standby, not a leftover
+; setpoint - and wait for it; the extruder refuses to move below the cold-extrusion limit
+if heat.heaters[var.currentHeater].state != "active" || heat.heaters[var.currentHeater].active != var.targetTemp
+  echo "Heating tool " ^ var.tool ^ " to " ^ var.targetTemp ^ "C for the NLE calibration"
+  M568 P{var.tool} S{var.targetTemp} A2
+if heat.heaters[var.currentHeater].current < heat.heaters[var.currentHeater].active
+  M116 P{var.tool}                                  ; wait only when heating up
+var currentTemp = heat.heaters[var.currentHeater].active ; calibration temperature, recorded in the result file
 
 M83                                                 ; use relative distances for extrusion
 M107                                                ; fan off
