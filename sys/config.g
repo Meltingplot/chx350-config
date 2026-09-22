@@ -159,8 +159,8 @@ M563 P0 D0 H1 F0                                        ; define tool 0
 G10 P0 X0 Y0 Z0                                         ; set tool 0 axis offsets
 M568 P0 R0 S0 A0                                        ; set initial tool 0 active and standby temperatures to 0C
 
-M404 N2.85
-M200 D2.85 S0                                           ; set filament diameter to 2.85mm
+M404 N{global.filament_diameter[0]}                     ; filament diameter of tool 0 (globals, machine-local, macro set-filament-diameter)
+M200 D{global.filament_diameter[0]} S0                  ; set filament diameter, volumetric extrusion off
 
 ; Scanning Z probe
 M558 K0 P11 C"60.i2c.ldc1612" F6000 T60000 R0.5 A2      ; set Z probe type to scanning z probe feed rate and travel speed

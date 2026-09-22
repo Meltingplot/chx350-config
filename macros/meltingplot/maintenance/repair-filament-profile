@@ -60,6 +60,10 @@ if var.write_temps
   echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_standby = " ^ var.standby
   echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_unload = " ^ var.unload
 
+; material.g (density, usual spool size, empty-spool weight) is offered when missing -
+; create_material_config.g returns at once when the profile already has one
+M98 P"0:/sys/meltingplot/create_material_config.g" S{var.name}
+
 M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.name}
 
 set global.filament_broken_profile = ""

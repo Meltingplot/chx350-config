@@ -300,14 +300,14 @@ echo "Threshold current: " ^ {var.thresholdCurrent} ^ " mA"
 if var.mfi > 0
   echo "MFI: " ^ {var.mfi} ^ " g/10min"
 
-; === WRITE config-auto-pa-<nozzle>.g ===
-; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
+; === WRITE config-auto-pa-<filament>-<nozzle>.g ===
+; the result belongs to the filament diameter and nozzle it was calibrated with
 var filamentName = move.extruders[0].filament
 ; sformat.g returns the key in global.result - read it straight away
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
-var nozzleKey = global.result
-var autoFile = "0:/filaments/" ^ var.filamentName ^ "/config-auto-pa-" ^ var.nozzleKey ^ ".g"
-echo >{var.autoFile} "; cold compression PA calibration, nozzle: " ^ var.nozzleKey ^ "mm"
+M98 P"0:/sys/meltingplot/calibration_key.g" T{var.tool}
+var calKey = global.result
+var autoFile = "0:/filaments/" ^ var.filamentName ^ "/config-auto-pa-" ^ var.calKey ^ ".g"
+echo >{var.autoFile} "; cold compression PA calibration, filament-nozzle: " ^ var.calKey ^ " mm"
 echo >>{var.autoFile} "; spring constant k=" ^ {var.springK} ^ " mA/mm, threshold current: " ^ {var.thresholdCurrent} ^ "mA"
 echo >>{var.autoFile} "; regression: displacement = " ^ {var.slope} ^ " * current + " ^ {var.intercept}
 if var.mfi > 0

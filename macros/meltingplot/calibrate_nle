@@ -13,7 +13,7 @@
 var tool = exists(param.T) ? param.T : 0            ; tool number
 var calDistance = exists(param.D) ? param.D : 60    ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear and double the distance of the melt zone
 var tolerance = exists(param.S) ? param.S : 0.05    ; tolerance in %
-var filamentDiameter = 2.85 ; filament diameter in mm
+var filamentDiameter = global.filament_diameter[var.tool] ; filament diameter in mm (globals, machine-local)
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
@@ -406,13 +406,14 @@ while true
 
 echo "NLE calibration finished!"
 echo "M592 D" ^ var.extruder ^ " A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
-; the result belongs to the nozzle it was calibrated with - loaded back by tpost0.g
-; sformat.g returns the key in global.result - read it straight away
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
-var nozzleKey = global.result
-var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.nozzleKey ^ ".g"
+; the result belongs to the filament diameter and nozzle it was calibrated with (key
+; "<filament>-<nozzle>", calibration_key.g, returns in global.result - read it straight away)
+; - loaded back by tpost0.g
+M98 P"0:/sys/meltingplot/calibration_key.g" T{var.tool}
+var calKey = global.result
+var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.calKey ^ ".g"
 echo >{var.autoFile} "; max F" ^ {var.extrusionSpeeds[var.sampleCount -1] * 60} ^ " mm/min or " ^ {var.extrusionSpeeds[var.sampleCount -1] * 6.38} ^ "mm³/s"
-echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, nozzle: " ^ var.nozzleKey ^ "mm"
+echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, filament-nozzle: " ^ var.calKey ^ " mm"
 echo >>{var.autoFile} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 
 M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor

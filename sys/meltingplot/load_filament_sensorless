@@ -36,10 +36,17 @@ if global.last_filament_temp >= 260 && var.load_temp < 280
 
 ; confirm the installed nozzle before anything nozzle-specific happens: the e-steps
 ; calibration below writes config-auto-esteps-<key>.g and the NLE check reads
-; config-auto-nle-<key>.g, so the diameter has to be right before those run. Asked here
+; config-auto-nle-<key>.g (<key> = filament-nozzle), so the diameter has to be right
+; before those run. Asked here
 ; because the operator is at the machine for the feed prompt anyway, and the nozzle
 ; parameters then apply to the load itself. Cancelling keeps the configured value.
 M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g"
+
+; the spool goes on with the filament, so it is recorded here as well: size and what is
+; left on it (A1 = new spool: the profile's usual size is preselected, the material's
+; density is copied onto the tool for the consumption tracker, a missing material.g is
+; offered). Cancelling keeps the configured values.
+M98 P"0:/sys/meltingplot/confirm_spool_size.g" A1
 
 M291 P"Feed new Filament into the PTFE Tube." S2
 
@@ -146,13 +153,12 @@ if global.filament_loading_error == false
   var current_tool = 0
   var current_filament = move.extruders[var.current_tool].filament
 
-  ; NLE calibration is nozzle-specific; the unsuffixed file of profiles predating the
-  ; per-nozzle split still counts as calibrated (tpost0.g falls back to it as well)
-  var nle = "0:/filaments/" ^ var.current_filament ^ "/config-auto-nle"
-  ; sformat.g returns the key in global.result - read it straight away
-  M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.current_tool]} D2 W0
-  var nleSuffix = "-" ^ global.result ^ ".g"
-  if var.esteps_result == 0 && !fileexists(var.nle ^ var.nleSuffix) && !fileexists(var.nle ^ ".g")
+  ; NLE calibration is specific to filament diameter and nozzle; older files still count
+  ; as calibrated through the same fallback chain tpost0.g loads them with
+  ; (find_calibration_file.g returns the resolved path in global.result, "" = none)
+  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-nle" T{var.current_tool}
+  var nle = global.result
+  if var.esteps_result == 0 && var.nle == ""
     echo "No non linear extrusion (NLE) calibration found!"
     if job.file.fileName == null
       echo "Creating NLE calibration."

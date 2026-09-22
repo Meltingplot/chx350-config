@@ -20,6 +20,22 @@ if state.status == "simulating"
     M2
   M99
 
+; Arm the spool consumption tracker for this job (spool_track.g): start.g runs this
+; exactly once per job start, and RRF zeroed move.extruders[].rawPosition with the job,
+; so the baseline starts at 0. print_end's flush disarms it - the bracket that keeps a
+; repeated print_end from booking the job twice.
+set global.spool_track_raw = vector(2, 0.0)
+set global.spool_track_active = true
+
+; Low-spool warning from the slicer's filament estimate in the file header, converted to
+; grams with the tool's filament diameter and the density recorded on the spool. Warns
+; only - never blocks, this runs unattended in automatic mode; the operator decides.
+if #job.file.filament > 0 && global.spool_density[0] > 0
+  var need = {job.file.filament[0] * pi * pow(global.filament_diameter[0] / 2, 2) * global.spool_density[0] / 1000}
+  if var.need > global.spool_remaining[0]
+    M118 P0 S{"Warning: job needs ~" ^ floor(var.need) ^ " g, the spool on tool 0 has " ^ floor(global.spool_remaining[0]) ^ " g left"}
+    M291 R"Low spool" P{"Job needs ~" ^ floor(var.need) ^ " g, spool has " ^ floor(global.spool_remaining[0]) ^ " g left"} S1 T30
+
 ; (door_ignore_trigger removed - it was never read; the door triggers run off the pins)
 while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
   if iterations > 5

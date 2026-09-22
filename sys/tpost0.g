@@ -14,17 +14,17 @@ if var.current_filament != ""
 ; run /filaments/<filament name>/config.g
 M703
 
-; calibration results are nozzle-specific (config-auto-<what>-<nozzle key>.g) - a PA or
-; NLE calibration only ever describes the nozzle it was run with. Profiles predating the
-; per-nozzle split are still picked up through the unsuffixed fallback.
-; sformat.g returns the key in global.result - read it straight away
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.current_tool]} D2 W0
-var suffix = "-" ^ global.result ^ ".g"
-var auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-esteps"
-if fileexists(var.auto ^ var.suffix)
-  M98 P{var.auto ^ var.suffix}
-elif fileexists(var.auto ^ ".g")
-  M98 P{var.auto ^ ".g"}
+; calibration results are specific to the filament diameter and the nozzle
+; (config-auto-<what>-<filament>-<nozzle>.g, key from calibration_key.g) - a PA, NLE or
+; e-steps calibration only ever describes the pair it was run with. Older files (nozzle
+; key only, or unsuffixed) are picked up by the fallback chain in find_calibration_file.g,
+; which hands the resolved path back in global.result - read it straight away.
+var auto = ""
+if var.current_filament != ""
+  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-esteps" T{var.current_tool}
+  set var.auto = global.result
+if var.auto != ""
+  M98 P{var.auto}
 
 var current_esteps = move.extruders[var.current_extruder].stepsPerMm
 var validValue = {50 * move.extruders[var.current_extruder].microstepping.value}
@@ -33,17 +33,19 @@ if var.current_esteps < {var.validValue * 0.8} || var.current_esteps > {var.vali
   echo "Warning: configured E-Steps of tool " ^ var.current_tool ^ " out of range, please check the configuration. Using Default."
   M92 E{var.validValue}
 
-set var.auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-nle"
-if fileexists(var.auto ^ var.suffix)
-  M98 P{var.auto ^ var.suffix}
-elif fileexists(var.auto ^ ".g")
-  M98 P{var.auto ^ ".g"}
+set var.auto = ""
+if var.current_filament != ""
+  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-nle" T{var.current_tool}
+  set var.auto = global.result
+if var.auto != ""
+  M98 P{var.auto}
 
-set var.auto = "0:/filaments/" ^ var.current_filament ^ "/config-auto-pa"
-if fileexists(var.auto ^ var.suffix)
-  M98 P{var.auto ^ var.suffix}
-elif fileexists(var.auto ^ ".g")
-  M98 P{var.auto ^ ".g"}
+set var.auto = ""
+if var.current_filament != ""
+  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-pa" T{var.current_tool}
+  set var.auto = global.result
+if var.auto != ""
+  M98 P{var.auto}
 
 ; Wait for set temperatures to be reached
 if heat.heaters[tools[0].heaters[0]].current < heat.heaters[tools[0].heaters[0]].active

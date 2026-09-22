@@ -112,5 +112,6 @@ argument length limit see exactly the same text as before. Three consequences:
    shifts every following line number out of step. This
    affects `sys/meltingplot/global-override.g` (operator-edited, on the DWC
    protected list) and everything the machine writes itself
-   (`filaments/*/config.g`, `nozzle*.g`, `last-filament-temp.g`). Exclude them
+   (`filaments/*/config.g`, `nozzle*.g`, `spool*.g`, `filament-diameter*.g`, `bed-surface.g`,
+   `last-filament-temp.g`). Exclude them
    with `-x`.

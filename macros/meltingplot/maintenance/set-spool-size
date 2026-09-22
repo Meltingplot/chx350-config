@@ -1,0 +1,22 @@
+; set-spool-size
+; Records or corrects the spool mounted on the current tool: nominal net weight and what
+; is left on it. The same questions the filament load asks at its feed prompt - one call
+; to confirm_spool_size.g without A1, so the tool's current values are preselected:
+; a dropdown of the common sizes ("Other..." for a free value in grams), then the
+; remaining grams (weigh the spool and subtract the tare recorded with it). With a
+; material.g the dropdown lists the profile's own spool variants instead.
+; Persisted per tool in sys/meltingplot/spool<tool>.g together with the filament's
+; density, which the consumption tracker (spool_track.g) needs. Cancelling the first
+; prompt keeps everything. Use it when a spool is swapped without a filament change
+; (same material, new spool) or to correct the tracked remaining weight.
+; Allowed while a print is paused (a spool change), never while it prints.
+
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
+  M99
+
+var tool = min(max(state.currentTool, 0), 1)
+M98 P"0:/sys/meltingplot/confirm_spool_size.g" T{var.tool}
+
+M291 R"Spool" P{"Tool " ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g of " ^ global.spool_size[var.tool] ^ " g spool" ^ (global.spool_density[var.tool] > 0 ? "" : " (no density - not tracked)")} S1 T0
+M400 ; sbc specific

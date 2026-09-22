@@ -220,10 +220,20 @@ global closed_loop_homing = 0xAAAAAAAA   ; 0x55555555 driver-error.g tolerates c
 ; ==============================================================================
 
 ; --- installed nozzle ---------------------------------------------------------
+; The machine-state values in this and the following sections (nozzle, filament
+; diameter, spool, build plate) describe what is physically installed. They share one persistence pattern: declared
+; here with a "nothing known yet" default, then overwritten by a machine-local file in
+; sys/meltingplot/ that a confirm_*.g macro writes on change and this file runs on boot
+; (fileexists-guarded). Those files are written on the machine, never shipped with the
+; repo (.gitignore) and sit on the protected list of the DWC config plugin, so a config
+; update keeps them. Each holds only "set global.<name>... = <value>" lines.
 ; nozzle diameter - a property of the tool, not of the filament, so it is stored per
 ; tool and persisted (a nozzle change must survive a power cycle): tool 0 reads
 ; sys/meltingplot/nozzle0.g, tool 1 nozzle1.g, both written by macro set-nozzle-diameter.
-; The diameter also builds file names (filaments/<name>/nozzle-0.40.g, config-auto-pa-0.40.g).
+; The diameter also builds file names, paired with the filament diameter as the key
+; "<filament>-<nozzle>" (filaments/<name>/nozzle-2.85-0.40.g, config-auto-pa-2.85-0.40.g)
+; - always through calibration_key.g (writers) / find_calibration_file.g (readers, with
+; the fallback to older nozzle-only and unsuffixed files).
 ; NEVER concatenate the raw value for that: RRF keeps the decimal places the value was
 ; written with, so 0.4 renders "0.4" but 0.4000 renders "0.4000" and anything computed
 ; renders "0.4000000" - each a different, silently wrong file name. Always derive the key
@@ -237,6 +247,73 @@ if fileexists("0:/sys/meltingplot/nozzle0.g")
   M98 P"0:/sys/meltingplot/nozzle0.g"
 if fileexists("0:/sys/meltingplot/nozzle1.g")
   M98 P"0:/sys/meltingplot/nozzle1.g"
+; nozzle type - what the nozzle is made of and whether it is a high-flow (CHT) design.
+; A key string, one of: "brass", "cht" (brass CHT), "hardened" (hardened steel, rated
+; for abrasive filaments), "cht-hardened", "tungsten-carbide", "copper" (plated copper),
+; "other", "unknown" (nothing recorded yet). The key is never used in a file name.
+; Same persistence as the diameter: sys/meltingplot/nozzle-type<tool>.g, written by
+; confirm_nozzle_type.g (macro set-nozzle-diameter asks for both on a nozzle change).
+global nozzle_type = vector(2, "unknown")
+if fileexists("0:/sys/meltingplot/nozzle-type0.g")
+  M98 P"0:/sys/meltingplot/nozzle-type0.g"
+if fileexists("0:/sys/meltingplot/nozzle-type1.g")
+  M98 P"0:/sys/meltingplot/nozzle-type1.g"
+
+; --- filament diameter --------------------------------------------------------
+; diameter of the filament each tool is built for (mm). A property of the tool like the
+; nozzle: config.g applies it (M200 D / M404 N) and the consumption tracker turns
+; extruded millimetres into grams with it. Machine-local: macro set-filament-diameter
+; (confirm_filament_diameter.g) persists a change in sys/meltingplot/filament-diameter<tool>.g
+; and re-applies M200 at once, so a change survives a power cycle.
+global filament_diameter = vector(2, 2.85)
+if fileexists("0:/sys/meltingplot/filament-diameter0.g")
+  M98 P"0:/sys/meltingplot/filament-diameter0.g"
+if fileexists("0:/sys/meltingplot/filament-diameter1.g")
+  M98 P"0:/sys/meltingplot/filament-diameter1.g"
+
+; --- mounted spool ------------------------------------------------------------
+; The spool on each tool: nominal net filament weight in grams (int, 0 = unknown), what
+; is left on it in grams (float), the empty-spool weight in grams (tare, int, 0 =
+; unknown - lets the operator weigh the spool and enter weighed - tare), and the
+; density (g/cm3) of the filament it carries - tare and density are copies of the
+; profile's values, taken at load time, so the tracker never depends on which profile
+; ran last. All four are written together to sys/meltingplot/spool<tool>.g
+; by store_spool.g (the spool stays on the machine across a power cycle). Asked at the
+; feed prompt of every filament load (confirm_spool_size.g, cancelling keeps the values)
+; and by macro set-spool-size.
+; Consumption: spool_track.g books the print's slicer-commanded extrusion
+; (move.extruders[].rawPosition - reset by RRF at every print start, unaffected by G92,
+; not counting macro extrusion such as purges, NET of G1 retractions so it can run
+; backwards by a few mm) onto spool_remaining, scaled by the M221 extrusion factor:
+; grams = mm * pi * (d/2)^2 * density / 1000, signed deltas. daemon.g calls it every
+; 60 s while printing (no file write), print_end flushes it and persists (W1). The job
+; is bracketed by the firmware hooks, never guessed from the counter or a file name:
+; print_start arms spool_track_active and zeroes the baseline (RRF zeroed rawPosition
+; with the job), the W1 flush books, persists and disarms - so print_end may run any
+; number of times after a job, every call but the first is a no-op. A spool with density
+; 0 is not tracked. spool_track_raw is the last booked rawPosition per tool,
+; spool_track_time the daemon's sample timestamp - all session state, not persisted.
+global spool_size = vector(2, 0)
+global spool_remaining = vector(2, 0.0)
+global spool_tare = vector(2, 0)
+global spool_density = vector(2, 0.0)
+if fileexists("0:/sys/meltingplot/spool0.g")
+  M98 P"0:/sys/meltingplot/spool0.g"
+if fileexists("0:/sys/meltingplot/spool1.g")
+  M98 P"0:/sys/meltingplot/spool1.g"
+global spool_track_raw = vector(2, 0.0)
+global spool_track_time = 0
+global spool_track_active = false        ; armed by print_start (job started, baseline 0), disarmed by the print_end flush - the bracket that makes print_end idempotent
+
+; --- build plate --------------------------------------------------------------
+; surface of the installed build plate. A key string, one of: "pei" (smooth PEI),
+; "pei-textured", "pertinax" (Hartpapier / phenolic paper), "g10" (Glasfaser / FR4
+; fiberglass), "carbon" (carbon fibre plate), "glass", "other", "unknown". Machine-wide,
+; set by macro set-bed-surface (confirm_bed_surface.g), persisted in
+; sys/meltingplot/bed-surface.g. Not used in a file name.
+global bed_surface = "unknown"
+if fileexists("0:/sys/meltingplot/bed-surface.g")
+  M98 P"0:/sys/meltingplot/bed-surface.g"
 
 ; --- filament: material parameters --------------------------------------------
 global filament_max_flow_rate = 20
@@ -254,6 +331,18 @@ if fileexists("0:/sys/meltingplot/last-filament-temp.g")
 global filament_temp_active = 0              ; extrusion/load temperature
 global filament_temp_standby = 0             ; standby temperature
 global filament_temp_unload = 0              ; unload temperature (0 = same as active)
+; per-profile material data, set by filaments/<name>/material.g (user-editable, written
+; by create_material_config.g - offered at the filament-load prompt, by macros
+; create-filament-profile and repair-filament-profile). Run by confirm_spool_size.g,
+; which resets all three to 0 first so a profile without material.g never inherits the
+; previous material's values. 0 = unknown.
+; A material may come on several spool variants, so size and weight are parallel arrays
+; of the same length (index i: spool_size[i] holds spool_weight[i] g of filament). Empty
+; (vector(0, ...)) = unknown; material.g writes {1000,2500,} - the trailing comma keeps a
+; one-element list an array in RRF 3.5/3.6 syntax.
+global filament_density = 0.0                ; g/cm3 - turns extruded mm into grams
+global filament_spool_size = vector(0, 0)    ; g net filament per usual spool variant
+global filament_spool_weight = vector(0, 0)  ; g weight of that spool when empty (tare), 0 = unknown - remaining = weighed - tare
 
 ; --- filament: load/unload state ----------------------------------------------
 global filament_loading_error = false

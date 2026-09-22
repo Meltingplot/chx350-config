@@ -304,6 +304,12 @@ while state.status != "halted" && global.daemon_reload == false
     set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
 
   if state.status == "processing" && job.file.fileName != null
+    ; --- spool consumption: book the print's raw extrusion onto the spool every 60 s ---
+    ; non-blocking (OM reads and set only, no file write - print_end persists with W1).
+    ; Only while print_start armed it (short-circuit: the flag is read once a minute)
+    if (var.now - global.spool_track_time) >= 60 && global.spool_track_active
+      set global.spool_track_time = var.now
+      M98 P"0:/sys/meltingplot/spool_track.g"
     if global.mfm_suppress_until > 0 && var.now >= global.mfm_suppress_until
       set global.mfm_suppress_until = 0
       set global.ignoreMFMevents = false
