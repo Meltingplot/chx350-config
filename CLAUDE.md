@@ -43,7 +43,7 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 
 - **`sys/`** — System config and firmware hooks (`start.g`, `stop.g`, `pause.g`, `resume.g`, `homeall.g`, `daemon.g`, `trigger*.g`, …) — names fixed by RRF
 - **`sys/meltingplot/`** — the project's own logic, one folder per subsystem:
-  - `globals.g` (every global, see "State Management") and `migrate.g` (3.6 → 3.7 file moves); otherwise the root holds only the deprecated forwarding files (see "Naming")
+  - `globals.g` (every global, see "State Management") and `migrate.g` (3.6 → 3.7 file moves); otherwise the root holds only the forwarding files (see "Deprecated forwarding files")
   - `ce-declaration/` — CE declaration, operating modes (`operating-mode/{default,automatic}.g`, `reload-operating-mode.g`), e-stop; `doors/` holds the door checks every motion path runs: `ensure-checked-closed.g` (both door switches verified by an open edge, then both doors closed) and `wait-closed.g` (wait until both doors are closed)
   - `print/` — `prepare.g` (slicer start G-code), `finish.g` (slicer end G-code, `stop.g`, `cancel.g`), `prime-nozzle.g`, `wait-for-heater.g`
   - `filament/` — the load/unload chain: `on-load.g`, `on-unload.g` and `on-config.g` are called by a profile's `load.g`, `unload.g` and `config.g`; `load-procedure.g` and `unload-procedure.g` move the filament; `mfm-recovery.g` (run by `pause.g`)
@@ -64,14 +64,14 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 - **No basename twice:** a `sys/` helper and an operator macro never share a name.
 - **Names that must not change** without a migration: a global whose name is written into a file on the machine — `nozzle_diameter` (`sys/generated/nozzle<tool>.g`), `last_filament_temp`, `szp_touch_z_offset`, `filament_temp_*` (every `temps.g`), `filament_max_flow_rate` (`nozzle-<key>.g`), `deferred_filament_load_t0` (`load.g` before 2026-07) — and every global an operator may assign in `global-override.g` (`has_*`, `idle_heater_*`, `z_motor_stall_time_max`, `szp_*`, `debug`). Renaming one breaks the boot of a machine whose file still uses the old name. The same holds for a path that a generated profile file or the slicer calls, see below.
 
-### Deprecated forwarding files (deleted with RRF 3.8)
+### Deprecated forwarding files
 
-3.7 renamed the files below, but their old path is still called from outside the repo. Each old path keeps a forwarding file that warns (`M118 P0 L1 S"Warning: deprecated …"` — DWC console and event log, with the profile name where the call carries it) and then calls the new path. **They are deleted with RRF 3.8**; until then, search the event log for "deprecated" to find and fix the remaining callers. Never add logic to them.
+3.7 renamed the files below, but their old path is still called from outside the repo, so each old path keeps a forwarding file that calls the new path. Never add logic to them.
+
+**Profile hooks — deleted with RRF 3.8.** Each warns (`M118 P0 L1 S"Warning: deprecated …"` — DWC console and event log, with the profile name where the call carries it); until 3.8, search the event log for "deprecated" to find and fix the remaining callers.
 
 | Old path in `sys/meltingplot/` | New path | Still called by |
 |---|---|---|
-| `print_start` | `print/prepare.g` | slicer start G-code, every file sliced before 3.7 |
-| `print_end` | `print/finish.g` | slicer end G-code, every file sliced before 3.7 |
 | `filament_load.g` | `filament/on-load.g` | `load.g` of profiles generated before 3.7 |
 | `filament_unload.g` | `filament/on-unload.g` | `unload.g` of profiles generated before 3.7 |
 | `load_nozzle_config.g` | `filament-profile/apply-nozzle-file.g` | `config.g` of profiles generated before 3.7 |
@@ -79,7 +79,16 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 | `load_filament_sensorless` | `filament/load-procedure.g` | `load.g` of profiles generated before 2026-07 |
 | `unload_filament` | `filament/unload-procedure.g` | `unload.g` of profiles generated before 2026-07 |
 
-`tpost0.g` regenerates a profile on its next tool change (once it has a `temps.g`), macro `repair-filament-profile` does it at once; the 30 shipped profiles come with the update. A forwarding file adds one macro nesting level, so an outdated profile loads at depth 8 of the 10 RRF allows. Every other renamed file was only called from inside the repo; `migrate.g` deletes its old name on the machine.
+`tpost0.g` regenerates a profile on its next tool change (once it has a `temps.g`), macro `repair-filament-profile` does it at once; the 30 shipped profiles come with the update. A forwarding file adds one macro nesting level, so an outdated profile loads at depth 8 of the 10 RRF allows.
+
+**Slicer entry points — kept, silent, deprecated with RRF 3.8.** The OrcaSlicer, PrusaSlicer and SuperSlicer profiles call no other path under `sys/meltingplot/` than these two, and every file already sliced keeps calling them. They forward without a warning for now; with RRF 3.8 they get the same `M118 P0 L1` warning as the profile hooks, and are removed once the slicer profiles call the new paths.
+
+| Old path in `sys/meltingplot/` | New path | Still called by |
+|---|---|---|
+| `print_start` | `print/prepare.g` | slicer start G-code, every file sliced before 3.7 |
+| `print_end` | `print/finish.g` | slicer end G-code, every file sliced before 3.7 |
+
+Every other renamed file was only called from inside the repo; `migrate.g` deletes its old name on the machine.
 
 ### State Management
 

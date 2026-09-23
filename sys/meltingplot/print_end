@@ -1,12 +1,10 @@
-; print_end - DEPRECATED forwarding file, delete with RRF 3.8
+; print_end - forwarding file for the slicer end G-code.
+; 3.7 renamed it to sys/meltingplot/print/finish.g; the slicer end G-code and every
+; file sliced before 3.7 still call this path. Kept, and silent for now - it becomes
+; DEPRECATED with RRF 3.8 (then it warns with M118 P0 L1) so the slicer profiles can be
+; moved to M98 P"0:/sys/meltingplot/print/finish.g" first
 ; (CLAUDE.md, "Deprecated forwarding files").
-; 3.7 renamed it to sys/meltingplot/print/finish.g.
-; The slicer end G-code and every file sliced before 3.7 call the old path - change
-; the slicer profile to M98 P"0:/sys/meltingplot/print/finish.g".
-; Every call warns on the console and in the event log (M118 P0 L1), so the remaining
-; callers can be found and fixed before 3.8.
 ; Nothing may follow the M98: print/finish.g ends inside the mode-downgrade window
 ; (CLAUDE.md, "The mode-downgrade window").
 
-M118 P0 L1 S"Warning: deprecated print_end - slicer end G-code: print/finish.g"
 M98 P"0:/sys/meltingplot/print/finish.g"
