@@ -9,9 +9,6 @@ echo "driver warning - "^{param.B}^"."^{param.D}^" : "^{param.P}^" ,"^{param.S}
 if state.status == "paused" || state.status == "pausing" || state.status == "resuming"
   M99 ; ignore this event - it is already handled
 
-if !exists(global.event_driver_stall)
-  global event_driver_stall = true
-
 ; check if a printjob is running 
 ; if it is a can connected driver in closed loop mode with error position tolerance exceeded (param.B > 0 && param.D == 0 && param.P == 1024)
 if job.file.fileName != null

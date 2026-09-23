@@ -1,0 +1,42 @@
+if global.debug
+  echo "z-probe/probe-here.g"
+M400 ; SBC mode specific - make sure the current motion has stopped!
+var pos_x = move.axes[0].machinePosition
+var pos_y = move.axes[1].machinePosition
+
+G90 ; absolute position
+set global.result = 0
+
+while iterations < 2
+  var pos_variation_x = random(16)     ; 0 - 15, independent draw
+  var pos_variation_y = random(16) - 8 ; -8 - +7, independent draw
+
+  M400
+
+  if move.axes[0].homed && move.axes[1].homed
+    G53 G1 X{var.pos_x+var.pos_variation_x} Y{var.pos_y+var.pos_variation_y} F60000
+  elif move.axes[0].homed
+    G53 G1 X{var.pos_x+var.pos_variation_x} F60000
+  elif move.axes[1].homed
+    G53 G1 Y{var.pos_y+var.pos_variation_y} F60000
+  
+  M400 ; sbc specific
+  G4 P250
+
+  G30
+  set global.result = result
+  if result == 0
+    if iterations >= 1
+      echo "G30 completed successfully"
+    break
+  else
+    echo "Warning: G30 failed - repeat"
+
+if move.axes[0].homed && move.axes[1].homed
+  G53 G1 X{var.pos_x} Y{var.pos_y} F60000
+elif move.axes[0].homed
+  G53 G1 X{var.pos_x} F60000
+elif move.axes[1].homed
+  G53 G1 Y{var.pos_y} F60000
+
+M400

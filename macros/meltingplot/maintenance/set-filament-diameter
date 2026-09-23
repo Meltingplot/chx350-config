@@ -1,9 +1,9 @@
 ; set-filament-diameter
 ; Records the filament diameter a tool is set up for after a conversion (2.85 <-> 1.75
-; mm hotend/extruder parts) - one call to confirm_filament_diameter.g: a dropdown with
+; mm hotend/extruder parts) - one call to hardware/confirm-filament-diameter.g: a dropdown with
 ; the configured value preselected, persisted per tool in
 ; sys/generated/filament-diameter<tool>.g, applied at once with M200 and by config.g
-; at every boot. It is the first half of the calibration key (calibration_key.g): the
+; at every boot. It is the first half of the calibration key (filament-profile/calibration-key.g): the
 ; e-steps, NLE and PA results and nozzle-<key>.g are filed per filament diameter and
 ; nozzle, so after a conversion the profiles switch to the files of the new diameter
 ; and ask for the missing ones. Also used by the spool consumption tracker.
@@ -16,7 +16,7 @@ if job.file.fileName != null
   M99
 
 var tool = min(max(state.currentTool, 0), 1)
-M98 P"0:/sys/meltingplot/confirm_filament_diameter.g" T{var.tool}
+M98 P"0:/sys/meltingplot/hardware/confirm-filament-diameter.g" T{var.tool}
 
-M291 R"Filament diameter" P{"Tool " ^ var.tool ^ ": " ^ global.filament_diameter[var.tool] ^ " mm. Calibrations are filed per filament diameter - run calibrate_e_steps/nle/pa where results are missing."} S1 T0
+M291 R"Filament diameter" P{"Tool " ^ var.tool ^ ": " ^ global.filament_diameter[var.tool] ^ " mm. Calibrations are filed per filament diameter - run the calibration macros e-steps, nle and pressure-advance where results are missing."} S1 T0
 M400 ; sbc specific

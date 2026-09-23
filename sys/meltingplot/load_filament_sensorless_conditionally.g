@@ -1,14 +1,12 @@
-; load_filament_sensorless_conditionally.g
-; Checks the per-tool deferred filament load flag (armed by filament_load.g from
-; the profile's load.g) and runs load_filament_sensorless if needed. Called from
-; the machine-generated filaments/<name>/config.g - the only post-M701 hook where
-; move.extruders[n].filament is valid.
-; The physical-load marker is set BEFORE the flag is cleared so the daemon.g
-; watchdog can never observe (flag=false and marker unset) during a correct load.
+; load_filament_sensorless_conditionally.g - DEPRECATED forwarding file, delete with RRF 3.8
+; (CLAUDE.md, "Deprecated forwarding files").
+; 3.7 renamed it to sys/meltingplot/filament/on-config.g.
+; The old path is still called by the config.g of filament profiles generated before 3.7:
+; tpost0.g regenerates a profile on its next tool change, macro
+; repair-filament-profile does it at once.
+; Every call warns on the console and in the event log (M118 P0 L1, with the profile
+; name where the call carries it), so the remaining callers can be found and fixed
+; before 3.8.
 
-if state.currentTool >= 0 && global.deferred_filament_load[state.currentTool]
-  set global.filament_physical_load_name = move.extruders[tools[state.currentTool].extruders[0]].filament
-  set global.deferred_filament_load[state.currentTool] = false
-  M98 P"0:/sys/meltingplot/load_filament_sensorless"
-
-M400 ; sbc specific
+M118 P0 L1 S"Warning: deprecated load_filament_sensorless_conditionally.g - run repair-filament-profile"
+M98 P"0:/sys/meltingplot/filament/on-config.g"

@@ -1,0 +1,19 @@
+; switch_checked flags are bit-flip hardened (see globals): "checked" only by exact match with "1431655765" (0x55555555)
+while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+  if iterations > 0
+    var links = (("" ^ global.door_left_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    var rechts = (("" ^ global.door_right_switch_checked) == "1431655765") ? "geprüft" : "nicht geprüft"
+    M291 P{"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal<br>Türstatus links: " ^ var.links ^ "<br>Türstatus rechts: " ^ var.rechts}  R"Türkontrolle" S2
+  else
+    M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal - und kontrollieren Sie dabei zugleich, dass der Druckraum sauber ist.<br/><b>Achtung:</b> die Druckplatte könnte heiß sein." R"Türkontrolle" S2
+
+; Confirm the loop exit (globals, "CONFIRMING"): leaving the wait is the permissive
+; decision every caller acts on - homing, resume, tool change, filament load. The confirm
+; is the same wait once more, because "keep waiting" is the only restrictive outcome that
+; is correct in all of them: this file is reached from the filament path, where abort is
+; forbidden, and from homing, where returning an error nobody reads would be silent.
+while ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+  M118 P0 S"Warning: door check not confirmed on re-read - both doors must be opened once more"
+  M291 P"Öffnen Sie <b>beide</b> Türen zum Druckraum einmal" R"Türkontrolle" S2
+
+M98 P"0:/sys/meltingplot/ce-declaration/doors/wait-closed.g"

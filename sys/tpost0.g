@@ -9,19 +9,19 @@ var current_filament = move.extruders[var.current_extruder].filament
 ; keep filaments/<name>/config.g machine-owned: regenerate it (and auto-migrate any
 ; user content into config-override.g) before M703 executes it
 if var.current_filament != ""
-  M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.current_filament}
+  M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.current_filament}
 
 ; run /filaments/<filament name>/config.g
 M703
 
 ; calibration results are specific to the filament diameter and the nozzle
-; (config-auto-<what>-<filament>-<nozzle>.g, key from calibration_key.g) - a PA, NLE or
+; (config-auto-<what>-<filament>-<nozzle>.g, key from filament-profile/calibration-key.g) - a PA, NLE or
 ; e-steps calibration only ever describes the pair it was run with. Older files (nozzle
-; key only, or unsuffixed) are picked up by the fallback chain in find_calibration_file.g,
+; key only, or unsuffixed) are picked up by the fallback chain in filament-profile/find-calibration-file.g,
 ; which hands the resolved path back in global.result - read it straight away.
 var auto = ""
 if var.current_filament != ""
-  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-esteps" T{var.current_tool}
+  M98 P"0:/sys/meltingplot/filament-profile/find-calibration-file.g" S{var.current_filament} F"config-auto-esteps" T{var.current_tool}
   set var.auto = global.result
 if var.auto != ""
   M98 P{var.auto}
@@ -35,14 +35,14 @@ if var.current_esteps < {var.validValue * 0.8} || var.current_esteps > {var.vali
 
 set var.auto = ""
 if var.current_filament != ""
-  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-nle" T{var.current_tool}
+  M98 P"0:/sys/meltingplot/filament-profile/find-calibration-file.g" S{var.current_filament} F"config-auto-nle" T{var.current_tool}
   set var.auto = global.result
 if var.auto != ""
   M98 P{var.auto}
 
 set var.auto = ""
 if var.current_filament != ""
-  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.current_filament} F"config-auto-pa" T{var.current_tool}
+  M98 P"0:/sys/meltingplot/filament-profile/find-calibration-file.g" S{var.current_filament} F"config-auto-pa" T{var.current_tool}
   set var.auto = global.result
 if var.auto != ""
   M98 P{var.auto}

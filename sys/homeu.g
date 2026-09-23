@@ -9,7 +9,7 @@
 
 set global.result = 0
 
-M98 P"0:/sys/meltingplot/ensure_safety"
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 
 var motor_current = move.axes[3].percentCurrent
 var fullstep = move.axes[3].microstepping.value / move.axes[3].stepsPerMm    ; 0.2 mm at 64 microsteps and 320 steps/mm

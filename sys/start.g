@@ -11,4 +11,4 @@ if state.status == "simulating"
     M2
   M99
 
-M98 P"0:/sys/meltingplot/ensure_safety"
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"

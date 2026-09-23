@@ -1,27 +1,16 @@
-; load_nozzle_config.g
-; Runs filaments/<S>/nozzle-<key>.g of the filament diameter and nozzle installed on the
-; current tool (<key> = "2.85-0.40", calibration_key.g), if it exists - resolved through
-; find_calibration_file.g, so a nozzle-only file from before the filament suffix is still
-; used on a 2.85 mm tool. A missing file is not an error - the material-wide values of
-; config-override.g then stand, which keeps profiles predating the per-nozzle split working.
-; Called from the machine-generated filaments/<S>/config.g, right after config-override.g:
-;   M98 P"0:/sys/meltingplot/load_nozzle_config.g" S"<filament name>"
-; This logic deliberately lives here and not in the generated config.g: emitting it with
-; echo would require quotes inside quotes, and a single mis-escaped one produces an
-; unterminated string that breaks every filament profile at once.
+; load_nozzle_config.g - DEPRECATED forwarding file, delete with RRF 3.8
+; (CLAUDE.md, "Deprecated forwarding files").
+; 3.7 renamed it to sys/meltingplot/filament-profile/apply-nozzle-file.g.
+; The old path is still called by the config.g of filament profiles generated before 3.7:
+; tpost0.g regenerates a profile on its next tool change, macro
+; repair-filament-profile does it at once.
+; Every call warns on the console and in the event log (M118 P0 L1, with the profile
+; name where the call carries it), so the remaining callers can be found and fixed
+; before 3.8.
 
-if global.debug
-  echo "load_nozzle_config.g"
-
-if !exists(param.S)
-  M99
-if param.S == ""
-  M99
-
-; M703 can run without a tool selected - fall back to tool 0 rather than indexing with -1
-; find_calibration_file.g returns the resolved path in global.result - read it straight away
-M98 P"0:/sys/meltingplot/find_calibration_file.g" S{param.S} F"nozzle" T{max(state.currentTool, 0)}
-var nozzle = global.result
-
-if var.nozzle != ""
-  M98 P{var.nozzle}
+if exists(param.S)
+  M118 P0 L1 S{"Warning: deprecated load_nozzle_config.g - run repair-filament-profile for '" ^ param.S ^ "'"}
+  M98 P"0:/sys/meltingplot/filament-profile/apply-nozzle-file.g" S{param.S}
+else
+  M118 P0 L1 S"Warning: deprecated load_nozzle_config.g - run repair-filament-profile"
+  M98 P"0:/sys/meltingplot/filament-profile/apply-nozzle-file.g"

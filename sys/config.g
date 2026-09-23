@@ -1,12 +1,12 @@
 ; Configuration file for Duet 3 (firmware version 3.6.1)
 ; executed by the firmware on start-up
 
-M98 P"0:/sys/meltingplot/globals"                       ; Load Global Variables
+M98 P"0:/sys/meltingplot/globals.g"                       ; Load Global Variables
 M98 P"0:/sys/meltingplot/ce-declaration/e-stop.g"
 
 ; Led
 M950 E0 C"led" Q3000000 T1 U60 ; create ARGB leds in waterpump and hood
-M98 P"0:/sys/meltingplot/set_led_color" C"yellow"
+M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow"
 
 ; Network Ethernet
 ;M551 P"meltingplot"                                    ; set password
@@ -169,7 +169,7 @@ if result != 0
   M112
 M308 A"SZP coil" S4 Y"thermistor" P"60.temp0"           ; thermistor on coil
 G31 K0 Z2 X23.2 Y12.3 P9000                             ; set Z probe trigger value, offset and trigger height
-M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/standard-mode.g"
 M557 X{sensors.probes[0].offsets[0],move.axes[0].max-sensors.probes[0].offsets[0]} Y{sensors.probes[0].offsets[1],move.axes[1].max-sensors.probes[0].offsets[1]} P40:21                        ; define mesh grid
 
 M376 H5                                                 ; taper out z correction over 5mm height

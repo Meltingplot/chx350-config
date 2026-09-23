@@ -4,10 +4,11 @@ GCode meta commands _ Duet3D Documentation*
 
 # machine-owned files, never shipped with the config: sys/generated/ is written by the
 # machine itself (nozzle, spool, filament diameter, bed surface, last filament
-# temperature), sys/overrides/ holds the three versioned operator templates plus the
-# printer name the image writes
+# temperature, scanning Z-probe calibration), sys/overrides/ holds the three versioned operator templates plus the
+# printer name the image writes and the spool catalog of macro edit-spool-catalog
 sys/generated/
 sys/overrides/printer-name.g
+sys/overrides/spool-catalog.csv
 
 # local copy of the Duet3D wiki (https://github.com/Duet3D/wiki-content), G-code reference lookup
 .duet-wiki/

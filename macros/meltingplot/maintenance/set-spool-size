@@ -1,12 +1,13 @@
 ; set-spool-size
-; Records or corrects the spool mounted on the current tool: nominal net weight and what
+; Records or corrects the spool mounted on a tool: nominal net weight and what
 ; is left on it. The same questions the filament load asks at its feed prompt - one call
-; to confirm_spool_size.g without A1, so the tool's current values are preselected:
-; a dropdown of the common sizes ("Other..." for a free value in grams), then the
-; remaining grams (weigh the spool and subtract the tare recorded with it). With a
-; material.g the dropdown lists the profile's own spool variants instead.
+; to spool/confirm.g without A1, so the tool's current values are preselected:
+; a dropdown of the common sizes ("Other..." for a free value in grams), the spool body
+; from the spool catalog (macro edit-spool-catalog, gives the empty-spool weight), then the
+; weight on a scale - the tare is subtracted automatically. With a material.g the size
+; dropdown lists the profile's own spool sizes instead.
 ; Persisted per tool in sys/generated/spool<tool>.g together with the filament's
-; density, which the consumption tracker (spool_track.g) needs. Cancelling the first
+; density, which the consumption tracker (spool/track.g) needs. Cancelling the first
 ; prompt keeps everything. Use it when a spool is swapped without a filament change
 ; (same material, new spool) or to correct the tracked remaining weight.
 ; Allowed while a print is paused (a spool change), never while it prints.
@@ -15,8 +16,18 @@ if job.file.fileName != null && state.status != "paused"
   echo "Error: a print job is running - abort!"
   M99
 
+; which tool: T<n> when called with it, else asked when a second tool is defined (with
+; T0 and T1 in two motion systems DWC's current tool is only that of its own motion
+; system), preselected on the current tool
 var tool = min(max(state.currentTool, 0), 1)
-M98 P"0:/sys/meltingplot/confirm_spool_size.g" T{var.tool}
+if exists(param.T)
+  set var.tool = (param.T == 1) ? 1 : 0
+elif #tools > 1 && tools[1] != null
+  M291 R"Spool" P"Record the spool of which tool?" S4 K{"Tool 0","Tool 1"} F{var.tool} J2
+  if result != 0             ; J2 leaves input undefined - result must be tested right here
+    M99
+  set var.tool = input
+M98 P"0:/sys/meltingplot/spool/confirm.g" T{var.tool}
 
-M291 R"Spool" P{"Tool " ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g of " ^ global.spool_size[var.tool] ^ " g spool" ^ (global.spool_density[var.tool] > 0 ? "" : " (no density - not tracked)")} S1 T0
+M291 R"Spool" P{"Tool " ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g of " ^ global.spool_net_weight[var.tool] ^ " g spool" ^ (global.spool_density[var.tool] > 0 ? "" : " (no density - not tracked)")} S1 T0
 M400 ; sbc specific

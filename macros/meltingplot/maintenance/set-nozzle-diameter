@@ -1,12 +1,12 @@
 ; set-nozzle-diameter
 ; Records which nozzle is installed after a nozzle change: diameter and type. The
 ; diameter step is the same one the filament load runs at its feed prompt - one call to
-; confirm_nozzle_diameter.g: it asks with choice buttons (configured diameter
+; hardware/confirm-nozzle-diameter.g: it asks with choice buttons (configured diameter
 ; preselected, "Other..." for a free value), persists a changed value per tool in
-; sys/generated/nozzle<tool>.g via store_nozzle_diameter.g, offers
+; sys/generated/nozzle<tool>.g via hardware/store-nozzle-diameter.g, offers
 ; filaments/<name>/nozzle-<key>.g when the loaded profile has none for the diameter
-; (create_nozzle_config.g) and applies it with load_nozzle_config.g. The type step
-; (confirm_nozzle_type.g: brass, CHT, hardened, ...) persists to nozzle-type<tool>.g and
+; (filament-profile/create-nozzle-file.g) and applies it with filament-profile/apply-nozzle-file.g. The type step
+; (hardware/confirm-nozzle-type.g: brass, CHT, hardened, ...) persists to nozzle-type<tool>.g and
 ; is only asked here, not at filament load, because it selects no file. Cancelling
 ; either keeps the configured value. The nozzle belongs to the tool, not to the
 ; filament: the diameter selects, for every profile, the nozzle file and the calibration
@@ -19,10 +19,10 @@ if job.file.fileName != null && state.status != "paused"
   M99
 
 var tool = min(max(state.currentTool, 0), 1)
-M98 P"0:/sys/meltingplot/confirm_nozzle_diameter.g" T{var.tool}
-M98 P"0:/sys/meltingplot/confirm_nozzle_type.g" T{var.tool}
+M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-diameter.g" T{var.tool}
+M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-type.g" T{var.tool}
 
-; sformat.g returns the key in global.result - read it straight away
-M98 P"0:/sys/meltingplot/sformat.g" F{global.nozzle_diameter[var.tool]} D2 W0
+; lib/format-number.g returns the key in global.result - read it straight away
+M98 P"0:/sys/meltingplot/lib/format-number.g" F{global.nozzle_diameter[var.tool]} D2 W0
 M291 R"Nozzle" P{"Tool " ^ var.tool ^ ": " ^ global.result ^ "mm " ^ global.nozzle_type[var.tool] ^ ". Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
 M400 ; sbc specific

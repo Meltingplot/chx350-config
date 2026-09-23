@@ -1,10 +1,10 @@
 set global.result = 0
 
-M98 P"0:/sys/meltingplot/ensure_safety"
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 
 ; this check is used when called from homeall.g
 if move.axes[2].homed == false 
-  M98 P"0:/sys/meltingplot/align_z_axis.g"  ; align z axis
+  M98 P"0:/sys/meltingplot/z-axis/align-motors.g"  ; align z axis
 
 if move.axes[0].homed == false            ; check if x is homed
   M98 P"0:/sys/homex.g"                   ; home x axis
@@ -29,19 +29,19 @@ G90 G1 Z{sensors.probes[0].triggerHeight + sensors.probes[0].diveHeights[0] * 1.
 if heat.heaters[0].active >= 60 && heat.heaters[0].state == "active" && sensors.analog[4].lastReading <= 40
   G4 S30  ; wait 30 seconds for the heat to reach the toolhead, that the z-probe can work properly
 M400
-M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/touch-mode.g"
 M400
-M98 P"0:/sys/meltingplot/probe_current_positon"
+M98 P"0:/sys/meltingplot/z-probe/probe-here.g"
 if global.result != 0
   M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-  M98 P"0:/sys/meltingplot/probe_current_positon"
+  M98 P"0:/sys/meltingplot/z-probe/probe-here.g"
 if global.result > 1
   echo "Error: Homing Z - abort! global.result: " ^ global.result
   M18 Z
   M99
 M400
 
-M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/standard-mode.g"
 
 M558.1 K0 S1.7
 if result != 0

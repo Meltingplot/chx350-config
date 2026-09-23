@@ -1,0 +1,83 @@
+; edit-spool-catalog
+; Maintains the machine's spool catalog - the spool bodies the spool prompt offers at
+; every filament load (spool/confirm.g), each a name and the weight of the empty
+; spool in grams (tare). A menu adds or removes one entry per round until "Done". Every
+; change rewrites sys/overrides/spool-catalog.csv from the catalog and reads it back
+; (spool/read-catalog.g), so it applies at once, without a restart.
+; The file lives in sys/overrides/ - a config update never overwrites it - and may also
+; be edited in DWC. Without it the default list declared in sys/meltingplot/globals.g
+; applies. Format and limits are described in spool/read-catalog.g: one CSV line
+; "<name>",<tare>,..., at most 20 spool types (fileread returns at most 40 elements per
+; call on RRF 3.6). The line is written piece by piece with echo >>> (append without a
+; newline), so neither the 255-character command limit nor the 256-character limit of
+; a string expression bounds it.
+; A name must not contain a double quote: it would have to be doubled in the file, and
+; RRF has no string replace to do that.
+; Moves and heats nothing, so it is allowed at any time, also while printing.
+
+if global.debug
+  echo "edit-spool-catalog"
+
+var file = "0:/sys/overrides/spool-catalog.csv"
+M98 P"0:/sys/meltingplot/spool/read-catalog.g"
+
+var action = 0
+var name = ""
+var tare = 0
+var drop = -1
+var count = 0
+var labels = vector(1, "")
+var sep = ""
+while iterations < 100
+  set var.count = floor(#global.spool_catalog / 2)
+  ; the first round preselects "Add", every later one "Done"
+  M291 R"Spool types" P{"The spool prompt offers " ^ var.count ^ " spool type(s). Change the list?"} S4 K{"Add a spool type","Remove a spool type","Done"} F{(iterations == 0) ? 0 : 2} J2
+  if result != 0             ; J2 leaves input undefined - result must be tested right here
+    break
+  set var.action = input
+  if var.action == 2
+    break
+
+  set var.drop = -1
+  if var.action == 0
+    if var.count >= 20
+      M291 R"Spool types" P"The list is full (20 spool types). Remove one first." S2
+      continue
+    M291 R"Spool types" P"Name of the spool type, e.g. maker, material of the spool body, size:" S7 L1 H30 J2
+    if result != 0
+      continue
+    set var.name = input
+    if find(var.name, """") >= 0
+      M291 R"Spool types" P"A name must not contain a double quote." S2
+      continue
+    M291 R"Spool types" P{"Weight of an empty '" ^ var.name ^ "' spool in grams:"} S5 L1 H5000 F250 J2
+    if result != 0
+      continue
+    set var.tare = input
+  else
+    if var.count == 0
+      M291 R"Spool types" P"The list is empty." S2
+      continue
+    set var.labels = vector(var.count, "")
+    while iterations < var.count
+      set var.labels[iterations] = global.spool_catalog[iterations + iterations] ^ " (" ^ global.spool_catalog[iterations + iterations + 1] ^ " g)"
+    M291 R"Spool types" P"Remove which spool type?" S4 K{var.labels} F0 J2
+    if result != 0
+      continue
+    set var.drop = input
+
+  ; rewrite the file as one line: delete it, append every entry but the one removed and
+  ; then the one added without a newline, end the line last. An empty catalog leaves an
+  ; empty line, which reads as no spool types (fileread: one null element).
+  if fileexists(var.file)
+    M472 P{var.file}
+  set var.sep = ""
+  while iterations < var.count
+    if iterations != var.drop
+      echo >>>{var.file} var.sep ^ """" ^ global.spool_catalog[iterations + iterations] ^ """," ^ global.spool_catalog[iterations + iterations + 1]
+      set var.sep = ","
+  if var.action == 0
+    echo >>>{var.file} var.sep ^ """" ^ var.name ^ """," ^ var.tare
+  echo >>{var.file} ""
+  M98 P"0:/sys/meltingplot/spool/read-catalog.g"
+  M118 P0 S{"Spool catalog: " ^ floor(#global.spool_catalog / 2) ^ " spool type(s)"}

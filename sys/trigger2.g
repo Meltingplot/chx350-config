@@ -1,4 +1,4 @@
-M98 P"0:/sys/meltingplot/set_led_color" C"yellow"
+M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow"
 M112 ; emergency shutdown
 
 ; THIS FILE CONTAINS CE RELEVANT CONFIGURATIONS, ANY CHANGES TO THIS FILE MAY RESULT IN A LOST OF THE CE DECLARATION

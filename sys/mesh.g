@@ -1,4 +1,4 @@
-M98 P"0:/sys/meltingplot/ensure_safety"         ; ensure safety conditions are met
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"         ; ensure safety conditions are met
 G29 S2                                          ; Clear height compensation
 M290 R0 S0                                      ; clear babystepping
 M116                                            ; wait for all heaters
@@ -10,7 +10,7 @@ G1 Z20 F6000                                    ; move Z up to 20mm
 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z{sensors.probes[0].diveHeights[0]} F600 ; drive close to dive height
 
-M98 P"0:/sys/meltingplot/z-probe/szp_standard_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/standard-mode.g"
 G31 K0 Z3 ; reduce trigger height
 M400
 G4 P500

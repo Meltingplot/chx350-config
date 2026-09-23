@@ -4,7 +4,7 @@
 
 ; move the machine-owned files of a pre-3.7 configuration into sys/overrides/ and
 ; sys/generated/ before anything reads them (idempotent, see the macro)
-M98 P"0:/sys/meltingplot/migrate_overrides.g"
+M98 P"0:/sys/meltingplot/migrate.g"
 
 M586 C'*' ; allow CORS requests from any domain - needed for access through reverse proxy
 

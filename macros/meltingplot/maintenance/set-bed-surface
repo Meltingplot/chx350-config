@@ -1,6 +1,6 @@
 ; set-bed-surface
 ; Records which build plate surface is installed after a plate change - one call to
-; confirm_bed_surface.g: a dropdown with the configured surface preselected, persisted
+; hardware/confirm-bed-surface.g: a dropdown with the configured surface preselected, persisted
 ; machine-wide in sys/generated/bed-surface.g. Cancelling keeps the configured value.
 ; Allowed while a print is paused, never while it prints.
 
@@ -8,7 +8,7 @@ if job.file.fileName != null && state.status != "paused"
   echo "Error: a print job is running - abort!"
   M99
 
-M98 P"0:/sys/meltingplot/confirm_bed_surface.g"
+M98 P"0:/sys/meltingplot/hardware/confirm-bed-surface.g"
 
 M291 R"Build plate" P{"Surface: " ^ global.bed_surface ^ ". Re-check the Z offset if the plate thickness changed."} S1 T0
 M400 ; sbc specific

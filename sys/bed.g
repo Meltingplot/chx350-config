@@ -24,7 +24,7 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].ho
   set global.result = 1                   ; indicate error
   M99
 
-M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/touch-mode.g"
 if global.result != 0
   echo "Error: bed.g failed to set z-probe to touch mode"
   M99
@@ -44,7 +44,7 @@ while heat.heaters[var.bhi].state == "active" && heat.heaters[var.bhi].active > 
     set global.result = 1                   ; indicate error
     M99
 
-M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g"
+M98 P"0:/sys/meltingplot/z-probe/touch-mode.g"
 if global.result != 0
   echo "Error: bed.g failed to set z-probe to touch mode"
   M99
@@ -108,11 +108,11 @@ if !exists(param.S) || param.S == 0
   G1 Z20 F6000
   G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
   G1 Z{sensors.probes[0].diveHeights[1]} F600 ; drive close to dive height
-  M98 P"0:/sys/meltingplot/z-probe/szp_touch_mode.g" ; set z-probe to touch mode
-  M98 P"0:/sys/meltingplot/probe_current_positon" ; probe current position
+  M98 P"0:/sys/meltingplot/z-probe/touch-mode.g" ; set z-probe to touch mode
+  M98 P"0:/sys/meltingplot/z-probe/probe-here.g" ; probe current position
   if global.result != 0
     M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
-    M98 P"0:/sys/meltingplot/probe_current_positon"
+    M98 P"0:/sys/meltingplot/z-probe/probe-here.g"
     if global.result != 0
       echo "Error: G32 failed!"
       M99

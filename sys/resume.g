@@ -2,7 +2,7 @@
 ; called before a print from SD card is resumed
 ;
 
-M98 P"0:/sys/meltingplot/ensure_safety"
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 
 T R1                    ; put last tool into active
 M106 R1                 ; enable fan in its last state
@@ -37,7 +37,7 @@ if state.currentTool != -1
 ; which reloads e-steps from the filament config and wipes any M92 applied in filament-error.g — so
 ; re-apply the corrected value here, after the reload, to make it win. Idempotent (suggested is the
 ; fixed, clamped target); capture the baseline (now the reloaded config value) if not yet recorded
-; so print_end can restore it. Standstill here, so the blocking M92 is fine.
+; so print/finish.g can restore it. Standstill here, so the blocking M92 is fine.
 if global.mfm_esteps_suggested != 0
   if global.mfm_esteps_baseline == 0
     set global.mfm_esteps_baseline = move.extruders[0].stepsPerMm
@@ -45,15 +45,15 @@ if global.mfm_esteps_suggested != 0
 
 M400 ; sbc specific
 
-; Re-base the MFM post-recovery state to the actual restart of the print. mfm_auto_recovery arms
-; ignoreMFMevents and the extruder reference while still paused, but its purge, retract and nozzle
+; Re-base the MFM post-recovery state to the actual restart of the print. filament/mfm-recovery.g arms
+; mfm_ignore_events and the extruder reference while still paused, but its purge, retract and nozzle
 ; clean plus the reheat above take longer than the 30 s window: a timestamp taken back then is
 ; already expired when daemon.g first sees "processing" again, so it cleared the suppression on
 ; its very first iteration and the resume transient was never suppressed. Likewise the reference
 ; captured before the re-prime had G11 + 12.7 mm of the 30 mm guard already used up before the
 ; first print move. Both together turned an ordinary resume transient into an immediate hard pause
 ; via the loop breaker in filament-error.g (2026-09-03). Standstill here (M400), positions are final.
-if global.ignoreMFMevents
+if global.mfm_ignore_events
   set global.mfm_suppress_until = state.upTime + 30
-if global.mfm_error_extruder_ref != null
-  set global.mfm_error_extruder_ref = move.extruders[0].position
+if global.mfm_error_start_pos != null
+  set global.mfm_error_start_pos = move.extruders[0].position

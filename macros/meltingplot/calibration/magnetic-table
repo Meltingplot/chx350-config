@@ -1,0 +1,37 @@
+; calibration/magnetic-table
+; Calibrates the magnetic encoders of the four closed-loop 1HCL drivers (X1 50, X2 51,
+; Y 52, U 53) with M569.6 V2 and verifies each table with V3. The driver turns the motor
+; on its own for the calibration, so the carriages must be free to move, nothing may be
+; printing, and the motor currents must be the automatic-mode ones (default mode reduces
+; them with M917, which would calibrate the encoder against the wrong current).
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+M291 R"Magnetic encoder calibration" P"X, Y and U will be turned by the drivers in both directions. Make sure the carriages are clear of the end stops and nothing is in the way. Continue?" S3
+if result != 0
+  echo "abort by user!"
+  M99
+
+M17             ; activate motors
+M569.6 P50.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 50.
+M569.6 P50.0 V3 ; check table
+
+M569.6 P51.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 51.
+M569.6 P51.0 V3 ; check table
+
+M569.6 P52.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 52.
+M569.6 P52.0 V3 ; check table
+
+M569.6 P53.0 V2 ; conduct magnetic encoder calibration on move on closed loop driver on HCL board with magnetic encoder at address 53.
+M569.6 P53.0 V3 ; check table
+M400 ; sbc specific

@@ -1,0 +1,86 @@
+if state.status == "simulating"
+  M99
+
+; switch_checked flags are bit-flip hardened (see globals): "checked" only by exact match with "1431655765" (0x55555555)
+if state.currentTool != -1
+  if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
+    ; confirm before extruder motion (globals, "CONFIRMING"); skipping the retract is the
+    ; restrictive outcome and costs nothing - the hotend is switched off two lines below
+    if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+      M118 P0 S"Warning: door check not confirmed on re-read - retract skipped"
+    else
+      G10                                                     ; Retract the filament
+  M568 P0 R0 S0 A0                                          ; disable hotend
+  M140 S0 R0                                                ; set bed heater to 0°
+  M140 P0 S-273                                             ; disable bed heater
+  T-1                                                       ; deselect all tools
+
+; do not run this after mode switch is initialized
+if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
+  ; confirm before the park move, see the retract above
+  if ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
+    M118 P0 S"Warning: door check not confirmed on re-read - park move skipped"
+  else
+    G90                                                   ; absolute positioning
+    if move.axes[2].homed
+      G1 Z{move.axes[2].max-1} F60000                     ; lift z to clearance height
+    G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; move gantry away from camera
+
+;M84                                                      ; turn off motors
+; Turn off every fan the slicer may have switched on. Only the optional ones need a
+; guard - P0 exists on every machine, P2/P3 only if the hardware is fitted. The internal
+; fans (P4+) and the part cooling #2 enable (P1) are thermostatic and stay under firmware
+; control so the water loop keeps cooling down after the print.
+M106 P0 S0                                                ; turn off part cooling fan
+if global.has_aux_fan
+  M106 P2 S0                                              ; turn off auxiliary part cooling fan
+if global.has_exhaust_fan
+  M106 P3 S0                                              ; turn off exhaust / chamber fan
+
+; Book the extrusion since the daemon's last 60 s sample onto the spool, persist it
+; (spool<tool>.g) and disarm the tracker - only the first call after print/prepare.g armed
+; it books anything, so this file may run repeatedly after a job. Meta and file writes
+; only - position-neutral, but kept in front of the settle with everything else that is
+; not part of the flag-clear tail.
+M98 P"0:/sys/meltingplot/spool/track.g" W1
+
+; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
+; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
+; MUST run BEFORE the M400/G4 S1 settle below: M92 rewrites the extruder motor position from
+; the rescaled step endpoint (AdjustEndpoint: lrintf(steps * ratio), float-rounded), so the
+; reported move.extruders[].position shifts by an epsilon the daemon's exact-compare motion
+; tracker reads as extruder movement. Placed after the settle, that "movement" lands inside
+; the daemon's 0.25s motion window right as the switch_checked flags are cleared at the end
+; of this file → unsafe-state M112 at print end (happened 2026-08-22). Before the settle,
+; the G4 S1 lets the window expire while the flags are still true (automatic branch, harmless).
+if global.mfm_esteps_baseline != 0
+  M92 E{global.mfm_esteps_baseline}
+set global.mfm_esteps_baseline = 0.0
+
+M400
+G4 S1                                                     ; wait for motion system to complete moves, otherwise we will get an default mode error
+
+; Reset MFM false positive detection state
+set global.mfm_suppress_until = 0
+set global.mfm_swing_count = 0
+set global.mfm_prev_percentage = null
+set global.mfm_swing_window_start = 0
+set global.mfm_pwm_min = 0.0
+set global.mfm_pwm_max = 0.0
+set global.mfm_pwm_range = 0.0
+set global.mfm_pwm_window_start = 0
+set global.mfm_backoff_level = 3
+set global.mfm_ignore_events = false
+set global.mfm_error_start_pos = null
+set global.mfm_normal_since = 0
+set global.mfm_recovery_resume_time = 0
+set global.mfm_recovery_requested = false
+set global.mfm_recovery_result = -1
+; (the M92 e-steps baseline restore runs above, before the M400/G4 S1 settle — see comment there)
+set global.mfm_esteps_suggested = 0
+set global.mfm_esteps_detected = false
+set global.mfm_esteps_drift_since = 0
+set global.mfm_esteps_drift_avg = 0
+
+set global.door_left_switch_checked = 0xAAAAAAAA          ; set to unsafe state (hardened false pattern)
+set global.door_right_switch_checked = 0xAAAAAAAA         ; set to unsafe state

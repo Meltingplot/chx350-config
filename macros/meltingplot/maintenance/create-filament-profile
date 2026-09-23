@@ -1,30 +1,30 @@
 ; create-filament-profile
 ; Creates a new filament profile under 0:/filaments/<name>/ from scratch:
 ;   temps.g            - active/standby/unload temperature. Canonical temperature store,
-;                        read by filament_load.g/filament_unload.g (RRF cannot read values
+;                        read by filament/on-load.g and on-unload.g (RRF cannot read values
 ;                        back out of the machine-generated load.g/unload.g).
-;   material.g         - density, usual spool size and empty-spool weight (consumption
-;                        tracking, spool prompts). Written by create_material_config.g.
+;   material.g         - density and the usual spool sizes (consumption tracking, spool
+;                        prompts). Written by filament-profile/create-material-file.g.
 ;   config-override.g  - material parameters that do NOT depend on the nozzle (M143 ...)
 ;   nozzle-<key>.g     - parameters of the installed filament diameter and nozzle
-;                        (<key> = "2.85-0.40", calibration_key.g): max volumetric flow rate,
+;                        (<key> = "2.85-0.40", filament-profile/calibration-key.g): max volumetric flow rate,
 ;                        pressure advance, firmware retraction, heater feedforward.
 ;                        Selected automatically by the generated config.g through
 ;                        global.nozzle_diameter of the current tool.
-;   config.g/load.g/unload.g - machine-owned, written by regenerate_filament_config.g
+;   config.g/load.g/unload.g - machine-owned, written by filament-profile/regenerate.g
 ; A profile describes one MATERIAL, not one material/nozzle combination. Running it again
 ; for a profile that already exists adds the parameter set of the currently installed
 ; hardware (macros set-nozzle-diameter / set-filament-diameter), so one PLA profile can
 ; serve 0.4, 0.6 and 0.8 mm nozzles and both filament diameters.
-; The nozzle half of that is create_nozzle_config.g, shared with the filament-load path:
+; The nozzle half of that is filament-profile/create-nozzle-file.g, shared with the filament-load path:
 ; selecting a profile whose nozzle values are missing offers the same questions there.
 ; For profiles that are broken rather than incomplete (e.g. created in DWC) use macro
 ; repair-filament-profile.
 
 var tool = state.currentTool >= 0 ? state.currentTool : 0
-; "<filament>-<nozzle>" key of the installed hardware (calibration_key.g returns it in
+; "<filament>-<nozzle>" key of the installed hardware (filament-profile/calibration-key.g returns it in
 ; global.result - read it straight away); the raw floats must never build a file name
-M98 P"0:/sys/meltingplot/calibration_key.g" T{var.tool}
+M98 P"0:/sys/meltingplot/filament-profile/calibration-key.g" T{var.tool}
 var nozzle = global.result
 
 M291 R"New filament profile" P"Name of the filament profile (becomes the directory name under /filaments):" S7 L1 H40 J2
@@ -43,12 +43,12 @@ if fileexists(var.dir ^ "temps.g") || fileexists(var.dir ^ "config-override.g") 
     M291 R"New filament profile" P{"Profile '" ^ var.name ^ "' exists but is incomplete - run macro repair-filament-profile first."} S1 T0
     M99
   ; through the same fallback chain the profile is loaded with, so an older nozzle-only
-  ; file counts on a 2.85 mm tool (find_calibration_file.g returns the path in global.result)
-  M98 P"0:/sys/meltingplot/find_calibration_file.g" S{var.name} F"nozzle" T{var.tool}
+  ; file counts on a 2.85 mm tool (filament-profile/find-calibration-file.g returns the path in global.result)
+  M98 P"0:/sys/meltingplot/filament-profile/find-calibration-file.g" S{var.name} F"nozzle" T{var.tool}
   if global.result != ""
     M291 R"New filament profile" P{"Profile '" ^ var.name ^ "' already has values for filament/nozzle " ^ var.nozzle ^ " mm - edit them in DWC."} S1 T0
     M99
-  ; the profile exists and only lacks this nozzle - create_nozzle_config.g below asks
+  ; the profile exists and only lacks this nozzle - filament-profile/create-nozzle-file.g below asks
   ; whether to add it ("Not now" is the way out), so no second confirmation here
   set var.addNozzleOnly = true
 
@@ -74,7 +74,7 @@ if !var.addNozzleOnly
     M99
   set var.unload = input
 
-  echo >{var.dir ^ "temps.g"} "; " ^ var.name ^ " - temperatures (user-editable, used by filament_load.g/filament_unload.g)"
+  echo >{var.dir ^ "temps.g"} "; " ^ var.name ^ " - temperatures (user-editable, used by filament/on-load.g and on-unload.g)"
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_active = " ^ var.active
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_standby = " ^ var.standby
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_unload = " ^ var.unload
@@ -93,26 +93,26 @@ if !var.addNozzleOnly
   echo >>{var.dir ^ "config-override.g"} "; nozzle-specific values (flow rate, M572, M207, M309) live in nozzle-<diameter>.g"
   echo >>{var.dir ^ "config-override.g"} "M143 H1 S" ^ var.maxtemp ^ "     ; hotend temperature limit for this material"
 
-; --- material data (material.g): density, usual spool size, empty-spool weight ---
-; shared with the filament-load path (confirm_spool_size.g) and with macro
+; --- material data (material.g): density, usual spool sizes ---
+; shared with the filament-load path (spool/confirm.g) and with macro
 ; repair-filament-profile; returns without asking when the file already exists.
 if !var.addNozzleOnly
-  M98 P"0:/sys/meltingplot/create_material_config.g" S{var.name}
+  M98 P"0:/sys/meltingplot/filament-profile/create-material-file.g" S{var.name}
 
 ; --- nozzle-specific parameters (nozzle-<diameter>.g) ---
-; shared with the filament-load path (confirm_nozzle_diameter.g) and with macro
-; set-nozzle-diameter: create_nozzle_config.g asks whether to enter the values or write
+; shared with the filament-load path (hardware/confirm-nozzle-diameter.g) and with macro
+; set-nozzle-diameter: filament-profile/create-nozzle-file.g asks whether to enter the values or write
 ; defaults and writes the file, so every way of adding a nozzle to a profile asks the
 ; same questions and produces the same file.
 ; It hands the outcome back in global.result - read it straight away
-M98 P"0:/sys/meltingplot/create_nozzle_config.g" S{var.name} T{var.tool}
+M98 P"0:/sys/meltingplot/filament-profile/create-nozzle-file.g" S{var.name} T{var.tool}
 var nozzleWritten = (global.result == 0)
 
 ; write the machine-owned config.g/load.g/unload.g
-M98 P"0:/sys/meltingplot/regenerate_filament_config.g" S{var.name}
+M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
 
 if var.nozzleWritten
-  M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for filament/nozzle " ^ var.nozzle ^ " mm. Load it via DWC (Filaments), then run calibrate_e_steps / calibrate_pa."} S1 T0
+  M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for filament/nozzle " ^ var.nozzle ^ " mm. Load it via DWC (Filaments), then run the calibration macros e-steps and pressure-advance."} S1 T0
 else
   M291 R"New filament profile" P{"'" ^ var.name ^ "' has no values for filament/nozzle " ^ var.nozzle ^ " mm yet - run this macro again to add them."} S1 T0
 M400 ; sbc specific

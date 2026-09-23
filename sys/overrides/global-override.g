@@ -1,11 +1,11 @@
 ; Machine specific variant configuration.
-; Loaded at the end of sys/meltingplot/globals, i.e. before any hardware is configured
+; Loaded at the end of sys/meltingplot/globals.g, i.e. before any hardware is configured
 ; in config.g. It lives in sys/overrides/, the directory a config update never
 ; overwrites (DWC config plugin and image alike), so local changes survive.
 ;
 ; Rules:
 ;   - assignments only: set global.<name> = <value>
-;   - the variable must already be declared in sys/meltingplot/globals; declaring a new
+;   - the variable must already be declared in sys/meltingplot/globals.g; declaring a new
 ;     one here would fail on the second boot ("global already exists")
 ;   - values only. Anything that needs G-code (M569 drive directions, M591 filament
 ;     monitor, M307 heater models, ...) belongs in machine-override, not here.
