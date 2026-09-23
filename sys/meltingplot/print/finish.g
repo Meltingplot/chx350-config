@@ -37,12 +37,12 @@ if global.has_aux_fan
 if global.has_exhaust_fan
   M106 P3 S0                                              ; turn off exhaust / chamber fan
 
-; Book the extrusion since the daemon's last 60 s sample onto the spool, persist it
-; (spool<tool>.g) and disarm the tracker - only the first call after print/prepare.g armed
-; it books anything, so this file may run repeatedly after a job. Meta and file writes
-; only - position-neutral, but kept in front of the settle with everything else that is
-; not part of the flag-clear tail.
-M98 P"0:/sys/meltingplot/spool/track.g" W1
+; Book the extrusion since the daemon's last 60 s sample onto the spool, write it
+; (spool<tool>.g) and report what is left - once per job: this file runs twice at a
+; normal job end (end G-code, then stop.g), the second call books nothing new and stays
+; quiet (spool/track.g J1). Meta and file writes only - position-neutral, but kept in
+; front of the settle with everything else that is not part of the flag-clear tail.
+M98 P"0:/sys/meltingplot/spool/track.g" J1
 
 ; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
 ; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.

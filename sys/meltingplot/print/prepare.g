@@ -20,21 +20,14 @@ if state.status == "simulating"
     M2
   M99
 
-; Arm the spool consumption tracker for this job (spool/track.g): start.g runs this
-; exactly once per job start, and RRF zeroed move.extruders[].rawPosition with the job,
-; so the baseline starts at 0. print/finish.g's flush disarms it - the bracket that keeps a
-; repeated print/finish.g from booking the job twice.
-set global.spool_track_baseline = vector(2, 0.0)
-set global.spool_track_active = true
-
 ; Low-spool warning per tool from the slicer's filament estimate in the file header
 ; (job.file.filament[i] = slicer extruder i = tool i), converted to grams with that
 ; tool's filament diameter and the density recorded on its spool. One message for all
 ; tools - a second non-blocking M291 would replace the first. Warns only - never blocks,
 ; this runs unattended in automatic mode; the operator decides.
 ; Copy/mirror mode: the slicer lists one extruder that both tools extrude, so only tool
-; 0 is checked here; the consumption tracker still books both spools (rawPosition
-; counts per drive).
+; 0 is checked here; the consumption tracker still books both spools (it reads the
+; position of each extruder drive).
 var low = ""
 var need = 0.0
 while iterations < min(#job.file.filament, 2)

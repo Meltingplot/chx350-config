@@ -4,8 +4,9 @@
 ; on every boot (the spool stays on the machine across a power cycle). Writes the file
 ; from the globals, so every caller sets the globals first and then calls this:
 ;   M98 P"0:/sys/meltingplot/spool/store.g" T0
-; Callers: spool/confirm.g (operator entered a spool) and spool/track.g W1 (flush at
-; print end). Never call it from daemon.g - the daemon must not write files.
+; Callers: spool/confirm.g (operator entered a spool) and spool/track.g W1/J1 - daemon.g
+; while not printing (at most once a minute) and print/finish.g at the job end. An echo
+; into a file never waits for motion, which is what lets daemon.g write it.
 ; The file is machine-local state: written on the machine, never shipped with the repo,
 ; and a config update must not overwrite it.
 

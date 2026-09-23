@@ -166,7 +166,9 @@ global motion_axis_time = vector(4,0.0)
 global motion_extruder_pos = vector(2,0)
 global motion_extruder_time = vector(2,0.0)
 ; per-axis / per-extruder delta of the last observed move (0 = standstill). Written by
-; the daemon only - exported for diagnostics, not read back by it. A flip has no effect.
+; the daemon only. The axis deltas are diagnostics; an extruder delta that is not 0 once
+; its window has expired is the daemon's "extruder stopped" edge, which books the spool
+; (read coerced, so it cannot throw) - a flip causes at most one extra booking.
 global motion_axis_delta = vector(4,0)
 global motion_extruder_delta = vector(2,0)
 
@@ -301,18 +303,18 @@ global spool_catalog = {"Pappe",500,"PC",350,"PE",450}
 ; by spool/store.g (the spool stays on the machine across a power cycle). Asked at the
 ; feed prompt of every filament load (spool/confirm.g, cancelling keeps the values)
 ; and by macro set-spool-size.
-; Consumption: spool/track.g books the print's slicer-commanded extrusion
-; (move.extruders[].rawPosition - reset by RRF at every print start, unaffected by G92,
-; not counting macro extrusion such as purges, NET of G1 retractions so it can run
-; backwards by a few mm) onto spool_remaining, scaled by the M221 extrusion factor:
-; grams = mm * pi * (d/2)^2 * density / 1000, signed deltas. daemon.g calls it every
-; 60 s while printing (no file write), print/finish.g flushes it and persists (W1). The job
-; is bracketed by the firmware hooks, never guessed from the counter or a file name:
-; print/prepare.g arms spool_track_active and zeroes the baseline (RRF zeroed rawPosition
-; with the job), the W1 flush books, persists and disarms - so print/finish.g may run any
-; number of times after a job, every call but the first is a no-op. A spool with density
-; 0 is not tracked. spool_track_baseline is the last booked rawPosition per tool,
-; spool_track_time the daemon's sample timestamp - all session state, not persisted.
+; Consumption: spool/track.g books everything the extruder motor fed
+; (move.extruders[].position - print moves, retractions and all macro and manual
+; extrusion, M221 applied, untouched by G92, zeroed by RRF at every job start) onto
+; spool_remaining: grams = mm * pi * (d/2)^2 * density / 1000, signed deltas. daemon.g
+; calls it every 60 s while printing and at every extruder stop otherwise, and writes
+; spool<tool>.g while not printing at most once a minute; print/finish.g books, writes
+; and reports at the job end. start.g re-bases the baseline on RRF's job-start zero and
+; arms spool_report_pending, which the first print/finish.g flush of the job clears -
+; print/finish.g runs twice at a normal job end (end G-code, stop.g), the remaining
+; weight is reported once. A spool with density 0 is not tracked. spool_track_baseline
+; is the last booked position per tool, spool_track_time the daemon's sample timestamp
+; while printing - session state, not persisted.
 global spool_net_weight = vector(2, 0)
 global spool_remaining = vector(2, 0.0)
 global spool_tare = vector(2, 0)
@@ -323,7 +325,7 @@ if fileexists("0:/sys/generated/spool1.g")
   M98 P"0:/sys/generated/spool1.g"
 global spool_track_baseline = vector(2, 0.0)
 global spool_track_time = 0
-global spool_track_active = false        ; armed by print/prepare.g (job started, baseline 0), disarmed by the print/finish.g flush - the bracket that makes print/finish.g idempotent
+global spool_report_pending = false      ; armed by start.g, cleared by the first print/finish.g flush of the job - reports what is left once
 
 ; --- build plate --------------------------------------------------------------
 ; surface of the installed build plate. A key string, one of: "pei" (smooth PEI),

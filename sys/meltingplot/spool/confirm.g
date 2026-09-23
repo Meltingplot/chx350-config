@@ -164,10 +164,10 @@ set global.spool_net_weight[var.tool] = var.grams
 set global.spool_remaining[var.tool] = var.remaining
 set global.spool_tare[var.tool] = var.tare
 set global.spool_density[var.tool] = var.density
-; the tracker books from here on: a spool entered mid-print (paused filament change)
-; must not be charged with what the print extruded before it went on
+; the tracker books from here on: the entered weight already reflects everything
+; extruded before (a paused filament change, the purge of the load that asked this)
 if tools[var.tool] != null
-  set global.spool_track_baseline[var.tool] = move.extruders[tools[var.tool].extruders[0]].rawPosition
+  set global.spool_track_baseline[var.tool] = move.extruders[tools[var.tool].extruders[0]].position
 
 M98 P"0:/sys/meltingplot/spool/store.g" T{var.tool}
 

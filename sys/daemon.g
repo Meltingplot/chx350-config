@@ -27,6 +27,11 @@ var right_checked = (("" ^ global.door_right_switch_checked) == "1431655765") ? 
 ; Initializing from the OM makes a boot with restored filament produce no change event.
 var fil_prev = move.extruders[0].filament
 var fil_watch_until = 0
+; spool tracker outside a print: upTime at which to book the extrusion that just stopped
+; (0 = nothing pending) and when this loop last wrote spool<tool>.g - see the spool block
+; at the end of the loop
+var spool_next = 0
+var spool_saved_at = 0
 
 while state.status != "halted" && global.daemon_reload == false
   set var.now = state.upTime + state.msUpTime/1000
@@ -68,8 +73,12 @@ while state.status != "halted" && global.daemon_reload == false
       if global.motion_extruder_time[iterations] > var.now + 1
         M118 P0 S{"Warning: motion timestamp of extruder " ^ iterations ^ " corrupted (" ^ global.motion_extruder_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
         set global.motion_extruder_time[iterations] = var.now
-    else
+    elif ("" ^ global.motion_extruder_delta[iterations]) != "0"
+      ; first iteration after the extruder's window: it stopped - the spool block at the
+      ; end of the loop books the burst (spool/track.g is numeric, it stays behind the
+      ; interlock). Coerced, so a corrupted delta cannot throw here.
       set global.motion_extruder_delta[iterations] = 0
+      set var.spool_next = var.now
 
   ; Door states: 0x55555555 open, 0xAAAAAAAA closed. "closed" is only ever an exact
   ; match, anything else reads as open. They persist between iterations, so a value that
@@ -304,10 +313,9 @@ while state.status != "halted" && global.daemon_reload == false
     set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
 
   if state.status == "processing" && job.file.fileName != null
-    ; --- spool consumption: book the print's raw extrusion onto the spool every 60 s ---
-    ; non-blocking (OM reads and set only, no file write - print/finish.g persists with W1).
-    ; Only while print/prepare.g armed it (short-circuit: the flag is read once a minute)
-    if (var.now - global.spool_track_time) >= 60 && global.spool_track_active
+    ; --- spool consumption: book the print's extrusion onto the spool every 60 s ---
+    ; non-blocking (OM reads and set only, no file write - print/finish.g writes at the end)
+    if (var.now - global.spool_track_time) >= 60
       set global.spool_track_time = var.now
       M98 P"0:/sys/meltingplot/spool/track.g"
     if global.mfm_suppress_until > 0 && var.now >= global.mfm_suppress_until
@@ -413,11 +421,26 @@ while state.status != "halted" && global.daemon_reload == false
       M220 S100
       set global.mfm_backoff_level = 3
       set global.mfm_backoff_time = var.now
-  elif global.mfm_backoff_level < 3
-    ; not printing — restore full speed immediately, ready for the next job
-    M220 S100
-    set global.mfm_backoff_level = 3
-    set global.mfm_backoff_time = var.now
+  else
+    if global.mfm_backoff_level < 3
+      ; not printing — restore full speed immediately, ready for the next job
+      M220 S100
+      set global.mfm_backoff_level = 3
+      set global.mfm_backoff_time = var.now
+    ; --- spool consumption outside a print: load, unload, purges, calibrations, manual ---
+    ; extrusion. Booked when the extruder stops (flagged by the motion tracker), so a job
+    ; start - RRF zeroes the extruder position - finds everything booked; spool<tool>.g is
+    ; written at most once a minute, so a power cycle loses at most the last minute. The
+    ; write is an echo into a file, it never waits for motion. One access per iteration.
+    if var.spool_next != 0
+      if var.now >= var.spool_next
+        if (var.now - var.spool_saved_at) >= 60
+          M98 P"0:/sys/meltingplot/spool/track.g" W1
+          set var.spool_saved_at = var.now
+          set var.spool_next = 0
+        else
+          M98 P"0:/sys/meltingplot/spool/track.g"
+          set var.spool_next = var.spool_saved_at + 60
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100
