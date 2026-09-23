@@ -45,6 +45,16 @@ M17 E0               ; activate tool board motor! bug in 3.6.1
 
 G1 E16 F120          ; extrude 12mm
 G4 S5                ; wait 5 seconds for filament to soften
+
+; Spool tracker: the retraction below books nothing. Most of it is filament that was
+; never booked - fed by hand through the tube; the motor only fed the ~65 mm from the
+; gear to the nozzle, and their molten end is cut off - so crediting it back would
+; overstate the spool by 1-2 g per unload. Instead of a re-base at the end, the baseline
+; is shifted by the retracted distance: whatever daemon.g books in between (it books at
+; every extruder stop) is cancelled by the shift, in either order. G4 above has waited
+; for the extrusion, so the position is settled.
+var e = tools[state.currentTool].extruders[0]
+var retract_from = move.extruders[var.e].position
 G1 E-20 F300         ; retract 10mm @ 5mm/sec
 G4 S5                ; wait 5 second for filament to harden
 G1 E-100 F120        ; retract 100mm @ 2mm/sec
@@ -56,6 +66,8 @@ M291 P"Is the filament free? Press OK if yes, No to retract another 100mm." R"Fi
 if input != 0
   G1 E-100 F300        ; additional retract 100mm if filament is not free
   M400
+set global.spool_track_baseline[state.currentTool] = global.spool_track_baseline[state.currentTool] + move.extruders[var.e].position - var.retract_from
+M98 P"0:/sys/meltingplot/spool/track.g" W1   ; settle the booking and write it now
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 M568 P{state.currentTool} A0 ; disable hotend
 ; tell the daemon.g watchdog that a physical unload actually ran - checked on the

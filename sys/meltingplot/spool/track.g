@@ -8,9 +8,10 @@
 ; rawPosition, the earlier source, counts none of the macro extrusion (GCodes.cpp: only
 ; moves with !IsDoingFileMacro()) and nothing outside a job would have been booked.
 ;   grams = mm * pi * (filament_diameter / 2)^2 * density / 1000
-; Booked with its sign: an unload pulls filament back towards the spool and books it
-; back (capped at the spool's net weight), a sample taken mid-retraction is corrected by
-; the next one.
+; Booked with its sign, so a retraction is netted against its un-retract and a sample
+; taken mid-retraction is corrected by the next one. The long retraction of an unload is
+; excluded: filament/unload-procedure.g shifts the baseline by it - it pulls back filament
+; that was never booked (hand-fed through the tube). A credit is capped at the net weight.
 ; RRF zeroes the position at every job start (GCodes.cpp StartPrinting, right before
 ; start.g) - that jump is not a retraction. start.g re-bases the baseline to 0 before
 ; anything extrudes; a jump to exactly 0 is also taken as that reset here (re-based, not
