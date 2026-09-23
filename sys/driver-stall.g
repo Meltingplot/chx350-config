@@ -10,7 +10,7 @@ if param.B == 0 && param.D < 4
     set global.z_motor_stalled[param.D] = 0x55555555
 
     if global.z_motor_stall_deadline == 0
-      ; daemon.g halts on a deadline more than 30 s ahead, so a max outside 1..30 cannot
+      ; trigger5.g halts on a deadline more than 30 s ahead, so a max outside 1..30 cannot
       ; be armed - it is either corrupted or misconfigured; arm the default instead
       if global.z_motor_stall_time_max >= 1 && global.z_motor_stall_time_max <= 30
         set global.z_motor_stall_deadline = state.upTime + global.z_motor_stall_time_max
