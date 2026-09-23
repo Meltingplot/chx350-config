@@ -108,7 +108,7 @@ M98 P"0:/sys/meltingplot/migrate.g"
 ; neither pattern - the door states, the switch_checked flags, and machine_mode holding
 ; neither of its two strings - because nothing but the daemon or the two operating-mode
 ; scripts ever writes them: such a value means RAM, or an operator, is not to be trusted.
-; potential_unsafe_state and machine_is_hot are recomputed from scratch every iteration
+; potential_unsafe_state and machine_is_hot are recomputed by every daemon iteration
 ; and need no persistence check. Numeric values cannot be pattern-encoded (they are
 ; compared with < and >); they are bounded by plausibility instead, see each of them.
 ; In DWC the flags show as 1431655765 (true) and 2863311530 (false).
@@ -149,7 +149,10 @@ global door_right_state_transition = false
 ; --- unsafe-state detection (daemon motion tracker) ---------------------------
 ; potential_unsafe_state is true while anything moved within the last 0.25 s. It is what
 ; makes a mode downgrade with motion in progress an emergency stop, so it is recomputed
-; from scratch at the top of every daemon iteration and must never be latched elsewhere.
+; from scratch by every daemon iteration and must never be latched elsewhere. The daemon
+; collects the verdict in a local and writes the global once, after the tracker loops:
+; trigger4.g reads it concurrently, and a reset of the global at the top of the loop read
+; "safe" during motion until the loop reached the moving axis.
 ; It flags any EXACT change of a reported position, physical motion or not: M92, G92,
 ; G10 L2/L20, T, M290, G29/M375 and M579 perturb these values by a rounding epsilon and
 ; therefore count as motion (CLAUDE.md, "the mode-downgrade window").

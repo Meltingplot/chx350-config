@@ -13,6 +13,11 @@
 ; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
 ; that follow (idle cutoff, Z watchdog, filament, MFM) can, and then only they are lost.
 var now = 0
+; the tracker's verdict for this iteration, published to global.potential_unsafe_state
+; once, after both loops. trigger4.g reads the global concurrently: resetting the global
+; itself at the top of the tracker showed "safe" during motion until the loop reached
+; the moving axis or extruder - a door opened in that gap skipped the M112.
+var unsafe = 0x55555555
 ; Daemon-private switch_checked mirror — globals are exposed via DWC and can be set by
 ; hand to fake automatic mode; script-vars cannot. The mirror holds the rendered pattern
 ; ("1431655765" checked, "2863311530" not) and is flipped to checked ONLY on a real
@@ -48,15 +53,15 @@ while state.status != "halted" && global.daemon_reload == false
   ; in the PAST - never in the future, so a stored timestamp can appear up to 1 s ahead
   ; with nothing corrupted. Only beyond that is it a bit flip; re-dating on the read tear
   ; instead threw away a valid motion timestamp and cried corruption (seen 2026-09-18).
-  set global.potential_unsafe_state = 0xAAAAAAAA
+  set var.unsafe = 0xAAAAAAAA
   while iterations < #move.axes
     if global.motion_axis_pos[iterations] != move.axes[iterations].machinePosition
       set global.motion_axis_delta[iterations] = global.motion_axis_pos[iterations] - move.axes[iterations].machinePosition
       set global.motion_axis_pos[iterations] = move.axes[iterations].machinePosition
       set global.motion_axis_time[iterations] = var.now
-      set global.potential_unsafe_state = 0x55555555
+      set var.unsafe = 0x55555555
     elif (var.now - global.motion_axis_time[iterations]) < 0.25
-      set global.potential_unsafe_state = 0x55555555
+      set var.unsafe = 0x55555555
       if global.motion_axis_time[iterations] > var.now + 1
         M118 P0 S{"Warning: motion timestamp of axis " ^ iterations ^ " corrupted (" ^ global.motion_axis_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
         set global.motion_axis_time[iterations] = var.now
@@ -67,9 +72,9 @@ while state.status != "halted" && global.daemon_reload == false
       set global.motion_extruder_delta[iterations] = global.motion_extruder_pos[iterations] - move.extruders[iterations].position
       set global.motion_extruder_pos[iterations] = move.extruders[iterations].position
       set global.motion_extruder_time[iterations] = var.now
-      set global.potential_unsafe_state = 0x55555555
+      set var.unsafe = 0x55555555
     elif (var.now - global.motion_extruder_time[iterations]) < 0.25
-      set global.potential_unsafe_state = 0x55555555
+      set var.unsafe = 0x55555555
       if global.motion_extruder_time[iterations] > var.now + 1
         M118 P0 S{"Warning: motion timestamp of extruder " ^ iterations ^ " corrupted (" ^ global.motion_extruder_time[iterations] ^ " > " ^ var.now ^ ") - re-dated"}
         set global.motion_extruder_time[iterations] = var.now
@@ -79,6 +84,7 @@ while state.status != "halted" && global.daemon_reload == false
       ; interlock). Coerced, so a corrupted delta cannot throw here.
       set global.motion_extruder_delta[iterations] = 0
       set var.spool_next = var.now
+  set global.potential_unsafe_state = var.unsafe
 
   ; Door states: 0x55555555 open, 0xAAAAAAAA closed. "closed" is only ever an exact
   ; match, anything else reads as open. They persist between iterations, so a value that
