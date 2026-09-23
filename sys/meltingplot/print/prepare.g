@@ -81,7 +81,7 @@ M400 ; dsf specific
 G4 P500 ; dsf specific - wait for the keepout zone to remove
 
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false            ; check if u is homed
-  M98 P"0:/macros/meltingplot/calibration/align-z-axis"
+  M98 P"0:/sys/meltingplot/z-axis/align-motors.g" ; doors and automatic mode are checked above - the calibration/align-z-axis macro refuses inside a job
   G90 G1 Z50
   G4 S30 ; wait 30 s for heat to warmup the printhead / chamber temp sensor
   G28 ; G32 is part of homez.g
