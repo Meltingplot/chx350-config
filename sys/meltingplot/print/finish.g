@@ -37,7 +37,7 @@ if global.has_aux_fan
 if global.has_exhaust_fan
   M106 P3 S0                                              ; turn off exhaust / chamber fan
 
-; Book the extrusion since trigger8.g's last 60 s booking onto the spool, write it
+; Book the extrusion since the daemon's last 60 s sample onto the spool, write it
 ; (spool<tool>.g) and report what is left - once per job: this file runs twice at a
 ; normal job end (end G-code, then stop.g), the second call books nothing new and stays
 ; quiet (spool/track.g J1). Meta and file writes only - position-neutral, but kept in

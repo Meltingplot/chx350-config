@@ -19,14 +19,12 @@
 ; not run start.g. The one misread - a real move that ends on exactly 0.000 mm - drops
 ; that move, well under a gram.
 ; The baseline is advanced before the booking, so two calls running at the same time
-; (trigger8.g or daemon.g and print/finish.g) can double-book only between two
-; consecutive lines.
+; (daemon.g and print/finish.g) can double-book only between two consecutive lines.
 ; A tool whose spool has density 0 (no material.g, nothing entered) is skipped but its
 ; baseline still follows, so entering a density later never books history.
 ;   M98 P"0:/sys/meltingplot/spool/track.g"     - book only: OM reads and set, no file
-;                                                 write (trigger8.g: every 60 s while
-;                                                 printing; daemon.g: at every extruder
-;                                                 stop otherwise)
+;                                                 write (daemon.g: every 60 s while
+;                                                 printing, at every extruder stop otherwise)
 ;   M98 P"0:/sys/meltingplot/spool/track.g" W1  - book and write spool<tool>.g (daemon.g
 ;                                                 while not printing, at most once a minute)
 ;   M98 P"0:/sys/meltingplot/spool/track.g" J1  - job end (print/finish.g): book, write,

@@ -11,9 +11,7 @@
 ; stays zero and a disagreement warns and stays restrictive instead of halting.
 ; Block order is deliberate: the interlock decision (tracker -> doors -> mirror -> hot ->
 ; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
-; that follow (idle cutoff, filament, MFM) can, and then only they are lost.
-; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5-T8): the
-; Z stall watchdog, the MFM speed restore and suppression expiry, the 60 s spool booking.
+; that follow (idle cutoff, Z watchdog, filament, MFM) can, and then only they are lost.
 var now = 0
 ; the tracker's verdict for this iteration, published to global.potential_unsafe_state
 ; once, after both loops. trigger4.g reads the global concurrently: resetting the global
@@ -299,6 +297,20 @@ while state.status != "halted" && global.daemon_reload == false
       set global.filament_unload_skip = true
       M702
 
+  ; Z stall watchdog. 0 = disarmed (one access per iteration). Armed, the deadline must
+  ; lie within [upTime, upTime + 30] - driver-stall.g arms it at most 30 s ahead. Expired
+  ; (this includes a negative value) = the four Z motors did not all report; further
+  ; ahead = the variable changed without driver-stall.g writing it. Both halt.
+  if global.z_motor_stall_deadline != 0
+    if state.upTime > global.z_motor_stall_deadline
+      echo "Error: failed to home all z-motors within " ^ global.z_motor_stall_time_max ^ "s (deadline " ^ global.z_motor_stall_deadline ^ ") - abort!"
+      M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow" E1
+      M112
+    elif global.z_motor_stall_deadline > state.upTime + 30
+      echo "Error: Z stall watchdog deadline corrupted (" ^ global.z_motor_stall_deadline ^ ", upTime " ^ state.upTime ^ ") - machine halt!"
+      M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow" E1
+      M112
+
   ; melt-zone peak for resume.g's re-prime: highest extruder position reached by manual
   ; moves while paused (purge beyond it leaves the nozzle, retraction after it is the
   ; real deficit). Only in "paused" - during "pausing" the MFM recovery's own purge runs,
@@ -306,9 +318,18 @@ while state.status != "halted" && global.daemon_reload == false
   if state.status == "paused" && global.pause_extruder != -1
     set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
 
-  ; while printing: the MFM blocks below. The 60 s spool booking, the MFM suppression
-  ; expiry and the MFM speed restore run as expression triggers (trigger6-8.g).
   if state.status == "processing" && job.file.fileName != null
+    ; --- spool consumption: book the print's extrusion onto the spool every 60 s ---
+    ; non-blocking (OM reads and set only, no file write - print/finish.g writes at the end)
+    if (var.now - global.spool_track_time) >= 60
+      set global.spool_track_time = var.now
+      M98 P"0:/sys/meltingplot/spool/track.g"
+    if global.mfm_suppress_until > 0 && var.now >= global.mfm_suppress_until
+      set global.mfm_suppress_until = 0
+      set global.mfm_ignore_events = false
+      set global.mfm_prev_percentage = null
+      if global.debug
+        echo "MFM: suppression period ended, monitoring resumed"
     ; --- Systematic flow-bias (e-steps) detection — WARN ONLY, never apply from the daemon ---
     ; avgPercentage is the toolboard's whole-print integral (only restarts when the monitor goes
     ; idle on pause/stop), so it is robust to a momentary awkward section (many short moves the MFM
@@ -358,7 +379,7 @@ while state.status != "halted" && global.daemon_reload == false
       if var.pct != null && var.pct != global.mfm_prev_percentage
         if global.mfm_backoff_level < 3 && var.pct > 80 && var.pct < 150
           ; reading recovered on its own → restore full speed early (the unconditional
-          ; time-based restore in trigger6.g is the fallback that breaks the reduced-speed deadlock)
+          ; time-based restore below is the fallback that breaks the reduced-speed deadlock)
           if global.debug
             echo "MFM: reading normal (" ^ {var.pct} ^ "%) — fast-track speed restore"
           M220 S100
@@ -398,20 +419,34 @@ while state.status != "halted" && global.daemon_reload == false
               M220 S100
               set global.mfm_backoff_level = 3
         set global.mfm_prev_percentage = var.pct
-  elif var.spool_next != 0
+    ; Unconditional time-based speed restore (replaces the reading-gated stepped ramp). Reduced
+    ; speed itself depresses the MFM reading, so waiting for the reading to recover deadlocks the
+    ; restore — jump straight back to 100% a fixed time after the last backoff, regardless of the
+    ; (depressed) reading. Runs every cycle, independent of the 0.5s sampling gate.
+    if global.mfm_backoff_level < 3 && (var.now - global.mfm_backoff_time) >= 30
+      M220 S100
+      set global.mfm_backoff_level = 3
+      set global.mfm_backoff_time = var.now
+  else
+    if global.mfm_backoff_level < 3
+      ; not printing — restore full speed immediately, ready for the next job
+      M220 S100
+      set global.mfm_backoff_level = 3
+      set global.mfm_backoff_time = var.now
     ; --- spool consumption outside a print: load, unload, purges, calibrations, manual ---
     ; extrusion. Booked when the extruder stops (flagged by the motion tracker), so a job
     ; start - RRF zeroes the extruder position - finds everything booked; spool<tool>.g is
     ; written at most once a minute, so a power cycle loses at most the last minute. The
     ; write is an echo into a file, it never waits for motion. One access per iteration.
-    if var.now >= var.spool_next
-      if (var.now - var.spool_saved_at) >= 60
-        M98 P"0:/sys/meltingplot/spool/track.g" W1
-        set var.spool_saved_at = var.now
-        set var.spool_next = 0
-      else
-        M98 P"0:/sys/meltingplot/spool/track.g"
-        set var.spool_next = var.spool_saved_at + 60
+    if var.spool_next != 0
+      if var.now >= var.spool_next
+        if (var.now - var.spool_saved_at) >= 60
+          M98 P"0:/sys/meltingplot/spool/track.g" W1
+          set var.spool_saved_at = var.now
+          set var.spool_next = 0
+        else
+          M98 P"0:/sys/meltingplot/spool/track.g"
+          set var.spool_next = var.spool_saved_at + 60
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100

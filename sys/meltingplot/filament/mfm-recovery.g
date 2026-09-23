@@ -50,11 +50,11 @@ elif var.avg > 50 && var.last > 50
   echo "MFM: auto-recovery OK (avg " ^ var.avg ^ "%, last " ^ var.last ^ "%) — false positive"
   set global.result = 0
   ; Short suppress window to ride out the resume transient / same off-the-wheel
-  ; readings. Both gates (suppress_until AND firmware mfm_ignore_events) are
+  ; readings. Both gates (daemon suppress_until AND firmware mfm_ignore_events) are
   ; armed together below so the firmware P=4/P=5 path can't immediately re-pause.
   ; The timestamp set here is only a placeholder: the retract, nozzle clean and the
   ; reheat in resume.g outlast the window, so resume.g re-bases it to the actual
-  ; restart of the print (trigger7.g only ends it while "processing").
+  ; restart of the print (the daemon only evaluates it while "processing").
   set global.mfm_suppress_until = state.upTime + 30
   M220 S100
   set global.mfm_backoff_level = 3
@@ -81,8 +81,8 @@ M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 M98 P"0:/sys/overrides/machine-override"
 ; On a false positive (result 0) keep events suppressed for the suppress window
 ; set above — otherwise the same off-the-wheel readings re-trigger filament-error.g
-; immediately and loop back into recovery. trigger7.g clears both mfm_ignore_events
-; and mfm_suppress_until when the window expires. On a real issue
+; immediately and loop back into recovery. The daemon clears both mfm_ignore_events
+; and mfm_suppress_until when the window expires (daemon.g). On a real issue
 ; (result != 0) we stay paused, so re-enable events for the operator resume.
 if var.recovery_result == 0
   set global.mfm_ignore_events = true

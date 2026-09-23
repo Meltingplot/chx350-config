@@ -206,12 +206,11 @@ global saved_tool_heater_states = vector(2, "off")       ; per-tool heater state
 ; --- stall and driver watchdog ------------------------------------------------
 ; Z homing runs the four Z motors into their stops; driver-stall.g counts the stalls and
 ; arms z_motor_stall_deadline. If not all four report within
-; z_motor_stall_time_max seconds, trigger5.g (expression trigger T5, config.g) halts the
-; machine with M112 - a Z motor that keeps driving against its stop breaks the bed's
-; joints. A process function, not CE.
+; z_motor_stall_time_max seconds, daemon.g halts the machine with M112 - a Z axis that
+; keeps driving against a jammed leadscrew destroys the gantry.
 ; z_motor_stall_deadline is numeric: armed, it must lie within [upTime, upTime + 30] - past
 ; means the motors did not report, further ahead means it changed without driver-stall.g
-; writing it; trigger5.g halts on both. z_motor_stall_time_max is accepted in 1..30 by
+; writing it; daemon.g halts on both. z_motor_stall_time_max is accepted in 1..30 by
 ; driver-stall.g, anything else arms 5 s with a warning.
 global z_motor_stalled = vector(4, 0xAAAAAAAA)       ; per Z motor: 0x55555555 stalled (permissive: counts towards "all reported"), 0xAAAAAAAA not
 global z_motor_stall_deadline = 0                    ; state.upTime deadline (0 = no homing in progress)
@@ -310,15 +309,15 @@ global spool_catalog = {"Pappe",500,"PC",350,"PE",450}
 ; Consumption: spool/track.g books everything the extruder motor fed
 ; (move.extruders[].position - print moves, retractions and all macro and manual
 ; extrusion, M221 applied, untouched by G92, zeroed by RRF at every job start) onto
-; spool_remaining: grams = mm * pi * (d/2)^2 * density / 1000, signed deltas. trigger8.g
-; calls it every 60 s while printing, daemon.g at every extruder stop otherwise and writes
+; spool_remaining: grams = mm * pi * (d/2)^2 * density / 1000, signed deltas. daemon.g
+; calls it every 60 s while printing and at every extruder stop otherwise, and writes
 ; spool<tool>.g while not printing at most once a minute; print/finish.g books, writes
 ; and reports at the job end. start.g re-bases the baseline on RRF's job-start zero and
 ; arms spool_report_pending, which the first print/finish.g flush of the job clears -
 ; print/finish.g runs twice at a normal job end (end G-code, stop.g), the remaining
 ; weight is reported once. A spool with density 0 is not tracked. spool_track_baseline
-; is the last booked position per tool, spool_track_time the upTime of trigger8.g's last
-; booking while printing - session state, not persisted.
+; is the last booked position per tool, spool_track_time the daemon's sample timestamp
+; while printing - session state, not persisted.
 global spool_net_weight = vector(2, 0)
 global spool_remaining = vector(2, 0.0)
 global spool_tare = vector(2, 0)
@@ -397,13 +396,13 @@ global filament_broken_profile = ""          ; profile name captured by the watc
 ; --- MFM: speed backoff -------------------------------------------------------
 global mfm_backoff_level = 3              ; 3 = full speed; every P4/P5 error sets M220 to 20 % * level and steps down, 0 = no step left
 global mfm_ignore_events = false          ; filament-error.g ignores MFM events (swing suppression, calibration macros)
-global mfm_backoff_time = 0               ; upTime of the last backoff step or speed restore - trigger6.g restores 30 s after it
+global mfm_backoff_time = 0               ; upTime of the last backoff step or speed restore - daemon.g restores 30 s after it
 
 ; --- MFM: false positive detection --------------------------------------------
 global mfm_prev_percentage = null         ; previous lastPercentage reading
 global mfm_swing_count = 0                ; large-swing count in current window
 global mfm_swing_window_start = 0         ; window start time (upTime)
-global mfm_suppress_until = 0             ; upTime until which to suppress (0 = not active) - trigger7.g ends it while printing
+global mfm_suppress_until = 0             ; upTime until which to suppress (0 = not active)
 global mfm_sample_time = 0.0              ; last MFM check timestamp (sub-second precision)
 
 ; --- MFM: persistent error tracking (survives swing suppressions and fast-track resets)
