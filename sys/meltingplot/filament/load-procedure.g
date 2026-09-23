@@ -72,6 +72,11 @@ if var.last_avg_percantage == null
 
 var drive_filament = 0
 var filament_loaded = false
+; the failure is decided on this local; global.filament_load_failed is only the hand-off
+; to daemon.g at the end - the daemon consumes and clears it within one cycle, so a global
+; set in the loop read back as "not failed" below (e-steps ran after a failed load, the
+; heater was never switched off)
+var load_failed = false
 
 while true
   var position = sensors.filamentMonitors[var.tool].position
@@ -105,13 +110,13 @@ while true
   if var.filament_loaded && (var.avg_percantage < 20 || var.last_percentage < 10)
     echo "Filament stuck! cancle loading"
     M98 P"0:/sys/meltingplot/filament/unload-procedure.g"
-    set global.filament_load_failed = true
+    set var.load_failed = true
     break
 
   if iterations > 240 ; 60s
     echo "abort"
     M98 P"0:/sys/meltingplot/filament/unload-procedure.g"
-    set global.filament_load_failed = true
+    set var.load_failed = true
     break
 
   if var.drive_filament > 0
@@ -120,7 +125,7 @@ while true
     if var.drive_filament == 0 && var.filament_loaded == false
       echo "Filament loading failed"
       M98 P"0:/sys/meltingplot/filament/unload-procedure.g"
-      set global.filament_load_failed = true
+      set var.load_failed = true
       break
 
   if var.drive_filament == 0 && var.filament_loaded
@@ -136,12 +141,12 @@ M591 D{var.tool} S1 A0
 ; loading done - drop from the 280C purge temperature back to the filament temperature
 if var.hightemp_purge
   M568 P0 S{var.load_temp} A2
-  if global.filament_load_failed == false
+  if var.load_failed == false
     M106 S255 ; part fan speeds up cooling; calibration/e-steps turns it off again (M107)
     M116 P0   ; wait for the nozzle to cool down before the e-steps calibration
     M106 S0
 
-if global.filament_load_failed == false
+if var.load_failed == false
   ; calibrate e-steps
   echo "calibrating e-steps"
   M98 P"0:/macros/meltingplot/calibration/e-steps" C0 ; C0: the nozzle was confirmed above
@@ -167,8 +172,11 @@ G1 E-12.5 F180      ; retract filament
 M400
 G4 P0               ; wait for moves to finish
 
-if global.filament_load_failed
+if var.load_failed
   M568 P{var.tool} A0 ; disable heater of tool
+  ; hand-off to daemon.g, which drops the filament assignment (M702 P0) - only now, after
+  ; the last decision in this file that depends on the failure
+  set global.filament_load_failed = true
 
 M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
 

@@ -370,6 +370,9 @@ global material_density = 0.0                ; g/cm3 - turns extruded mm into gr
 global material_spool_weights = vector(0, 0) ; g net filament per usual spool size
 
 ; --- filament: load/unload state ----------------------------------------------
+; hand-off from filament/load-procedure.g to daemon.g (drops the filament assignment),
+; set once after the load's last decision. The daemon clears it within one cycle, so
+; nothing may read it back to decide anything - the load decides on a local.
 global filament_load_failed = false
 ; per-tool deferred physical load, armed by filament/on-load.g (from load.g), consumed by
 ; filament/on-config.g (from the machine-generated config.g).
