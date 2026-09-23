@@ -45,7 +45,7 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 - **`sys/meltingplot/`** — the project's own logic, one folder per subsystem:
   - `globals.g` (every global, see "State Management") and `migrate.g` (3.6 → 3.7 file moves); otherwise the root holds only the deprecated forwarding files (see "Naming")
   - `ce-declaration/` — CE declaration, operating modes (`operating-mode/{default,automatic}.g`, `reload-operating-mode.g`), e-stop; `doors/` holds the door checks every motion path runs: `ensure-checked-closed.g` (both door switches verified by an open edge, then both doors closed) and `wait-closed.g` (wait until both doors are closed)
-  - `print/` — `prepare.g` (slicer start G-code), `finish.g` (from `stop.g` / `cancel.g`), `prime-nozzle.g`, `wait-for-heater.g`
+  - `print/` — `prepare.g` (slicer start G-code), `finish.g` (slicer end G-code, `stop.g`, `cancel.g`), `prime-nozzle.g`, `wait-for-heater.g`
   - `filament/` — the load/unload chain: `on-load.g`, `on-unload.g` and `on-config.g` are called by a profile's `load.g`, `unload.g` and `config.g`; `load-procedure.g` and `unload-procedure.g` move the filament; `mfm-recovery.g` (run by `pause.g`)
   - `filament-profile/` — everything that reads or writes `filaments/<name>/`: `regenerate.g`, `create-material-file.g`, `create-nozzle-file.g`, `apply-nozzle-file.g`, `calibration-key.g`, `find-calibration-file.g`
   - `hardware/` — the installed hardware recorded in `sys/generated/`: `confirm-nozzle-diameter.g`, `store-nozzle-diameter.g`, `confirm-nozzle-type.g`, `confirm-filament-diameter.g`, `confirm-bed-surface.g`
@@ -71,6 +71,7 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 | Old path in `sys/meltingplot/` | New path | Still called by |
 |---|---|---|
 | `print_start` | `print/prepare.g` | slicer start G-code, every file sliced before 3.7 |
+| `print_end` | `print/finish.g` | slicer end G-code, every file sliced before 3.7 |
 | `filament_load.g` | `filament/on-load.g` | `load.g` of profiles generated before 3.7 |
 | `filament_unload.g` | `filament/on-unload.g` | `unload.g` of profiles generated before 3.7 |
 | `load_nozzle_config.g` | `filament-profile/apply-nozzle-file.g` | `config.g` of profiles generated before 3.7 |

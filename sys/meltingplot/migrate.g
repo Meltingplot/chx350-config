@@ -42,9 +42,9 @@ while iterations < #var.szp_old
 
 ; Pre-3.7 names of renamed files. A config update installs the new names but need not
 ; remove the old ones, and a stale copy is old code: it still reads the renamed globals
-; and calls the renamed files. The seven forwarding files (CLAUDE.md, "Deprecated
+; and calls the renamed files. The eight forwarding files (CLAUDE.md, "Deprecated
 ; forwarding files") keep their old path and are deliberately not in these lists.
-var stale_sys1 = {"globals", "migrate_overrides.g", "ensure_safety", "check_doors_closed", "check_door_plausibility", "home_if_necessary", "print_end", "prime_nozzle_0", "wait_for_heater"}
+var stale_sys1 = {"globals", "migrate_overrides.g", "ensure_safety", "check_doors_closed", "check_door_plausibility", "home_if_necessary", "prime_nozzle_0", "wait_for_heater"}
 var stale_sys2 = {"mfm_auto_recovery", "regenerate_filament_config.g", "create_nozzle_config.g", "create_material_config.g", "calibration_key.g", "find_calibration_file.g", "sformat.g"}
 var stale_sys3 = {"confirm_nozzle_diameter.g", "store_nozzle_diameter.g", "confirm_nozzle_type.g", "confirm_filament_diameter.g", "confirm_bed_surface.g", "set_led_color"}
 var stale_sys4 = {"confirm_spool_size.g", "store_spool.g", "spool_track.g", "load_spool_types.g", "align_z_axis.g", "set_new_z_height", "probe_current_positon"}
