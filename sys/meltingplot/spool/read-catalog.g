@@ -19,6 +19,10 @@
 ; holds at most 20 spool types; a longer file is cut to 20 with a warning. An empty
 ; field reads as null (a stray trailing comma, a missing weight) and is replaced here
 ; by "" or 0, so no consumer ever sees null.
+; The overflow check reads element 41 and tests it for null, not the array length: on
+; an SBC, DSF evaluates fileread (Functions.cs FileRead) and returns {null} - one null
+; element - when the skip runs past the end of the line, standalone RRF returns an empty
+; array. A length test warned on every read on the SBC (seen 2026-09-23 with 4 types).
 
 if global.debug
   echo "spool/read-catalog.g"
@@ -27,8 +31,10 @@ var file = "0:/sys/overrides/spool-catalog.csv"
 if !fileexists(var.file)
   M99
 set global.spool_catalog = fileread(var.file, 0, 40, ',')
-if #fileread(var.file, 40, 1, ',') > 0
-  M118 P0 S"Warning: sys/overrides/spool-catalog.csv holds more than 20 spool types - only the first 20 are offered"
+var more = fileread(var.file, 40, 1, ',')
+if #var.more > 0
+  if var.more[0] != null
+    M118 P0 S"Warning: sys/overrides/spool-catalog.csv holds more than 20 spool types - only the first 20 are offered"
 while iterations < #global.spool_catalog
   if global.spool_catalog[iterations] == null
     set global.spool_catalog[iterations] = (mod(iterations, 2) == 0) ? "" : 0
