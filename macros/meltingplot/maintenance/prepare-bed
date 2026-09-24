@@ -1,0 +1,61 @@
+; ---
+; title: Bett vorbereiten
+; description: Teil entnehmen · Bett fährt nach unten
+; icon: mdi-tray-arrow-down
+; page: start
+; order: 20
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
+; hint: Nur in Betriebsart Automatik – Türen schließen
+; ---
+; maintenance/prepare-bed
+; Gets the machine ready for the next job: parks the print heads, lowers the bed, and walks the
+; operator through removing the part and checking the build plate. A flow of the CHX 350 UI
+; (CLAUDE.md, "Flows in the CHX 350 UI"): the ;; lines are the prompts' texts there.
+; The moves need automatic mode - default mode crawls at 60 mm/min, the 945 mm of Z would take a
+; quarter of an hour. After print/finish.g the bed is already at the bottom and only the prompts
+; remain.
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+;; Die Druckköpfe fahren zur Seite, das Druckbett fährt ganz nach unten. Bauraum geschlossen
+;; lassen, bis die Bewegung steht.
+M291 R"Bett fährt nach unten" P"Die Druckköpfe fahren zur Seite, das Druckbett fährt nach unten." S1 T0
+
+G90
+if move.axes[2].homed
+  if move.axes[0].homed && move.axes[1].homed && move.axes[3].homed
+    G53 G1 X{move.axes[0].max} Y{move.axes[1].min} U{move.axes[3].max} F60000  ; heads away from the bed, as print/finish.g parks them
+  if move.axes[2].machinePosition < move.axes[2].max - 2
+    G1 Z{move.axes[2].max - 1} F60000                                         ; bed to the bottom (limited by M203)
+else
+  ; without a Z reference the Z alignment drives the bed onto the lower stop - that is the
+  ; bottom position, and Z is referenced afterwards (doors and mode were checked above)
+  M98 P"0:/sys/meltingplot/z-axis/align-motors.g"
+M400
+
+;; Tür öffnen und das Bauteil vom Druckbett lösen. Keine Werkzeuge auf der Druckplatte ablegen.
+;;
+;; {% set bed = heat.heaters[heat.bedHeaters[0]].current %}
+;; Druckbett: **{{ bed | round }} °C**{% if bed > 45 %} – nur mit Handschuhen anfassen. Viele Teile
+;; lösen sich leichter, wenn das Bett abgekühlt ist.{% endif %}
+M291 R"Teil entnehmen" P"Tür öffnen, Teil entnehmen, dann OK." S2
+
+;; Reste und Stützmaterial entfernen, die Platte auf Beschädigung prüfen und wieder einsetzen –
+;; sie muss vollständig einrasten.
+;;
+;; {% set names = { "pei": "PEI glatt", "pei-textured": "PEI strukturiert", "pertinax": "Pertinax",
+;;    "g10": "G10", "carbon": "Carbon", "glass": "Glas", "other": "Andere" } %}
+;; Eingesetzt laut Maschine: **{{ names[global.bed_surface] or global.bed_surface }}**
+M291 R"Druckplatte prüfen" P{"Platte prüfen und einrasten lassen. Eingesetzt: " ^ global.bed_surface} S4 K{"Gleiche Platte","Andere Platte"} F0
+if input == 1
+  M98 P"0:/macros/meltingplot/maintenance/set-bed-surface"

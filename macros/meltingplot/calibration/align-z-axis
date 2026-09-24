@@ -1,3 +1,12 @@
+; ---
+; title: Z-Achse ausrichten
+; description: Die Z-Motoren am unteren Anschlag zueinander ausrichten
+; icon: mdi-align-vertical-center
+; page: calibrate
+; order: 30
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
+; hint: Nur in Betriebsart Automatik – Türen schließen
+; ---
 ; calibration/align-z-axis
 ; Pushes both Z motors against the lower stop to square the bed (z-axis/align-motors.g). Runs
 ; the full Z travel at reduced current - not during a print and only in automatic mode,

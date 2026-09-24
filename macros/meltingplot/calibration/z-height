@@ -1,8 +1,20 @@
+; ---
+; title: Z-Nullpunkt kalibrieren
+; description: Sonde kalt und warm gegen das Z-Einstellgerät einmessen · bis zu 40 min
+; icon: mdi-target
+; page: calibrate
+; order: 10
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and sensors.analog[4].lastReading <= 35 }}"
+; hint: Nur in Betriebsart Automatik und mit kaltem Druckkopf (unter 35 °C)
+; ---
 ; calibration/z-height
 ; Calibrates the scanning Z probe (standard and touch mode, cold and warm) against the
 ; Z height gauge. Heats the nozzle to 250 C and the bed to 90 C, so it needs automatic
 ; mode (default mode keeps the heaters off and limited to 50 C), and it must start cold:
 ; the cold calibration is the first half of the procedure.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"): the ;; lines are the
+; prompts' texts there. A cancelled prompt restores the Z frame and the soft limits
+; (z-probe/cancel-calibration.g) instead of leaving the G92 Z20 shift behind.
 
 if job.file.fileName != null
   echo "Error: a print job is running - abort!"
@@ -22,6 +34,9 @@ if sensors.analog[4].lastReading > 35
   M291 P{"Printer temp is above 35°C - current " ^ sensors.analog[4].lastReading ^ "<br>Wait until the printer is cold and repeat."} R"Prerequirements" S2
   M99
 
+;; Die Z-Motoren werden am unteren Anschlag ausgerichtet, danach referenziert die Maschine X, Y
+;; und U. Das dauert einige Minuten.
+M291 R"Ausrichten und referenzieren" P"Z-Achse wird ausgerichtet, X, Y und U werden referenziert." S1 T0
 set global.result = 0
 M98 P"0:/macros/meltingplot/calibration/align-z-axis"
 if global.result != 0
@@ -38,31 +53,48 @@ T0 ; select tool with SZP
 M568 P0 S250 A2 ; heat tool
 M140 S0 ; bed must be cold!
 
+;; Die Düse heizt auf 250 °C, das Bett bleibt für die kalte Messung aus.
+;;
+;; Düse: **{{ heat.heaters[tools[0].heaters[0]].current | round }} °C** von 250 °C
+M291 R"Düse heizt auf · kalt" P"Die Düse heizt auf 250 °C." S1 T0
 M116 ; wait for heaters
 
 G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z120 F6000 ; drive z up to around 120mm -> to be able to place the z-probe on the bed
 G92 Z20 ; set z-height to 20mm to prevent accidantly crashing into the probing tool
 
-M291 P"Die Düse ist auf 250°C erhitzt, fassen Sie diese nicht an!" R"Gefahr!" S2
-M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Zero Z-Height Tool" S3
-M291 P"Öffnen Sie die Türen zum Bauraum, positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Place Z-Height Tool" S3
+;; > Die Düse ist **250 °C** heiß – nicht anfassen.
+M291 P"Die Düse ist auf 250°C erhitzt, fassen Sie diese nicht an!" R"Heiße Düse · kalt" S2
+;; Das Z-Einstellgerät mit der **Tastfläche** auf eine glatte, ebene Fläche drücken und dabei
+;; **ZERO** gedrückt halten, bis die Anzeige 0 zeigt.
+M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Z-Einstellgerät nullen · kalt" S3 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
+  M99
+;; Türen öffnen und das Z-Einstellgerät auf das Druckbett **unter die Düse** stellen. Die Düse
+;; muss sauber sein – Reste verfälschen den Nullpunkt.
+;;
+;; Danach die Türen wieder schließen, erst dann geht es weiter.
+M291 P"Öffnen Sie die Türen zum Bauraum, positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Z-Einstellgerät aufsetzen · kalt" S3 J2
+if result != 0
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
   M99
 M98 P"0:/sys/meltingplot/ce-declaration/doors/wait-closed.g"
 
 M564 S0 ; disable boundaries
-M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Calibrate Z-Height" S3 Z1
+;; Z in kleinen Schritten absenken (**Z−**), bis die Düse auf dem Z-Einstellgerät aufliegt. Die
+;; Kamera zeigt die Düse, zum Schluss mit 0,01 mm annähern.
+M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Düse absenken · kalt" S3 Z1 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
   M99
 M564 S1 ; enable boundaries
 
 var reading = 0
 
 while true
-  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Reading" S6
+  ;; Den Wert vom Z-Einstellgerät eintragen – in mm (0 bis 3) oder in µm (bis 3000).
+  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Messwert · kalt" S6
   set var.reading = input
   echo "Reading: " ^ var.reading
   if var.reading >= 0 && var.reading <= 3
@@ -80,12 +112,16 @@ while true
 G92 Z{100 + var.reading}
 G1 Z120
 
-M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Clean the Printbed" S3
+;; Das Z-Einstellgerät vom Druckbett nehmen und die Türen schließen. Danach kalibriert die
+;; Maschine die Sonde selbstständig.
+M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Z-Einstellgerät entfernen · kalt" S3 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S0
   M99
 M98 P"0:/sys/meltingplot/ce-declaration/doors/wait-closed.g"
 
+;; Die Maschine kalibriert die Sonde im Standard- und im Touch-Modus. Nicht in den Bauraum greifen.
+M291 R"Sonde kalibrieren · kalt" P"Die Sonde wird kalibriert." S1 T0
 T0 ; select tool with SZP
 M568 P0 S250 A2 ; heat tool
 M116 ; wait for heaters
@@ -175,8 +211,16 @@ echo >{"0:/sys/generated/szp-touch-mode-cold.g"} "M558.2 K0 S" ^ {var.driveCurre
 
 ; Calibrate the SZP in warm state
 M140 S90 ; enable bed heater
-M291 P"Die Kalibrierung im kalten Zustand war erfolgreich.<br>Jetzt wird das Druckbett auf 90°C aufgeheizt und der Vorgang wiederholt. Dies kann bis zu 20 Minuten dauern!" R"Gefahr!" S2
+;; Die kalte Messung ist gespeichert. Jetzt heizt das Druckbett auf 90 °C, und die Messung wird
+;; warm wiederholt. Das Aufheizen kann bis zu 20 Minuten dauern.
+M291 P"Die Kalibrierung im kalten Zustand war erfolgreich.<br>Jetzt wird das Druckbett auf 90°C aufgeheizt und der Vorgang wiederholt. Dies kann bis zu 20 Minuten dauern!" R"Kalte Messung abgeschlossen" S2
 
+;; Das Druckbett heizt auf, der Druckkopf wärmt sich mit auf. Weiter geht es, sobald der Kopf
+;; über 50 °C hat.
+;;
+;; Bett: **{{ heat.heaters[heat.bedHeaters[0]].current | round }} °C** von 90 °C ·
+;; Druckkopf: **{{ sensors.analog[4].lastReading | round }} °C** von 50 °C
+M291 R"Aufwärmen" P"Das Druckbett heizt auf 90 °C, der Druckkopf wärmt sich auf." S1 T0
 M116 ; wait for bed heater
 
 while true
@@ -191,26 +235,39 @@ while true
 G1 Z120 F6000 ; drive z up to around 120mm -> to be able to place the z-probe on the bed
 G92 Z20 ; set z-height to 20mm to prevent accidantly crashing into the probing tool
 
-M291 P"Die Düse ist auf 250°C erhitzt und das Druckbett auf 90°C, fassen Sie diese nicht an!" R"Gefahr!" S2
-M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Zero Z-Height Tool" S3
-M291 P"Positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Place Z-Height Tool" S3
+;; > Die Düse ist **250 °C** und das Druckbett **90 °C** heiß – nicht anfassen.
+M291 P"Die Düse ist auf 250°C erhitzt und das Druckbett auf 90°C, fassen Sie diese nicht an!" R"Heiße Düse und heißes Bett · warm" S2
+;; Das Z-Einstellgerät mit der **Tastfläche** auf eine glatte, ebene Fläche drücken und dabei
+;; **ZERO** gedrückt halten, bis die Anzeige 0 zeigt.
+M291 P"Nullen Sie das Z-Einstellgerät indem Sie es mit der Tastfläche auf eine glatte Fläche drücken und dabei die ZERO Taste gedrückt halten." R"Z-Einstellgerät nullen · warm" S3 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
+  M99
+;; Das Z-Einstellgerät auf das Druckbett **unter die Düse** stellen. Die Düse muss sauber sein –
+;; Reste verfälschen den Nullpunkt.
+;;
+;; Danach die Türen wieder schließen, erst dann geht es weiter.
+M291 P"Positionieren Sie das Z-Einstellgerät auf dem Druckbett unterhalb der Düse. Vergewissern Sie sich, dass die Düse sauber ist." R"Z-Einstellgerät aufsetzen · warm" S3 J2
+if result != 0
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
   M99
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/wait-closed.g"
 
 M564 S0 ; disable boundaries
-M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Calibrate Z-Height" S3 Z1
+;; Z in kleinen Schritten absenken (**Z−**), bis die Düse auf dem Z-Einstellgerät aufliegt. Die
+;; Kamera zeigt die Düse, zum Schluss mit 0,01 mm annähern.
+M291 P"Fahren Sie die Z-Achse in Z- bis die Düse auf dem Höheneinstellgerät aufliegt." R"Düse absenken · warm" S3 Z1 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S100
   M99
 M564 S1 ; enable boundaries
 
 set var.reading = 0
 
 while true
-  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Reading" S6
+  ;; Den Wert vom Z-Einstellgerät eintragen – in mm (0 bis 3) oder in µm (bis 3000).
+  M291 P"Wie lautet der Wert auf dem Z-Einstellgerät?" R"Messwert · warm" S6
   set var.reading = input
   echo "Reading: " ^ var.reading
   if var.reading >= 0 && var.reading <= 3
@@ -228,13 +285,17 @@ while true
 G92 Z{100 + var.reading}
 G1 Z120
 
-M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Clean the Printbed" S3
+;; Das Z-Einstellgerät vom Druckbett nehmen und die Türen schließen. Danach kalibriert die
+;; Maschine die Sonde selbstständig.
+M291 P"Entfernen Sie das Z-Einstellgerät vom Druckbett und schließen Sie die Türen." R"Z-Einstellgerät entfernen · warm" S3 J2
 if result != 0
-  echo "abort by user!"
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g" S0
   M99
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/wait-closed.g"
 
+;; Die Maschine kalibriert die Sonde im Standard- und im Touch-Modus. Nicht in den Bauraum greifen.
+M291 R"Sonde kalibrieren · warm" P"Die Sonde wird kalibriert." S1 T0
 T0 ; select tool with SZP
 M568 P0 S250 A2 ; heat tool
 M116 ; wait for heaters
@@ -315,4 +376,7 @@ echo >{"0:/sys/generated/szp-touch-mode-warm.g"} "M558.2 K0 S" ^ {var.driveCurre
 ;M140 S-273.1 ; disable bed heater
 ;M568 P0 A0 ; disable hotend
 
+; close the last progress box (M291 S1 T0 above) - it would stay open after the macro
+if state.messageBox != null
+  M292
 echo "Finished successful"

@@ -1,3 +1,12 @@
+; ---
+; title: Bett-Mesh messen
+; description: Höhenkarte über das ganze Bett aufnehmen · ersetzt die gespeicherte Karte
+; icon: mdi-grid
+; page: calibrate
+; order: 20
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
+; hint: Nur in Betriebsart Automatik – Türen schließen
+; ---
 ; calibration/heightmap
 ; Probes the bed and creates a new height map (G29 -> sys/mesh.g). The probe runs across
 ; the whole bed at printing speed, so this needs automatic mode and homed axes - an
