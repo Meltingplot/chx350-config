@@ -50,10 +50,10 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
   - `filament-profile/` — everything that reads or writes `filaments/<name>/`: `regenerate.g`, `create-material-file.g`, `create-nozzle-file.g`, `apply-nozzle-file.g`, `calibration-key.g`, `find-calibration-file.g`
   - `hardware/` — the installed hardware recorded in `sys/generated/`: `confirm-nozzle-diameter.g`, `store-nozzle-diameter.g`, `confirm-nozzle-type.g`, `confirm-filament-diameter.g`, `confirm-bed-surface.g`
   - `spool/` — the mounted spool and its consumption: `confirm.g`, `store.g`, `track.g`, `read-catalog.g`
-  - `z-axis/` (`align-motors.g`, `set-new-height.g`), `z-probe/` (`probe-here.g`, `standard-mode.g`, `touch-mode.g`), `nozzle-cleaner/`
+  - `z-axis/` (`align-motors.g`, `set-new-height.g`), `z-probe/` (`probe-here.g`, `standard-mode.g`, `touch-mode.g`, `cancel-calibration.g`), `nozzle-cleaner/`
   - `lib/` — helpers that belong to no subsystem: `format-number.g`, `set-led-color.g`
 - **`filaments/`** — 30 material profiles, each with the user-editable `config-override.g` and `temps.g` and the machine-generated `config.g`, `load.g` and `unload.g` (see "Filament Loading and DWC Interaction")
-- **`macros/meltingplot/`** — the operator's macros in DWC: `calibration/` (`e-steps`, `nle`, `pressure-advance`, `z-height`, `heightmap`, `magnetic-table`, `align-z-axis`), `maintenance/` (filament, nozzle, spool, bed surface, nozzle cleaner, coolant), `startup/`, `z-probe/offset/`
+- **`macros/meltingplot/`** — the operator's macros in DWC: `calibration/` (`e-steps`, `nle`, `pressure-advance`, `z-height`, `heightmap`, `magnetic-table`, `align-z-axis`), `maintenance/` (bed preparation, filament, nozzle, spool, bed surface, nozzle cleaner, coolant), `startup/`, `z-probe/offset/`
 
 ### Naming
 
@@ -63,6 +63,20 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 - **A global is named for what it holds**, not for how it is used: `z_motor_stalled[]` (flags, not a count), `z_motor_stall_deadline` (an `upTime`, not a duration), `motion_axis_delta[]` (a distance, not a bool). A profile file hands values over in globals named after the file (`material.g` → `material_*`); per-tool state is never named like a transfer value (`spool_net_weight[tool]` versus the list `material_spool_weights`).
 - **No basename twice:** a `sys/` helper and an operator macro never share a name.
 - **Names that must not change** without a migration: a global whose name is written into a file on the machine — `nozzle_diameter` (`sys/generated/nozzle<tool>.g`), `last_filament_temp`, `szp_touch_z_offset`, `filament_temp_*` (every `temps.g`), `filament_max_flow_rate` (`nozzle-<key>.g`), `deferred_filament_load_t0` (`load.g` before 2026-07) — and every global an operator may assign in `global-override.g` (`has_*`, `idle_heater_*`, `z_motor_stall_time_max`, `szp_*`, `debug`). Renaming one breaks the boot of a machine whose file still uses the old name. The same holds for a path that a generated profile file or the slicer calls, see below.
+
+### Flows in the CHX 350 UI
+
+An operator macro can carry comments that the CHX 350 operator UI (DWC plugin `CHX350`, `src/plugins/CHX350/flows/`) shows as a guided flow: a tile on a page, a step list, and every prompt as a full-page step with text, live values and touch inputs. The firmware skips comments, so the macro runs unchanged in classic DWC and on PanelDue, where the same prompts appear as plain message boxes. A changed flow needs a config deploy only, never a web deploy. Flows so far: `calibration/z-height`, `calibration/heightmap`, `calibration/align-z-axis`, `maintenance/prepare-bed`.
+
+- **Front matter** (turns the macro into a flow with a tile): YAML between two `; ---` lines at the very top of the file, every line a comment (Jekyll style). Keys: `title` (required), `description`, `icon` (mdi name), `page` (`start`, `calibrate`, `service`; none = no tile), `order`, `enabled` (Jinja that renders `true` when the tile may start; without it the tile starts only while the machine is idle), `hint` (shown instead of the description while the tile is disabled). Quote a value that starts with `{`.
+- **Steps:** `;;` lines directly above an M291 are that prompt's Markdown, like `///` doc comments in Rust; blank lines and plain `;` comments may sit in between. The UI matches the open box by its **literal** `R` title, so every documented M291 has a fixed `R"…"` (no `R{…}`) that is unique within the file - z-height suffixes its titles with `· kalt` / `· warm`. The `P` text must still stand on its own: it is all classic DWC and PanelDue show. An M291 without a `;;` block still shows, as plain text, but is not listed as a step.
+- **Jinja** in the Markdown and in `description`, `enabled` and `hint`: `{{ … }}` and `{% … %}` against the live object model, globals as `global.<name>` like in RRF (hardened flags compare against 1431655765 / 2863311530). Filters and `range()` only - Nunjucks is no sandbox, so the UI refuses method calls, `constructor`/`__proto__`/`prototype` and includes, and shows such a block unevaluated. Templates are evaluated only in the indexed flow files, never on the text of an open message box, which a job file could otherwise use to run template code.
+- **Progress:** before a long wait (heating, probing) an `M291 … S1 T0` shows as a step with a spinner; the next M291 replaces it. Close the last one before the macro ends (`if state.messageBox != null` → `M292`), it stays open otherwise.
+- **Cancel:** give cancellable prompts `J2` and restore a safe state yourself on `result != 0` (`sys/meltingplot/z-probe/cancel-calibration.g`) - a cancel that only returns leaves shifted datums or disabled soft limits behind. End with `echo "Error: …"`, so the UI reports the flow as not completed.
+- **Images:** `![text](0:/sys/meltingplot/flows/img/<name>.webp)` for shipped images, `0:/sys/overrides/flows/…` for own ones, never under `macros/` (DWC lists every file there as a macro).
+- **Own flows** go to `0:/sys/overrides/flows/`, which no config update overwrites (see "Machine-owned files").
+- Keep `;;` lines under 200 characters and split a paragraph over several lines; Markdown joins them. `tools/gcode_crc.py` leaves comment-only lines untouched.
+- The UI indexes `0:/macros`, `0:/sys/meltingplot` and `0:/sys/overrides/flows` and lists what it found (YAML errors, duplicate titles, refused Jinja, markup DOMPurify removes) on its Service page. A `;;` block in a `sys/` helper documents that helper's prompt wherever it appears, e.g. the door check.
 
 ### Deprecated forwarding files
 
