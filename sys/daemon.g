@@ -12,8 +12,9 @@
 ; Block order is deliberate: the interlock decision (tracker -> doors -> mirror -> hot ->
 ; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
 ; that follow (idle cutoff, filament, MFM) can, and then only they are lost.
-; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5-T8): the
-; Z stall watchdog, the MFM speed restore and suppression expiry, the 60 s spool booking.
+; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5, T7, T8):
+; the Z stall watchdog, the MFM suppression expiry and the 60 s print tick (spool booking,
+; MFM flow-bias sample).
 var now = 0
 ; the tracker's verdict for this iteration, published to global.potential_unsafe_state
 ; once, after both loops. trigger4.g reads the global concurrently: resetting the global
@@ -99,7 +100,6 @@ while state.status != "halted" && global.daemon_reload == false
 
   if sensors.gpIn[2].value == 0 && ("" ^ global.door_left_open) == "2863311530"
     set global.door_left_open = 0x55555555
-    set global.door_left_state_transition = true
     ; Confirm the open edge before crediting the door check (globals, "CONFIRMING"):
     ; switch_checked is the gate for automatic mode, so it is not handed out on a single
     ; reading of the pin. The confirm re-evaluates gpIn - reliably catching a branch that
@@ -114,13 +114,9 @@ while state.status != "halted" && global.daemon_reload == false
       M118 P0 S"Warning: left door open edge not confirmed on re-read - door check not credited"
   elif sensors.gpIn[2].value != 0 && ("" ^ global.door_left_open) != "2863311530"
     set global.door_left_open = 0xAAAAAAAA
-    set global.door_left_state_transition = true
-  elif global.door_left_state_transition
-    set global.door_left_state_transition = false
 
   if sensors.gpIn[3].value == 0 && ("" ^ global.door_right_open) == "2863311530"
     set global.door_right_open = 0x55555555
-    set global.door_right_state_transition = true
     ; confirm the open edge on a second sample, see the left door above
     if sensors.gpIn[3].value == 0
       set global.door_right_switch_checked = 0x55555555
@@ -129,9 +125,6 @@ while state.status != "halted" && global.daemon_reload == false
       M118 P0 S"Warning: right door open edge not confirmed on re-read - door check not credited"
   elif sensors.gpIn[3].value != 0 && ("" ^ global.door_right_open) != "2863311530"
     set global.door_right_open = 0xAAAAAAAA
-    set global.door_right_state_transition = true
-  elif global.door_right_state_transition
-    set global.door_right_state_transition = false
 
   ; switch_checked mirror. A mismatch is print/finish.g's legitimate clear, an operator faking
   ; the flag, or RAM: the first two resolve to "not checked"; a value that is neither
@@ -306,64 +299,15 @@ while state.status != "halted" && global.daemon_reload == false
   if state.status == "paused" && global.pause_extruder != -1
     set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
 
-  ; while printing: the MFM blocks below. The 60 s spool booking, the MFM suppression
-  ; expiry and the MFM speed restore run as expression triggers (trigger6-8.g).
+  ; while printing: the MFM sample stream below. The MFM suppression expiry (trigger7.g) and
+  ; the 60 s print tick - spool booking and flow-bias sample - (trigger8.g) run as
+  ; expression triggers.
   if state.status == "processing" && job.file.fileName != null
-    ; --- Systematic flow-bias (e-steps) detection — WARN ONLY, never apply from the daemon ---
-    ; avgPercentage is the toolboard's whole-print integral (only restarts when the monitor goes
-    ; idle on pause/stop), so it is robust to a momentary awkward section (many short moves the MFM
-    ; reads poorly). Act only on a SETTLED, time-sustained drift, NOT at a fixed distance: avg must
-    ; stay outside the ±3% deadband AND flat (within ±3% of the window reference) for the whole
-    ; sustain window; any move >3% restarts the window (filters a progressing fault), any in-deadband
-    ; sample clears it. One warning per print. NOTE: the correction MUST NOT be applied here — M92
-    ; calls LockAllMovementSystemsAndWaitForStandstill and would freeze the whole daemon (and all its
-    ; safety checks) until motion stops, then fire a false unsafe-state M112 on the stale-state resume.
-    ; Only NON-blocking commands are allowed in daemon.g. The operator recalibrates via the e-steps macro.
-    if global.mfm_esteps_detected == false && (var.now - global.mfm_esteps_sample_time) >= 60
-      set global.mfm_esteps_sample_time = var.now
-      ; cache avg for atomicity — used in the gate, the math, and the message
-      var avg = sensors.filamentMonitors[0].avgPercentage
-      ; mfm_backoff_level != 3 ⇒ speed is reduced, which itself depresses the reading — that avg is not a
-      ; valid flow-bias sample, so clear the drift window and only accumulate drift at full speed.
-      if var.avg == null || global.mfm_backoff_level != 3 || (var.avg >= 97 && var.avg <= 103)
-        set global.mfm_esteps_drift_since = 0
-      elif global.mfm_esteps_drift_since == 0 || abs(var.avg - global.mfm_esteps_drift_avg) > 3
-        ; (re)start the settle window: drift just began, or avg is still moving (not settled)
-        set global.mfm_esteps_drift_since = var.now
-        set global.mfm_esteps_drift_avg = var.avg
-      elif (var.now - global.mfm_esteps_drift_since) >= 600
-        ; avg has been outside the deadband AND flat for the full window → settled systematic bias.
-        ; Compute the bounded (±5% absolute vs current e-steps) target. It is NOT applied here —
-        ; M92 blocks (forbidden in daemon.g). filament-error.g applies it at standstill on the next
-        ; MFM error pause. Stepping is unchanged at detection time, so stepsPerMm IS the baseline.
-        var base = move.extruders[0].stepsPerMm
-        var lo = {var.base * 0.95}
-        var hi = {var.base * 1.05}
-        var ideal = {var.base * 100 / var.avg}
-        set global.mfm_esteps_suggested = max(var.lo, min(var.hi, var.ideal))
-        set global.mfm_esteps_detected = true
-        M118 P3 S{"MFM flow bias " ^ var.avg ^ "% - recalibrate e-steps to ~" ^ global.mfm_esteps_suggested}
-    if (var.now - global.mfm_pwm_window_start) > 10
-      set global.mfm_pwm_range = global.mfm_pwm_max - global.mfm_pwm_min
-      set global.mfm_pwm_min = heat.heaters[1].avgPwm
-      set global.mfm_pwm_max = heat.heaters[1].avgPwm
-      set global.mfm_pwm_window_start = var.now
-    else
-      set global.mfm_pwm_min = min(global.mfm_pwm_min, heat.heaters[1].avgPwm)
-      set global.mfm_pwm_max = max(global.mfm_pwm_max, heat.heaters[1].avgPwm)
     if (var.now - global.mfm_sample_time) >= 0.5 && global.mfm_suppress_until == 0
       set global.mfm_sample_time = var.now
       ; var.pct cached for atomicity — branches/writeback all need same value
       var pct = sensors.filamentMonitors[0].lastPercentage
       if var.pct != null && var.pct != global.mfm_prev_percentage
-        if global.mfm_backoff_level < 3 && var.pct > 80 && var.pct < 150
-          ; reading recovered on its own → restore full speed early (the unconditional
-          ; time-based restore in trigger6.g is the fallback that breaks the reduced-speed deadlock)
-          if global.debug
-            echo "MFM: reading normal (" ^ {var.pct} ^ "%) — fast-track speed restore"
-          M220 S100
-          set global.mfm_backoff_level = 3
-          set global.mfm_backoff_time = var.now
         if global.mfm_error_start_pos != null
           if var.pct > 80 && var.pct < 150
             if global.mfm_normal_since == 0
@@ -387,16 +331,12 @@ while state.status != "halted" && global.daemon_reload == false
             if global.mfm_swing_count == 1
               set global.mfm_suppress_until = var.now + 15
               set global.mfm_ignore_events = true
-              M220 S100
-              set global.mfm_backoff_level = 3
             elif global.mfm_swing_count >= 2
               if global.debug
                 echo "MFM: oscillation detected — suppressing for 60s"
               set global.mfm_suppress_until = var.now + 60
               set global.mfm_ignore_events = true
               set global.mfm_swing_count = 0
-              M220 S100
-              set global.mfm_backoff_level = 3
         set global.mfm_prev_percentage = var.pct
   elif var.spool_next != 0
     ; --- spool consumption outside a print: load, unload, purges, calibrations, manual ---

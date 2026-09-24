@@ -138,13 +138,9 @@ global door_left_open = 0x55555555           ; 0x55555555 open, 0xAAAAAAAA close
 global door_right_open = 0x55555555
 global door_left_switch_checked = 0xAAAAAAAA ; 0x55555555 edge seen (permissive), 0xAAAAAAAA not
 global door_right_switch_checked = 0xAAAAAAAA
-; one-cycle edge markers, set by daemon.g on every open/close change. Nothing outside
-; the daemon consumes them today (the door triggers run off the pins via M581) - they
-; are the observable edge for anything that needs it. Plain bools: a flip has no effect.
-global door_left_state_transition = false
-global door_right_state_transition = false
 ; (door_ignore_trigger was removed 2026-09: print/prepare.g set it but nothing ever read it -
-; the door triggers run off the pins via M581)
+; the door triggers run off the pins via M581. door_left/right_state_transition were removed
+; 2026-09 as well: daemon.g set them on every door change, nothing ever read them)
 
 ; --- unsafe-state detection (daemon motion tracker) ---------------------------
 ; potential_unsafe_state is true while anything moved within the last 0.25 s. It is what
@@ -214,7 +210,8 @@ global saved_tool_heater_states = vector(2, "off")       ; per-tool heater state
 ; writing it; trigger5.g halts on both. z_motor_stall_time_max is accepted in 1..30 by
 ; driver-stall.g, anything else arms 5 s with a warning.
 global z_motor_stalled = vector(4, 0xAAAAAAAA)       ; per Z motor: 0x55555555 stalled (permissive: counts towards "all reported"), 0xAAAAAAAA not
-global z_motor_stall_deadline = 0                    ; state.upTime deadline (0 = no homing in progress)
+; z_motor_stall_deadline is declared at the end of this file (trigger T5 reads it on every
+; main-loop pass, see "read by expression triggers")
 global z_motor_stall_time_max = 5                    ; seconds all four Z motors have to report their stall
 
 ; stall/driver-error suppression flags. They switch the machine's reaction to a stall
@@ -328,7 +325,7 @@ if fileexists("0:/sys/generated/spool0.g")
 if fileexists("0:/sys/generated/spool1.g")
   M98 P"0:/sys/generated/spool1.g"
 global spool_track_baseline = vector(2, 0.0)
-global spool_track_time = 0
+; spool_track_time is declared at the end of this file (trigger T8 reads it)
 global spool_report_pending = false      ; armed by start.g, cleared by the first print/finish.g flush of the job - reports what is left once
 
 ; --- build plate --------------------------------------------------------------
@@ -394,19 +391,24 @@ global filament_unload_done = false          ; set by filament/unload-procedure.
 global filament_unload_skip = false          ; daemon-initiated M702: one-shot, skip the physical unload; self-cleared by filament/on-unload.g and unload-procedure.g
 global filament_broken_profile = ""          ; profile name captured by the watchdog before the forced unload (for the repair macro)
 
-; --- MFM: speed backoff -------------------------------------------------------
-global mfm_backoff_level = 3              ; 3 = full speed; every P4/P5 error sets M220 to 20 % * level and steps down, 0 = no step left
+; --- MFM: error tolerance -----------------------------------------------------
+; filament-error.g only counts the first 3 P=4/P=5 errors within 30 mm of extrusion and
+; pauses on the next; an error 30 s or more after the previous one starts a fresh count.
+; The speed is never lowered - a reduced speed makes the MFM read lower still (the M220
+; backoff it replaced made the errors worse, removed 2026-09).
+global mfm_error_count = 0                ; tolerated P=4/P=5 errors of the current sequence (0..3)
+global mfm_error_time = 0                 ; upTime of the last P=4/P=5 error
 global mfm_ignore_events = false          ; filament-error.g ignores MFM events (swing suppression, calibration macros)
-global mfm_backoff_time = 0               ; upTime of the last backoff step or speed restore - trigger6.g restores 30 s after it
 
 ; --- MFM: false positive detection --------------------------------------------
 global mfm_prev_percentage = null         ; previous lastPercentage reading
 global mfm_swing_count = 0                ; large-swing count in current window
 global mfm_swing_window_start = 0         ; window start time (upTime)
-global mfm_suppress_until = 0             ; upTime until which to suppress (0 = not active) - trigger7.g ends it while printing
+; mfm_suppress_until is declared at the end of this file (trigger T7 reads it on every
+; main-loop pass)
 global mfm_sample_time = 0.0              ; last MFM check timestamp (sub-second precision)
 
-; --- MFM: persistent error tracking (survives swing suppressions and fast-track resets)
+; --- MFM: persistent error tracking (survives swing suppressions) --------------
 global mfm_error_start_pos = null         ; extruder position at first error in sequence (null = no active tracking)
 global mfm_normal_since = 0               ; upTime when sustained normal readings began
 global mfm_recovery_resume_time = 0       ; upTime of last auto-recovery pass + auto-resume (0 = none); loop breaker in filament-error.g
@@ -414,20 +416,14 @@ global mfm_recovery_requested = false     ; armed by filament-error.g right befo
 global mfm_recovery_result = -1           ; verdict of the recovery run by pause.g: -1 = did not run, 0 = false positive, 1+ = real issue
 
 ; --- MFM: systematic flow-bias (e-steps) --------------------------------------
-; DETECT in daemon.g (non-blocking); APPLY only at standstill in filament-error.g when
-; the next MFM error pauses the print - M92 blocks, forbidden in daemon.g.
+; DETECT in filament/mfm-flow-bias.g (trigger8.g, every 60 s while printing, non-blocking);
+; APPLY only at standstill in filament-error.g when the next MFM error pauses the print -
+; M92 blocks, forbidden in daemon.g and in a trigger macro that must not hold the channel.
 global mfm_esteps_detected = false        ; one-shot detection guard for this print, reset in print/finish.g
-global mfm_esteps_sample_time = 0         ; last flow-bias sample timestamp (upTime)
 global mfm_esteps_drift_since = 0         ; upTime when the current settle window started (0 = inside deadband/no drift)
 global mfm_esteps_drift_avg = 0           ; avgPercentage at the start of the settle window (flatness reference)
 global mfm_esteps_suggested = 0           ; bounded (±5%) target steps/mm computed by the detector (0 = none pending)
 global mfm_esteps_baseline = 0.0          ; e-steps captured before the correction was applied (0 = not applied; for print/finish.g restore)
-
-; --- MFM: heater PWM tracking for extrusion verification ----------------------
-global mfm_pwm_min = 0.0                  ; min avgPwm in current window
-global mfm_pwm_max = 0.0                  ; max avgPwm in current window
-global mfm_pwm_range = 0.0                ; computed range from last complete window
-global mfm_pwm_window_start = 0           ; PWM window start time
 
 ; --- pause / resume re-prime bookkeeping --------------------------------------
 ; pause_extruder is the extruder drive of the tool active at pause (-1 = paused without
@@ -488,6 +484,17 @@ global daemon_reload = false            ; set to true to make daemon.g leave its
 ; fan, fume extraction never runs.
 global has_aux_fan = false              ; auxiliary part cooling fan on out2, slicer P2
 global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer P3
+
+; --- read by expression triggers - declared last on purpose ------------------
+; RRF keeps the globals in a linked list, puts every new one at the head and searches it
+; linearly, taking a heap lock per entry (ObjectModel/Variable.cpp). A trigger expression
+; looks its globals up on every main-loop pass, so the global declared last is found
+; first: 0.05 ms at the head against 0.34 ms at the tail of 88 globals (measured
+; 2026-09-24, CLAUDE.md "Expression triggers"). The global a trigger guard reads on every
+; pass comes last. They belong to the groups named in their comments.
+global spool_track_time = 0               ; spool: upTime of trigger8.g's last run (60 s print tick) - T8 reads it while printing
+global mfm_suppress_until = 0             ; MFM: upTime until which to suppress (0 = not active) - T7 guard, ends it while printing
+global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = no homing in progress) - T5 guard
 
 ; Per-machine overrides. Values only - anything that needs G-code (drive directions,
 ; sensor wiring, ...) belongs in machine-override instead. The file lives in

@@ -8,7 +8,6 @@ echo "MFM: starting auto-recovery..."
 set global.mfm_ignore_events = true          ; prevent re-triggering during test
 M400                                       ; wait for queued moves
 
-; PWM fast-fail is now checked in filament-error.g before pause (standby drops avgPwm)
 G90                                        ; absolute mode
 G1 X{move.axes[0].min} F60000             ; move to X min for test extrusion
 M400
@@ -56,8 +55,7 @@ elif var.avg > 50 && var.last > 50
   ; reheat in resume.g outlast the window, so resume.g re-bases it to the actual
   ; restart of the print (trigger7.g only ends it while "processing").
   set global.mfm_suppress_until = state.upTime + 30
-  M220 S100
-  set global.mfm_backoff_level = 3
+  set global.mfm_error_count = 0
 elif var.avg > 50
   echo "MFM: auto-recovery FAILED (avg " ^ var.avg ^ "%, last " ^ var.last ^ "%) — fed at first, then lost grip: real issue"
   set global.result = 2

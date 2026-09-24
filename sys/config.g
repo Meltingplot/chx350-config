@@ -193,14 +193,12 @@ M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Loggi
 ; ce-declaration/. A quote inside the expression is doubled, the lines carry no comment
 ; (G-code line limit 256). Cheap guard first - && and || short-circuit.
 ; Needs firmware 3.7.0-rc.1+3-mp.4 or later: before it a string literal in the expression
-; deadlocked the main task and reset the board (T6-T8 compare with ""processing"").
+; deadlocked the main task and reset the board (T7 and T8 compare with ""processing"").
 ; T5 Z stall watchdog: the Z homing deadline armed by driver-stall.g passed, or lies > 30 s ahead
 M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor_stall_deadline || global.z_motor_stall_deadline > state.upTime + 30)" R0
-; T6 MFM speed restore: 30 s after the last backoff step while printing, at once otherwise
-M581.1 T6 P"global.mfm_backoff_level < 3 && (state.status != ""processing"" || job.file.fileName == null || state.upTime - global.mfm_backoff_time >= 30)" R0
 ; T7 MFM suppression expiry, only while printing (a window survives a pause)
 M581.1 T7 P"global.mfm_suppress_until > 0 && state.status == ""processing"" && state.upTime >= global.mfm_suppress_until" R0
-; T8 spool booking every 60 s while printing
+; T8 print tick every 60 s while printing: spool booking, MFM flow-bias sample
 M581.1 T8 P"state.status == ""processing"" && state.upTime - global.spool_track_time >= 60" R0
 
 M501                                                    ; load saved parameters from non-volatile memory

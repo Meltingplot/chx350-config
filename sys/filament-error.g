@@ -24,8 +24,8 @@ if exists(global.mfm_ignore_events) && global.mfm_ignore_events == true
   ; During suppression, still enforce distance limit for stuck spool detection —
   ; but only when an active running job could actually be hard-paused. Otherwise
   ; (calibration, manual loading, paused state) the bypass's side effects would
-  ; leak: it clears mfm_ignore_events/mfm_suppress_until and falls through to the
-  ; backoff path which calls M220 — that would corrupt the calibration feedrate.
+  ; leak: it clears mfm_ignore_events/mfm_suppress_until, which a calibration macro
+  ; set on purpose, and falls through to the error count of a running job.
   if (param.P == 4 || param.P == 5) && global.mfm_error_start_pos != null && job.file.fileName != null && state.status != "paused"
     if abs(move.extruders[0].position - global.mfm_error_start_pos) >= 30
       ; Distance exceeded during suppression — cancel suppression, fall through to hard pause
@@ -49,15 +49,19 @@ if param.P == 5
     if exists(global.mfm_swing_count) && global.mfm_swing_count > 0
         if global.debug
           echo "MFM: P=5 suppressed — rebound from large swing (count=" ^ global.mfm_swing_count ^ ")"
-        M220 S100
-        set global.mfm_backoff_level = 3
         M99
     if global.debug
       echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
 
-; --- Common backoff / pause / auto-recovery for P=4 and P=5 ---
+; --- Common error tolerance / pause / auto-recovery for P=4 and P=5 ---
+; The first 3 errors within 30 mm of extrusion are only counted - one segment the MFM
+; misreads must not pause the print. The speed is never lowered: a reduced speed makes the
+; MFM read lower still, the former M220 backoff made the errors worse (CLAUDE.md, MFM).
 if param.P == 4 || param.P == 5
-    set global.mfm_backoff_time = state.upTime
+    ; a sequence ends 30 s after its last error - the next error starts a fresh count
+    if state.upTime - global.mfm_error_time >= 30
+      set global.mfm_error_count = 0
+    set global.mfm_error_time = state.upTime
     set global.mfm_normal_since = 0
 
     ; Track extruder distance since first error in this sequence
@@ -66,40 +70,28 @@ if param.P == 4 || param.P == 5
 
     var error_dist = abs(move.extruders[0].position - global.mfm_error_start_pos)
 
-    ; Within safety margin and backoff attempts remaining — reduce speed
-    if var.error_dist < 30 && global.mfm_backoff_level > 0
-        M220 S{20*global.mfm_backoff_level} ; reduce speed in steps 3*20=60% 2*20=40% 1*20=20%
-        set global.mfm_backoff_level = global.mfm_backoff_level - 1
+    ; Within safety margin and tolerance left — count and continue
+    if var.error_dist < 30 && global.mfm_error_count < 3
+        set global.mfm_error_count = global.mfm_error_count + 1
         if global.debug
-          echo "MFM: backoff counter " ^ global.mfm_backoff_level ^ " (dist=" ^ var.error_dist ^ "mm)"
+          echo "MFM: error " ^ global.mfm_error_count ^ " of 3 tolerated (dist=" ^ var.error_dist ^ "mm)"
         M99
 
-    ; Hard pause — backoff exhausted or 30mm safety distance exceeded
+    ; Hard pause — tolerance exhausted or 30mm safety distance exceeded
     if global.debug
       if var.error_dist >= 30
         echo "MFM: " ^ var.error_dist ^ "mm extruded during error sequence — hard pause"
       else
-        echo "MFM: backoff exhausted — pause"
+        echo "MFM: error tolerance exhausted — pause"
     set global.mfm_error_start_pos = null
     set global.mfm_normal_since = 0
-    set global.mfm_backoff_level = 3
-    M220 S100                            ; revert speed change to 100%
+    set global.mfm_error_count = 0
 
     ; Only proceed to M25 + auto-recovery when an active running job exists
     ; (state.status "processing" is also true for macros, so gate on job file)
     if job.file.fileName == null || state.status == "paused"
       if global.debug
         echo "MFM: hard-pause skipped (state=" ^ state.status ^ ", no active job)"
-      M99
-
-    ; Heater PWM fast-fail: check before pause (standby drops avgPwm)
-    ; Below threshold = definitely not extruding = real issue; above is inconclusive
-    if heat.heaters[1].avgPwm < 0.15
-      echo "MFM: heater PWM low (" ^ {heat.heaters[1].avgPwm} ^ ") — confirms real issue"
-      M25
-      M400
-      T-1 P0
-      M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed (heater PWM low). Check filament and resume."} S1 T0
       M99
 
     ; Loop breaker: a hard pause this soon after a successful auto-recovery means the
