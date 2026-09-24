@@ -161,7 +161,7 @@ while iterations < #var.sampleValues / 2
   G1 X{var.calDistance} E{var.calDistance} F{var.extrusionSpeeds[iterations * 2] * 60}              ; extrude the specified distance
   M400                                                ; wait for moves to finish
   G4 S1
-  if sensors.filamentMonitors[var.extruder].avgPercentage == null
+  if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 ; 0 = no movement seen, and 100 / 0 is not finite
     echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
@@ -192,7 +192,8 @@ while iterations < #var.sampleValues / 2
     G1 E{var.calDistance} F{var.extrusionSpeeds[(var.previous_index) * 2] * 60}              ; extrude the specified distance
     M400                                                ; wait for moves to finish
     G4 S1
-    set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
+    ; no reading (null) or no movement (0) fails the check below - 100 / 0 is not finite
+    set var.correction = (sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0) ? 0.0 : 100 / sensors.filamentMonitors[var.extruder].avgPercentage
     if var.correction > 0.98 && var.correction < 1.3
       set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
@@ -209,8 +210,9 @@ while iterations < #var.sampleValues / 2
 G1 E-5 F120
 G1 E20 F60
 M400
-; repeat the sample collection - this time with calculated extrusion speeds
-while iterations < #var.sampleValues / 2
+; repeat the sample collection - this time with calculated extrusion speeds, only for the
+; samples the first pass kept (it may have stopped early and lowered sampleCount)
+while iterations < var.sampleCount / 2
   M591 D{var.extruder} S0                             ; disable filament monitoring
   M400                                                ; wait for moves to finish
   G4 S1
@@ -235,7 +237,7 @@ while iterations < #var.sampleValues / 2
   G1 X{var.calDistance} E{var.calDistance} F{var.extrusionSpeeds[iterations*2+1] * 60}              ; extrude the specified distance
   M400                                                ; wait for moves to finish
   G4 S1
-  if sensors.filamentMonitors[var.extruder].avgPercentage == null
+  if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 ; 0 = no movement seen, and 100 / 0 is not finite
     echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
@@ -264,7 +266,8 @@ while iterations < #var.sampleValues / 2
     G1 E{var.calDistance} F{var.extrusionSpeeds[(var.previous_index) * 2] * 60}              ; extrude the specified distance
     M400                                                ; wait for moves to finish
     G4 S1
-    set var.correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
+    ; no reading (null) or no movement (0) fails the check below - 100 / 0 is not finite
+    set var.correction = (sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0) ? 0.0 : 100 / sensors.filamentMonitors[var.extruder].avgPercentage
     if var.correction > 0.98 && var.correction < 1.3
       set var.sampleCount = {iterations * 2} ; set sample count to current iteration to stop further iterations
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
@@ -329,19 +332,23 @@ while true
   ;B = (S_tv * S_v - S_t * S_v2) / Delta
 
   var Delta = {var.S_v * var.S_v3 - var.S_v2 * var.S_v2}
-  set var.nle_a = {(var.S_t * var.S_v3 - var.S_tv * var.S_v2) / var.Delta}
-  set var.nle_b = {(var.S_tv * var.S_v - var.S_t * var.S_v2) / var.Delta}
   echo "S_v: " ^ {var.S_v} ^ ", S_v2: " ^ {var.S_v2} ^ ", S_v3: " ^ {var.S_v3}
   echo "S_t: " ^ {var.S_t} ^ ", S_tv: " ^ {var.S_tv}
-  echo "Delta: " ^ {var.Delta} ^ ", A: " ^ {var.nle_a} ^ ", B: " ^ {var.nle_b}
 
-  if isnan(var.nle_a) || isnan(var.nle_b)
-    echo "Error: Unvalid values for A and B - abort!"
+  ; Delta is 0 when fewer than two different speeds are left (every sample dropped, or one
+  ; pair whose correction was clamped to 1) - A and B are undefined then. Check before
+  ; dividing: RRF divides by 0 without an error, and the non-finite result of a var
+  ; assignment crashes DSF in SBC mode (isnan afterwards is too late and misses inf)
+  if var.Delta <= 0
+    echo "Error: fewer than two different extrusion speeds measured (" ^ var.sampleCount ^ " samples) - no fit for A and B possible, abort!"
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.mfm_ignore_events = false
     set global.result = 8
     M99                                               ; exit macro
+  set var.nle_a = {(var.S_t * var.S_v3 - var.S_tv * var.S_v2) / var.Delta}
+  set var.nle_b = {(var.S_tv * var.S_v - var.S_t * var.S_v2) / var.Delta}
+  echo "Delta: " ^ {var.Delta} ^ ", A: " ^ {var.nle_a} ^ ", B: " ^ {var.nle_b}
 
   M592 D{var.extruder} A{max(0,var.nle_a)} B{var.nle_b}                          ; activate non linear extrusion
 
@@ -372,7 +379,7 @@ while true
     M400                                                ; wait for moves to finish
     G4 S1
     var diffPos = move.extruders[0].position - var.startPos 
-    if sensors.filamentMonitors[var.extruder].avgPercentage == null
+    if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 || var.diffPos <= 0 ; both are divisors below
       echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
       T-1                                               ; deselect tool
       T{var.previousTool}                               ; select previous tool
