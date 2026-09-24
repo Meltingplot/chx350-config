@@ -192,14 +192,20 @@ M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Loggi
 ; CLAUDE.md, "Expression triggers". Not CE: the e-stop and door triggers 2-4 are set up in
 ; ce-declaration/. A quote inside the expression is doubled, the lines carry no comment
 ; (G-code line limit 256). Cheap guard first - && and || short-circuit.
-; Needs firmware 3.7.0-rc.1+3-mp.4 or later: before it a string literal in the expression
-; deadlocked the main task and reset the board (T7 and T8 compare with ""processing"").
+; No string literal in an expression: RRF copies it into the string heap on every pass, and
+; T7 and T8 comparing with "processing" caused ~19 garbage collections/s. They gate on the job
+; instead (R1, job.file.fileName) and their macros check "processing" themselves. A literal
+; would also need firmware 3.7.0-rc.1+3-mp.4 or later (before it, it deadlocked the main task
+; and reset the board).
 ; T5 Z stall watchdog: the Z homing deadline armed by driver-stall.g passed, or lies > 30 s ahead
 M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor_stall_deadline || global.z_motor_stall_deadline > state.upTime + 30)" R0
-; T7 MFM suppression expiry, only while printing (a window survives a pause)
-M581.1 T7 P"global.mfm_suppress_until > 0 && state.status == ""processing"" && state.upTime >= global.mfm_suppress_until" R0
-; T8 print tick every 60 s while printing: spool booking, MFM flow-bias sample
-M581.1 T8 P"state.status == ""processing"" && state.upTime - global.spool_track_time >= 60" R0
+; T7 MFM suppression expiry while a job is loaded - trigger7.g ends the window only while
+; "processing" (a window survives a pause). The guard is 0 outside a job (print/finish.g).
+M581.1 T7 P"global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until" R1
+; T8 print tick every 60 s while a job is loaded: spool booking, MFM flow-bias sample (only
+; while "processing"). The job is part of the expression, not only R1: the time part is true
+; all through idle, so only the job term turns the expression true at the job start.
+M581.1 T8 P"job.file.fileName != null && state.upTime - global.spool_track_time >= 60" R1
 
 M501                                                    ; load saved parameters from non-volatile memory
 M98 P"0:/sys/overrides/machine-override"              ; Load Machine specific overrides
