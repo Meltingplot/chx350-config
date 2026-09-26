@@ -218,7 +218,7 @@ M291 P"Die Kalibrierung im kalten Zustand war erfolgreich.<br>Jetzt wird das Dru
 ;; Das Druckbett heizt auf, der Druckkopf wärmt sich mit auf. Weiter geht es, sobald der Kopf
 ;; über 50 °C hat.
 ;;
-;; Bett: **{{ heat.heaters[heat.bedHeaters[0]].current | round }} °C** von 90 °C ·
+;; Bett: **{{ heat.heaters[heat.bedHeaterMapping[0][0]].current | round }} °C** von 90 °C ·
 ;; Druckkopf: **{{ sensors.analog[4].lastReading | round }} °C** von 50 °C
 M291 R"Aufwärmen" P"Das Druckbett heizt auf 90 °C, der Druckkopf wärmt sich auf." S1 T0
 M116 ; wait for bed heater

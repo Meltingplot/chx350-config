@@ -45,7 +45,7 @@ M400
 
 ;; Tür öffnen und das Bauteil vom Druckbett lösen. Keine Werkzeuge auf der Druckplatte ablegen.
 ;;
-;; {% set bed = heat.heaters[heat.bedHeaters[0]].current %}
+;; {% set bed = heat.heaters[heat.bedHeaterMapping[0][0]].current %}
 ;; Druckbett: **{{ bed | round }} °C**{% if bed > 45 %} – nur mit Handschuhen anfassen. Viele Teile
 ;; lösen sich leichter, wenn das Bett abgekühlt ist.{% endif %}
 M291 R"Teil entnehmen" P"Tür öffnen, Teil entnehmen, dann OK." S2
