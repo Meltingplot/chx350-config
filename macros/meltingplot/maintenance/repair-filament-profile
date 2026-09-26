@@ -57,10 +57,15 @@ if var.write_temps
   if result != 0
     M99
   var unload = input
+  M291 R"Repair filament profile" P"Bed temperature for preheating (0 = machine default):" S5 L0 H150 F0 J2
+  if result != 0
+    M99
+  var bed = input
   echo >{"0:/filaments/" ^ var.name ^ "/temps.g"} "; " ^ var.name ^ " - temperatures (user-editable, used by filament/on-load.g and on-unload.g)"
   echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_active = " ^ var.active
   echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_standby = " ^ var.standby
   echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_unload = " ^ var.unload
+  echo >>{"0:/filaments/" ^ var.name ^ "/temps.g"} "set global.filament_temp_bed = " ^ var.bed ^ "     ; preheat only, 0 = machine default"
 
 ; material.g (density, usual spool sizes) is offered when missing -
 ; filament-profile/create-material-file.g returns at once when the profile already has one

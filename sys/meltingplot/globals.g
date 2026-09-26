@@ -347,13 +347,21 @@ global last_filament_temp = 0
 if fileexists("0:/sys/generated/last-filament-temp.g")
   M98 P"0:/sys/generated/last-filament-temp.g"
 ; per-profile temperatures, set by filaments/<name>/temps.g (executed by
-; filament/on-load.g and on-unload.g when called with F"<name>"). temps.g is the
-; canonical per-material temperature store: load.g/unload.g are machine-generated
-; boilerplate and M98's R parameter is the pause flag (NOT passed to the macro),
-; so temperatures can neither live in nor be passed into those files.
+; filament/on-load.g and on-unload.g when called with F"<name>", and by macro
+; startup/preheat). temps.g is the canonical per-material temperature store:
+; load.g/unload.g are machine-generated boilerplate and M98's R parameter is the pause
+; flag (NOT passed to the macro), so temperatures can neither live in nor be passed
+; into those files. The bed line is optional - the shipped profiles and every temps.g
+; written before 2026-09 have none - and only startup/preheat reads it.
 global filament_temp_active = 0              ; extrusion/load temperature
 global filament_temp_standby = 0             ; standby temperature
 global filament_temp_unload = 0              ; unload temperature (0 = same as active)
+global filament_temp_bed = 0                 ; bed temperature to preheat to (0 = not set)
+; bed temperature startup/preheat heats to when no loaded profile sets filament_temp_bed.
+; A machine value, assignable in global-override.g. Low on purpose: the print start waits
+; with M116 until the bed is at the job's setpoint, cooling down included, so a preheat
+; above it costs time instead of saving it.
+global preheat_bed_temp = 60
 ; per-profile material data, set by filaments/<name>/material.g (user-editable, written
 ; by filament-profile/create-material-file.g - offered at the filament-load prompt, by macros
 ; create-filament-profile and repair-filament-profile). Run by spool/confirm.g,

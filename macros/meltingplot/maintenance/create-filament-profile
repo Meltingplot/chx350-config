@@ -1,8 +1,9 @@
 ; create-filament-profile
 ; Creates a new filament profile under 0:/filaments/<name>/ from scratch:
-;   temps.g            - active/standby/unload temperature. Canonical temperature store,
-;                        read by filament/on-load.g and on-unload.g (RRF cannot read values
-;                        back out of the machine-generated load.g/unload.g).
+;   temps.g            - active/standby/unload temperature and the bed temperature macro
+;                        startup/preheat heats to. Canonical temperature store, read by
+;                        filament/on-load.g and on-unload.g (RRF cannot read values back
+;                        out of the machine-generated load.g/unload.g).
 ;   material.g         - density and the usual spool sizes (consumption tracking, spool
 ;                        prompts). Written by filament-profile/create-material-file.g.
 ;   config-override.g  - material parameters that do NOT depend on the nozzle (M143 ...)
@@ -58,6 +59,7 @@ if fileexists(var.dir ^ "temps.g") || fileexists(var.dir ^ "config-override.g") 
 var active = 220
 var standby = 160
 var unload = 220
+var bed = 0
 
 if !var.addNozzleOnly
   ; a leftover empty directory makes M470 fail - harmless, the temps.g write below is the
@@ -75,11 +77,16 @@ if !var.addNozzleOnly
   if result != 0
     M99
   set var.unload = input
+  M291 R{"New profile: " ^ var.name} P"Bed temperature for preheating (0 = machine default):" S5 L0 H150 F0 J2
+  if result != 0
+    M99
+  set var.bed = input
 
   echo >{var.dir ^ "temps.g"} "; " ^ var.name ^ " - temperatures (user-editable, used by filament/on-load.g and on-unload.g)"
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_active = " ^ var.active
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_standby = " ^ var.standby
   echo >>{var.dir ^ "temps.g"} "set global.filament_temp_unload = " ^ var.unload
+  echo >>{var.dir ^ "temps.g"} "set global.filament_temp_bed = " ^ var.bed ^ "     ; preheat only, 0 = machine default"
 
   if !fileexists(var.dir ^ "temps.g")
     M291 R"New filament profile" P{"Could not write to 0:/filaments/" ^ var.name ^ "/ - invalid profile name?"} S1 T0
