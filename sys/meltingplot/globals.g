@@ -369,6 +369,11 @@ global filament_temp_unload = 0              ; unload temperature (0 = same as a
 ; different materials in T0 and T1, possibly in two motion systems at once).
 global material_density = 0.0                ; g/cm3 - turns extruded mm into grams
 global material_spool_weights = vector(0, 0) ; g net filament per usual spool size
+; every loadable profile name, for the material choice of macro change-filament. RRF
+; cannot list a directory, so filament-profile/read-index.g builds it on use from the
+; profiles shipped with the config and sys/generated/filament-profiles.csv (the ones
+; created on the machine, filament-profile/store-index.g). Not read at boot.
+global filament_profiles = vector(0, "")
 
 ; --- filament: load/unload state ----------------------------------------------
 ; hand-off from filament/load-procedure.g to daemon.g (drops the filament assignment),

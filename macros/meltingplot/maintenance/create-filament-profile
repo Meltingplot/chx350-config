@@ -12,6 +12,8 @@
 ;                        Selected automatically by the generated config.g through
 ;                        global.nozzle_diameter of the current tool.
 ;   config.g/load.g/unload.g - machine-owned, written by filament-profile/regenerate.g
+; The new profile is added to the machine's profile list (filament-profile/store-index.g), so
+; the material choice of macro change-filament offers it - RRF cannot list 0:/filaments.
 ; A profile describes one MATERIAL, not one material/nozzle combination. Running it again
 ; for a profile that already exists adds the parameter set of the currently installed
 ; hardware (macros set-nozzle-diameter / set-filament-diameter), so one PLA profile can
@@ -110,6 +112,9 @@ var nozzleWritten = (global.result == 0)
 
 ; write the machine-owned config.g/load.g/unload.g
 M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
+; list it for macro change-filament - also a profile that only got a nozzle added, which may
+; predate the list; store-index.g skips a name that is listed already
+M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
 
 if var.nozzleWritten
   M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for filament/nozzle " ^ var.nozzle ^ " mm. Load it via DWC (Filaments), then run the calibration macros e-steps and pressure-advance."} S1 T0

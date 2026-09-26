@@ -7,6 +7,8 @@
 ; config-override.g. load.g/unload.g need the per-material temperatures, which
 ; live in temps.g (RRF cannot read them back out of existing G-code files) -
 ; if temps.g is missing the operator is prompted and it is written here.
+; The repaired profile is added to the machine's profile list (filament-profile/store-index.g),
+; so the material choice of macro change-filament offers it.
 
 ; determine the profile name: currently loaded filament, else the profile the
 ; watchdog captured before the forced unload, else ask the operator
@@ -65,6 +67,7 @@ if var.write_temps
 M98 P"0:/sys/meltingplot/filament-profile/create-material-file.g" S{var.name}
 
 M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
+M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
 
 set global.filament_broken_profile = ""
 M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' repaired. Load the filament again via DWC (Filaments -> Load)."} S1 T0
