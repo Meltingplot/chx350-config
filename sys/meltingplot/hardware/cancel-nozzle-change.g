@@ -1,16 +1,20 @@
 ; hardware/cancel-nozzle-change.g
 ; Leaves a safe state when the guided nozzle change of macro maintenance/set-nozzle-diameter
 ; ends early - the operator cancelled a prompt or let it time out, or the tool selection,
-; the unload, the homing or the return to automatic mode failed:
+; the homing or the return to automatic mode failed:
 ; - The nozzle heater off, and kept off. A door opened during the change made trigger4.g
 ;   save the heater as "active", and trigger3.g would switch it on again when the doors
 ;   close - heating a hotend that may have no nozzle in it, with nobody at the machine.
 ;   "off" is the value trigger3.g leaves behind itself and the restrictive one (globals,
 ;   saved_*_heater_state*). It is written before the M568: a restore running in between
 ;   either finds it or is switched off by the M568.
+; - The tool's own setpoints back (A active, B standby, as the macro found them): the
+;   change set the swap temperature, and resume.g's T R1 heats to whatever the tool holds.
 ; - A paused job gets the tool state pause.g left it in: no tool selected, heater on
 ;   standby - resume.g re-selects with T R1 and waits for the heater before it moves.
-;   M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T0 S"<reason>"
+; The filament may still be pulled back into the cold zone and the new nozzle is empty, so
+; the error line tells the operator to check the nozzle and prime it before printing.
+;   M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T0 A<active> B<standby> S"<reason>"
 ; S is the reason in the error line, default "cancelled or timed out". The closing
 ; "Error:" line marks the flow as not completed in the CHX 350 UI.
 
@@ -22,7 +26,10 @@ var tool = exists(param.T) ? ((param.T == 1) ? 1 : 0) : min(max(state.currentToo
 if state.messageBox != null
   M292                                              ; a progress box of the flow may still be open
 set global.saved_tool_heater_states[var.tool] = "off"
-M568 P{var.tool} A0                                 ; nozzle heater off
+if exists(param.A) && exists(param.B)
+  M568 P{var.tool} S{param.A} R{param.B} A0         ; the tool's own setpoints, nozzle heater off
+else
+  M568 P{var.tool} A0                               ; nozzle heater off
 if state.status == "paused"
   T-1 P0
-echo "Error: nozzle change on T" ^ var.tool ^ " " ^ (exists(param.S) ? param.S : "cancelled or timed out") ^ " - check that a nozzle is fitted and tight before heating"
+echo "Error: nozzle change on T" ^ var.tool ^ " " ^ (exists(param.S) ? param.S : "cancelled or timed out") ^ " - check the nozzle is fitted and tight and prime it before printing"
