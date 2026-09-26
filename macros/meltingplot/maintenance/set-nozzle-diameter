@@ -1,3 +1,12 @@
+; ---
+; title: Düse gewechselt
+; description: "{% for d in global.nozzle_diameter %}{% set i = loop.index0 %}{% if tools[i] %}{{ ' · ' if i }}T{{ i }}: {{ d }} mm, {{ global.nozzle_type[i] }}{% endif %}{% endfor %}"
+; icon: mdi-printer-3d-nozzle-outline
+; page: [calibrate, job]
+; order: 30
+; enabled: "{{ state.status in ['idle', 'paused'] }}"
+; hint: Nur im Leerlauf oder bei pausiertem Druck
+; ---
 ; set-nozzle-diameter
 ; Records which nozzle is installed after a nozzle change: diameter and type. The
 ; diameter step is the same one the filament load runs at its feed prompt - one call to
@@ -13,16 +22,34 @@
 ; results (config-auto-pa-<key>.g, -nle-, -esteps-), <key> being the diameter with two
 ; decimals: 0.40, 1.20.
 ; Allowed while a print is paused (a nozzle swap after a clog), never while it prints.
+; The tool is T<n> when called with it, else asked by lib/ask-tool.g when more than one
+; tool has an extruder. A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"),
+; which starts it without parameters.
 
 if job.file.fileName != null && state.status != "paused"
   echo "Error: a print job is running - abort!"
   M99
 
-var tool = min(max(state.currentTool, 0), 1)
+; lib/ask-tool.g hands the tool back in global.result, -1 = cancelled
+var tool = 0
+if exists(param.T)
+  set var.tool = (param.T == 1) ? 1 : 0
+else
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"An welchem Druckkopf wurde die Düse gewechselt?"
+  set var.tool = global.result
+  if var.tool < 0
+    echo "Error: nozzle entry cancelled"
+    M99
 M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-diameter.g" T{var.tool}
 M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-type.g" T{var.tool}
 
 ; lib/format-number.g returns the key in global.result - read it straight away
 M98 P"0:/sys/meltingplot/lib/format-number.g" F{global.nozzle_diameter[var.tool]} D2 W0
-M291 R"Nozzle" P{"Tool " ^ var.tool ^ ": " ^ global.result ^ "mm " ^ global.nozzle_type[var.tool] ^ ". Check the Z offset and calibrate PA/NLE for this nozzle."} S1 T0
+var key = global.result
+
+;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+;;
+;; Eine andere Düse sitzt anders hoch und fördert anders: den Z-Offset prüfen und Pressure
+;; Advance und NLE für diese Düse kalibrieren.
+M291 R"Düse erfasst" P{"T" ^ var.tool ^ ": " ^ var.key ^ " mm, " ^ global.nozzle_type[var.tool] ^ ". Z-Offset prüfen und PA/NLE für diese Düse kalibrieren."} S2
 M400 ; sbc specific

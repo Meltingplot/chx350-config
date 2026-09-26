@@ -1,0 +1,33 @@
+; ---
+; title: Heizungen aus
+; description: Alle Druckköpfe, Bett und Kammer ausschalten
+; icon: mdi-fire-off
+; page: start
+; order: 12
+; visible: "{% set states = heat.heaters | select | join(',', 'state') %}{{ 'active' in states or 'standby' in states }}"
+; hint: Nicht während eines Druckauftrags
+; ---
+; startup/heaters-off
+; Switches every heater off: each tool (M568 A0) and each bed and chamber slot that has a
+; heater mapped (S-273.15). The slots come from heat.bedHeaterMapping and
+; heat.chamberHeaterMapping - on RRF 3.7 the older heat.bedHeaters reads all -1.
+; Needs neither automatic mode nor closed doors, since switching off is always the safe
+; direction, but it refuses while a job is loaded: a paused job resumes with the heaters
+; it paused with. The tile shows only while a heater is on.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"), without a prompt.
+
+if job.file.fileName != null
+  echo "Error: a print job is loaded - abort!"
+  M99
+
+while iterations < #tools
+  if tools[iterations] != null
+    if #tools[iterations].heaters > 0
+      M568 P{iterations} A0
+while iterations < #heat.bedHeaterMapping
+  if #heat.bedHeaterMapping[iterations] > 0
+    M140 P{iterations} S-273.15
+while iterations < #heat.chamberHeaterMapping
+  if #heat.chamberHeaterMapping[iterations] > 0
+    M141 P{iterations} S-273.15
+echo "All heaters off"

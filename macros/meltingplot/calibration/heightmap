@@ -1,9 +1,9 @@
 ; ---
 ; title: Bett-Mesh messen
-; description: Höhenkarte über das ganze Bett aufnehmen · ersetzt die gespeicherte Karte
+; description: "{% set d = move.compensation.meshDeviation %}{% if d %}Aktive Karte: RMS {{ d.deviation | round(3) }} mm, Mittel {{ d.mean | round(3) }} mm{% else %}Höhenkarte über das ganze Bett aufnehmen{% endif %}"
 ; icon: mdi-grid
 ; page: calibrate
-; order: 20
+; order: 120
 ; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
 ; hint: Nur in Betriebsart Automatik – Türen schließen
 ; ---

@@ -1,8 +1,17 @@
+; ---
+; title: Druckplatte gewechselt
+; description: "{% set n = {'pei':'PEI glatt','pei-textured':'PEI strukturiert','glass':'Glas','other':'Andere','unknown':'unbekannt'} %}Eingesetzt: {{ n[global.bed_surface] or global.bed_surface | capitalize }}"
+; icon: mdi-layers-outline
+; page: calibrate
+; order: 40
+; ---
 ; set-bed-surface
 ; Records which build plate surface is installed after a plate change - one call to
 ; hardware/confirm-bed-surface.g: a dropdown with the configured surface preselected, persisted
 ; machine-wide in sys/generated/bed-surface.g. Cancelling keeps the configured value.
-; Allowed while a print is paused, never while it prints.
+; Allowed while a print is paused, never while it prints. A flow of the CHX 350 UI
+; (CLAUDE.md, "Flows in the CHX 350 UI") on the calibrate page, and the last step of flow
+; maintenance/prepare-bed when the operator put in another plate.
 
 if job.file.fileName != null && state.status != "paused"
   echo "Error: a print job is running - abort!"
@@ -10,5 +19,10 @@ if job.file.fileName != null && state.status != "paused"
 
 M98 P"0:/sys/meltingplot/hardware/confirm-bed-surface.g"
 
-M291 R"Build plate" P{"Surface: " ^ global.bed_surface ^ ". Re-check the Z offset if the plate thickness changed."} S1 T0
+;; {% set n = {"pei": "PEI glatt", "pei-textured": "PEI strukturiert", "pertinax": "Pertinax",
+;;    "g10": "G10", "carbon": "Carbon", "glass": "Glas", "other": "Andere"} %}
+;; Eingesetzt laut Maschine: **{{ n[global.bed_surface] or global.bed_surface }}**
+;;
+;; Ist die neue Platte dicker oder dünner als die alte, den Z-Offset prüfen.
+M291 R"Druckplatte erfasst" P{"Druckplatte: " ^ global.bed_surface ^ ". Z-Offset prüfen, wenn sich die Plattendicke geändert hat."} S2
 M400 ; sbc specific

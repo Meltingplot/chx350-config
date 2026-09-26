@@ -1,3 +1,12 @@
+; ---
+; title: Spule erfassen
+; description: "{% for w in global.spool_net_weight %}{% set i = loop.index0 %}{% if tools[i] %}{{ ' · ' if i }}T{{ i }}: {{ global.spool_remaining[i] | round ~ ' von ' ~ w ~ ' g' if w else 'offen' }}{% endif %}{% endfor %}"
+; icon: mdi-scale
+; page: [start, job]
+; order: 28
+; enabled: "{{ state.status in ['idle', 'paused'] }}"
+; hint: Nur im Leerlauf oder bei pausiertem Druck
+; ---
 ; set-spool-size
 ; Records or corrects the spool mounted on a tool: nominal net weight and what
 ; is left on it. The same questions the filament load asks at its feed prompt - one call
@@ -11,23 +20,30 @@
 ; prompt keeps everything. Use it when a spool is swapped without a filament change
 ; (same material, new spool) or to correct the tracked remaining weight.
 ; Allowed while a print is paused (a spool change), never while it prints.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"), started without
+; parameters - the tool is then asked by lib/ask-tool.g.
 
 if job.file.fileName != null && state.status != "paused"
   echo "Error: a print job is running - abort!"
   M99
 
-; which tool: T<n> when called with it, else asked when a second tool is defined (with
-; T0 and T1 in two motion systems DWC's current tool is only that of its own motion
-; system), preselected on the current tool
-var tool = min(max(state.currentTool, 0), 1)
+; which tool: T<n> when called with it, else asked when more than one tool has an
+; extruder (with T0 and T1 in two motion systems DWC's current tool is only that of its
+; own motion system); lib/ask-tool.g hands it back in global.result, -1 = cancelled
+var tool = 0
 if exists(param.T)
   set var.tool = (param.T == 1) ? 1 : 0
-elif #tools > 1 && tools[1] != null
-  M291 R"Spool" P"Record the spool of which tool?" S4 K{"Tool 0","Tool 1"} F{var.tool} J2
-  if result != 0             ; J2 leaves input undefined - result must be tested right here
+else
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"Die Spule welches Druckkopfs erfassen?"
+  set var.tool = global.result
+  if var.tool < 0
+    echo "Error: spool entry cancelled"
     M99
-  set var.tool = input
 M98 P"0:/sys/meltingplot/spool/confirm.g" T{var.tool}
 
-M291 R"Spool" P{"Tool " ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g of " ^ global.spool_net_weight[var.tool] ^ " g spool" ^ (global.spool_density[var.tool] > 0 ? "" : " (no density - not tracked)")} S1 T0
+;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+;;
+;; Der Verbrauch wird von diesem Stand an mitgezählt, sobald das Material eine Dichte hat
+;; (material.g des Filamentprofils).
+M291 R"Spule erfasst" P{"T" ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g von " ^ global.spool_net_weight[var.tool] ^ " g" ^ (global.spool_density[var.tool] > 0 ? "" : " (ohne Dichte, nicht gezählt)")} S2
 M400 ; sbc specific

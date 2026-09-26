@@ -75,5 +75,5 @@ M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
 M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
 
 set global.filament_broken_profile = ""
-M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' repaired. Load the filament again via DWC (Filaments -> Load)."} S1 T0
+M291 R"Repair filament profile" P{"Profile '" ^ var.name ^ "' repaired. Load the filament again with the flow Filament wechseln."} S1 T0
 M400 ; sbc specific

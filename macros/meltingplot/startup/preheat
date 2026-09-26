@@ -1,0 +1,92 @@
+; ---
+; title: Vorheizen
+; description: "{% set b = heat.heaters[heat.bedHeaterMapping[0][0]] %}{% if b and b.state == 'active' %}Heizt · Bett {{ b.current | round }} von {{ b.active }} °C{% else %}Nach geladenem Material{% endif %}"
+; icon: mdi-fire
+; page: start
+; order: 10
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and (move.extruders | selectattr('filament') | length) > 0 }}"
+; hint: Nur in Betriebsart Automatik und mit geladenem Filament
+; ---
+; startup/preheat
+; Heats the bed and every tool with a filament loaded, so that a job starts without the long
+; heat-up, and returns at once - no M116: the operator starts it and walks away.
+; Targets come from the loaded filament profiles (filaments/<name>/temps.g):
+; - each tool goes to standby at the profile's standby temperature, with the active
+;   setpoint set to the extrusion temperature, so selecting the tool at the job start
+;   heats on from standby;
+; - the bed goes to the highest filament_temp_bed of the loaded profiles. That temps.g
+;   line is optional (the shipped profiles and every temps.g written before 2026-09 have
+;   none, macro create-filament-profile asks for it); without it the bed goes to
+;   global.preheat_bed_temp, 60 C unless global-override.g sets another value.
+; With no filament loaded there is no target: nothing is heated. The idle heater cutoff
+; in daemon.g switches everything off again when no job follows.
+; temps.g writes the filament_temp_* transfer globals that every tool shares: reset, run
+; and copy follow each other with no prompt in between.
+; Heating needs automatic mode: default mode switches the heaters off and caps them at
+; 50 C (M143).
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI").
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+var active = vector(#tools, 0)
+var standby = vector(#tools, 0)
+var bed = 0
+var targets = ""
+while iterations < #tools
+  if tools[iterations] != null
+    if #tools[iterations].extruders > 0 && #tools[iterations].heaters > 0
+      var filament = move.extruders[tools[iterations].extruders[0]].filament
+      if var.filament != null && var.filament != ""
+        set global.filament_temp_active = 0
+        set global.filament_temp_standby = 0
+        set global.filament_temp_bed = 0
+        if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+          M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+        set var.active[iterations] = floor(global.filament_temp_active)
+        set var.standby[iterations] = floor(global.filament_temp_standby)
+        set var.bed = max(var.bed, floor(global.filament_temp_bed))
+        if var.active[iterations] > 0 && var.standby[iterations] > 0
+          set var.targets = var.targets ^ " · T" ^ iterations ^ " " ^ var.filament ^ " " ^ var.standby[iterations] ^ " °C"
+        else
+          M118 P0 S{"Warning: preheat: filaments/" ^ var.filament ^ "/temps.g missing or without standby temperature - T" ^ iterations ^ " is not heated"}
+
+if var.targets == ""
+  M291 R"Keine Zieltemperatur" P"Kein Druckkopf hat ein Filament mit Temperaturen geladen - es gibt nichts vorzuheizen. Zuerst Filament laden." S2
+  echo "Error: no filament with temperatures loaded - nothing to preheat"
+  M99
+
+if var.bed <= 0
+  set var.bed = floor(global.preheat_bed_temp)
+
+;; Die Zieltemperaturen ergeben sich aus den geladenen Materialien: jeder Druckkopf heizt auf
+;; die Standby-Temperatur seines Filamentprofils, das Bett auf die Temperatur aus dem Profil
+;; oder, wenn das Profil keine nennt, auf den Standardwert der Maschine.
+;;
+;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+;;
+;; Die Maschine wartet nicht, bis die Temperaturen erreicht sind. Folgt kein Druck, schalten
+;; die Heizungen nach der Leerlaufzeit wieder ab:
+;; Düse nach {{ (global.idle_heater_timeout[1] / 60) | round }} min,
+;; Bett nach {{ (global.idle_heater_timeout[0] / 60) | round }} min.
+M291 R"Vorheizen starten" P{"Heizen auf: Bett " ^ var.bed ^ " °C" ^ var.targets} S3 J2
+if result != 0
+  echo "Error: preheat cancelled"
+  M99
+
+while iterations < #heat.bedHeaterMapping
+  if #heat.bedHeaterMapping[iterations] > 0
+    M140 P{iterations} S{var.bed}
+while iterations < #tools
+  if var.standby[iterations] > 0 && var.active[iterations] > 0
+    M568 P{iterations} S{var.active[iterations]} R{var.standby[iterations]} A1   ; standby, active setpoint for the job start
+echo "Preheating: bed " ^ var.bed ^ " C" ^ var.targets

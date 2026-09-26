@@ -1,0 +1,47 @@
+; ---
+; title: Babystepping übernehmen
+; description: "{% set b = move.axes[2].babystep %}{{ '+' if b > 0 }}{{ b | round(2) }} mm Babystepping aus einem Druck · übernehmen oder verwerfen"
+; icon: mdi-arrow-expand-vertical
+; page: start
+; order: 35
+; visible: "{{ move.axes[2].babystep != 0 }}"
+; hint: Nicht während eines Druckauftrags
+; ---
+; z-probe/offset/resolve-babystepping
+; Decides what becomes of a Z babystep left over from a print: take it over as the touch-mode
+; Z offset of the scanning probe (macro apply-babystepping: szp_touch_z_offset, persisted in
+; sys/generated/szp-touch-z-offset.g) or discard it (M290 R0 S0). The tile shows only while
+; the Z babystep is not 0. Refused while a job is loaded, paused included: until the job has
+; ended the babystep belongs to it.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI").
+
+if job.file.fileName != null
+  echo "Error: a print job is loaded - abort!"
+  M99
+
+if move.axes[2].babystep == 0
+  echo "No Z babystep active - nothing to take over"
+  M99
+
+;; {% set b = move.axes[2].babystep %}
+;; Aus einem Druck ist ein Z-Versatz von **{{ '+' if b > 0 }}{{ b | round(3) }} mm** aktiv
+;; (Babystepping). **Übernehmen** speichert ihn als Z-Offset der Sonde, die nächsten Drucke
+;; starten dann mit dieser Höhe. **Verwerfen** setzt ihn zurück.
+;;
+;; Z-Offset der Sonde jetzt: {{ global.szp_touch_z_offset | round(3) }} mm
+M291 R"Z-Versatz aus dem Druck" P{"Z-Versatz " ^ move.axes[2].babystep ^ " mm aktiv. Übernehmen speichert ihn als Z-Offset der Sonde, Verwerfen setzt ihn zurück."} S4 K{"Übernehmen","Verwerfen"} F0 J2
+if result != 0             ; J2 leaves input undefined - result must be tested right here
+  echo "Error: cancelled - the babystep stays active"
+  M99
+
+if input == 1
+  M290 R0 S0                                  ; discard
+  echo "Z babystep discarded"
+  M99
+
+M98 P"0:/macros/meltingplot/z-probe/offset/apply-babystepping"
+
+;; Der Versatz ist jetzt Teil des Z-Offsets der Sonde und gilt ab dem nächsten Druck.
+;;
+;; Z-Offset der Sonde: **{{ global.szp_touch_z_offset | round(3) }} mm**
+M291 R"Z-Versatz übernommen" P{"Übernommen. Z-Offset der Sonde jetzt " ^ global.szp_touch_z_offset ^ " mm."} S2

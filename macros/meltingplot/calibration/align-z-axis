@@ -3,7 +3,7 @@
 ; description: Die Z-Motoren am unteren Anschlag zueinander ausrichten
 ; icon: mdi-align-vertical-center
 ; page: calibrate
-; order: 30
+; order: 100
 ; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
 ; hint: Nur in Betriebsart Automatik – Türen schließen
 ; ---

@@ -1,0 +1,75 @@
+; ---
+; title: Achsen referenzieren
+; description: "{% set open = move.axes | selectattr('visible') | rejectattr('homed') | join(', ', 'letter') %}{% if open %}Nicht referenziert: {{ open }}{% else %}Alle Achsen referenziert{% endif %}"
+; icon: mdi-home-import-outline
+; page: start
+; order: 20
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
+; hint: Nur in Betriebsart Automatik – Türen schließen
+; ---
+; startup/home-axes
+; Homes the machine, with the choice the old UI page offered:
+; - all axes: G28 -> homeall.g - Z motors aligned at the lower stop, beam squared with
+;   X, Y and U, then Z;
+; - the gantry: G28 X -> homex.g, which squares the beam and therefore always homes Y and U
+;   with it (a lone Y or U reference is worthless after the next squaring, so they are not
+;   offered on their own);
+; - Z: G28 Z -> homez.g, which homes X, Y and U first when they are not homed.
+; Every homing file runs the door check itself; it runs here once before the progress
+; step, so that its prompts come before the moves and not in the middle of the step.
+; Needs automatic mode: default mode limits the speed to 60 mm/min.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI").
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+;; Vor dem Referenzieren muss der Bauraum frei sein. Entfernen Sie Bauteile, Werkzeuge und
+;; Filamentreste vom Bett.
+;;
+;; **Alle Achsen** richtet zuerst die Z-Motoren am unteren Anschlag aus, dann referenziert die
+;; Maschine das Portal und Z. **Portal** referenziert X, Y und U, **Nur Z** die Z-Achse.
+M291 R"Bauraum prüfen" P"Der Bauraum muss frei sein: Bauteile, Werkzeuge und Filamentreste vom Bett entfernen. Welche Achsen referenzieren?" S4 K{"Alle Achsen","Portal (X, Y, U)","Nur Z"} F0 J2
+if result != 0             ; J2 leaves input undefined - result must be tested right here
+  echo "Error: homing cancelled"
+  M99
+var choice = input
+
+M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
+
+;; > Nicht in den Bauraum greifen.
+;;
+;; Die Maschine fährt die Achsen an ihre Endlagen. Greifen Sie während der Bewegung nicht in
+;; den Bauraum.
+M291 R"Referenzierung läuft" P"Die Maschine fährt die Achsen an ihre Endlagen. Nicht in den Bauraum greifen." S1 T0
+set global.result = 0
+if var.choice == 0
+  G28
+elif var.choice == 1
+  G28 X
+else
+  G28 Z
+var failed = result != 0 || global.result != 0
+
+if state.messageBox != null
+  M292
+if var.failed
+  echo "Error: homing failed"
+  M99
+
+var open = ""
+while iterations < #move.axes
+  if move.axes[iterations].visible && !move.axes[iterations].homed
+    set var.open = var.open ^ ((var.open == "") ? "" : ", ") ^ move.axes[iterations].letter
+
+;; {% set open = move.axes | selectattr('visible') | rejectattr('homed') | join(', ', 'letter') %}
+;; {% if open %}Referenziert. Noch nicht referenziert: **{{ open }}**{% else %}Alle Achsen sind referenziert.{% endif %}
+M291 R"Referenzierung abgeschlossen" P{(var.open == "") ? "Alle Achsen sind referenziert." : "Referenziert. Noch nicht referenziert: " ^ var.open} S2

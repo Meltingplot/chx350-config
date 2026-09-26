@@ -1,0 +1,154 @@
+; ---
+; title: Filament wechseln
+; description: "{% for t in tools %}{% set i = loop.index0 %}{% if t and t.extruders | length %}{{ ' · ' if i }}T{{ i }}: {{ move.extruders[t.extruders[0]].filament or 'leer' }}{% endif %}{% endfor %}"
+; icon: mdi-printer-3d-nozzle
+; page: [start, job]
+; order: 25
+; enabled: "{{ state.status in ['idle', 'paused'] and global.machine_mode == 'automatic' }}"
+; hint: Nur im Leerlauf oder bei pausiertem Druck, in Betriebsart Automatik
+; ---
+; maintenance/change-filament
+; Changes the filament of one tool: unloads what is loaded and loads the chosen profile,
+; or only unloads. Replaces the filament wizard of the CHX 350 UI and runs its sequence
+; T<n> -> M702 (when loaded) -> M701 S"<profile>" -> M703, so the load path is the one DWC's
+; own filament menu takes: filament/on-unload.g and on-load.g heat, filament/on-config.g
+; runs the physical load (filament/load-procedure.g), which asks for the nozzle and the
+; spool at its feed prompt.
+; The material list comes from filament-profile/read-index.g - RRF cannot list
+; 0:/filaments - and holds every profile with a temps.g. "Anderes Profil" takes the name
+; of one the list does not know yet (created before the index existed, or copied onto the
+; machine) and adds it to the index. "Nur entladen" is offered when something is loaded.
+; Both profiles are regenerated before M702 and M701 (filament-profile/regenerate.g, as
+; tpost0.g does on a tool change): a profile generated before 3.7 would otherwise load
+; through the forwarding files, one macro level deeper - and this flow already runs one
+; level above DWC's own M701/M703.
+; Allowed while a job is paused (filament change mid-print), never while it prints; a paused
+; job is handed back with no tool selected, as pause.g left it. It moves and heats, so it
+; needs automatic mode.
+; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"), on the start page and
+; in the pause controls of the job page.
+
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
+  M99
+
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - abort!"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  M99
+
+; which tool - asked only when more than one has an extruder; lib/ask-tool.g hands the
+; number back in global.result (-1 = cancelled), valid on the next line only
+M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"Welchen Druckkopf möchten Sie bestücken?"
+var tool = global.result
+if var.tool < 0
+  echo "Error: filament change cancelled"
+  M99
+var extruder = tools[var.tool].extruders[0]
+var loaded = move.extruders[var.extruder].filament
+if var.loaded == null
+  set var.loaded = ""
+
+; the choice: every loadable profile, then "Anderes Profil" and, when something is
+; loaded, "Nur entladen"; the loaded profile is preselected
+M98 P"0:/sys/meltingplot/filament-profile/read-index.g"
+var names = global.filament_profiles
+var other = #var.names
+var labels = var.names ^ vector(1, "Anderes Profil …")
+if var.loaded != ""
+  set var.labels = var.labels ^ vector(1, "Nur entladen")
+var preset = 0
+while iterations < #var.names
+  if var.names[iterations] == var.loaded
+    set var.preset = iterations
+    break
+
+;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
+;;
+;; Die Liste entspricht den Filamentprofilen auf der Maschine. **Anderes Profil** fragt nach dem
+;; Namen eines Profils, das hier fehlt. **Nur entladen** nimmt das Filament heraus, ohne neues
+;; zu laden.
+M291 R"Material wählen" P{"Welches Material laden Sie in T" ^ var.tool ^ "?"} S4 K{var.labels} F{var.preset} J2
+if result != 0             ; J2 leaves input undefined - result must be tested right here
+  echo "Error: filament change cancelled"
+  M99
+var name = ""              ; stays "" for "Nur entladen"
+if input < var.other
+  set var.name = var.names[input]
+elif input == var.other
+  ;; Der Name ist das Verzeichnis des Profils unter /filaments, genau so geschrieben. Das Profil
+  ;; steht danach in der Liste.
+  M291 R"Profilname eingeben" P"Name des Filamentprofils (Verzeichnis unter /filaments):" S7 L1 H40 J2
+  if result != 0
+    echo "Error: filament change cancelled"
+    M99
+  set var.name = input
+  if !fileexists("0:/filaments/" ^ var.name ^ "/temps.g")
+    M291 R"Profil nicht ladbar" P{"Profil '" ^ var.name ^ "' hat keine temps.g. Ein in DWC angelegtes Profil zuerst mit dem Makro repair-filament-profile reparieren."} S2
+    echo "Error: filament profile '" ^ var.name ^ "' has no temps.g"
+    M99
+  M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
+
+if var.loaded != ""
+  ;; > Düse wird heiß. Nicht in den Bauraum greifen.
+  ;;
+  ;; Die Düse heizt auf die Entladetemperatur, dann zieht die Maschine das alte Filament zurück.
+  ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
+  ;; Düse: **{{ h.current | round }} °C** von {{ h.active | round }} °C{% endif %}
+  M291 R"Filament wird entladen" P"Die Düse heizt auf, das alte Filament wird entladen. Düse wird heiß - nicht in den Bauraum greifen." S1 T0
+  T{var.tool}
+  if state.currentTool != var.tool
+    if state.messageBox != null
+      M292
+    echo "Error: tool " ^ var.tool ^ " could not be selected"
+    M99
+  M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.loaded}
+  ; filament/unload-procedure.g sets filament_unload_done as its last step; daemon.g resets it
+  ; only when a filament is assigned again, so right after M702 it tells whether the physical
+  ; unload ran to the end. M702 clears the assignment either way.
+  set global.filament_unload_done = false
+  M702
+  if !global.filament_unload_done
+    if state.messageBox != null
+      M292
+    echo "Error: unloading " ^ var.loaded ^ " did not finish - check the filament path"
+    M99
+
+if var.name != ""
+  ;; > Düse wird heiß. Nicht in den Bauraum greifen.
+  ;;
+  ;; Die Düse heizt auf die Temperatur des neuen Materials. Danach fragt die Maschine nach Düse
+  ;; und Spule, Sie führen das Filament ein, und sie fördert es selbstständig bis zur Düse.
+  ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
+  ;; Düse: **{{ h.current | round }} °C** von {{ h.active | round }} °C{% endif %}
+  M291 R"Filament wird geladen" P"Die Düse heizt auf, danach wird das neue Filament eingefördert. Düse wird heiß - nicht in den Bauraum greifen." S1 T0
+  T{var.tool}                ; no-op when the unload above selected it already
+  if state.currentTool != var.tool
+    if state.messageBox != null
+      M292
+    echo "Error: tool " ^ var.tool ^ " could not be selected"
+    M99
+  M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
+  M701 S{var.name}
+  M703
+  ; filament/on-config.g records the dispatched load before it starts it, a failed load
+  ; raises filament_load_failed at its end and daemon.g then drops the assignment - any of
+  ; the three says the filament is not in
+  if global.filament_load_failed || move.extruders[var.extruder].filament != var.name || global.filament_load_dispatched != var.name
+    if state.messageBox != null
+      M292
+    echo "Error: loading " ^ var.name ^ " failed"
+    M99
+
+; a paused job gets back the tool state pause.g left it in: no tool selected, heater on
+; standby. resume.g re-selects with T R1, and that tool change applies the new profile and its
+; calibration files (tpost0.g) before the re-prime.
+if state.status == "paused"
+  T-1 P0
+
+if state.messageBox != null
+  M292
+echo "Filament change on T" ^ var.tool ^ " finished: " ^ ((var.name == "") ? "unloaded" : var.name)

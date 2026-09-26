@@ -124,7 +124,7 @@ M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
 M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
 
 if var.nozzleWritten
-  M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for filament/nozzle " ^ var.nozzle ^ " mm. Load it via DWC (Filaments), then run the calibration macros e-steps and pressure-advance."} S1 T0
+  M291 R"New filament profile" P{"'" ^ var.name ^ "' ready for filament/nozzle " ^ var.nozzle ^ " mm. Load it with the flow Filament wechseln, then run the calibration macros e-steps and pressure-advance."} S1 T0
 else
   M291 R"New filament profile" P{"'" ^ var.name ^ "' has no values for filament/nozzle " ^ var.nozzle ^ " mm yet - run this macro again to add them."} S1 T0
 M400 ; sbc specific

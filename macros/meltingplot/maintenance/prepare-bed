@@ -3,7 +3,7 @@
 ; description: Teil entnehmen · Bett fährt nach unten
 ; icon: mdi-tray-arrow-down
 ; page: start
-; order: 20
+; order: 30
 ; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' }}"
 ; hint: Nur in Betriebsart Automatik – Türen schließen
 ; ---

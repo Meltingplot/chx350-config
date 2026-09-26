@@ -3,7 +3,7 @@
 ; description: Sonde kalt und warm gegen das Z-Einstellgerät einmessen · bis zu 40 min
 ; icon: mdi-target
 ; page: calibrate
-; order: 10
+; order: 110
 ; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and sensors.analog[4].lastReading <= 35 }}"
 ; hint: Nur in Betriebsart Automatik und mit kaltem Druckkopf (unter 35 °C)
 ; ---
