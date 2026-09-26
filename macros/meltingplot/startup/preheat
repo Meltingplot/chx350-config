@@ -90,3 +90,6 @@ while iterations < #tools
   if var.standby[iterations] > 0 && var.active[iterations] > 0
     M568 P{iterations} S{var.active[iterations]} R{var.standby[iterations]} A1   ; standby, active setpoint for the job start
 echo "Preheating: bed " ^ var.bed ^ " C" ^ var.targets
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

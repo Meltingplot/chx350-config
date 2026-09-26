@@ -1,31 +1,55 @@
+; ---
+; title: E-Steps kalibrieren
+; description: "{% for t in tools %}{% set i = loop.index0 %}{% if t and t.extruders | length %}{% set e = move.extruders[t.extruders[0]] %}{{ ' · ' if i }}T{{ i }}: {{ e.stepsPerMm | round(1) }} Schritte/mm{{ ', ' ~ e.filament if e.filament }}{% endif %}{% endfor %}"
+; icon: mdi-tape-measure
+; page: calibrate
+; order: 130
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and (move.extruders | selectattr('filament') | length) > 0 }}"
+; hint: Nur in Betriebsart Automatik und mit geladenem Filament
+; ---
 ; calibration/e-steps
 ; Measures the real extruder steps/mm against the filament monitor and writes the result
 ; to filaments/<name>/config-auto-esteps-<key>.g (loaded back by tpost0.g). Runs from
-; filament/load-procedure.g after every load, or as a macro from DWC.
+; filament/load-procedure.g after every load, and as a flow of the CHX 350 UI (CLAUDE.md,
+; "Flows in the CHX 350 UI") or a macro from DWC.
 ;   M98 P"0:/macros/meltingplot/calibration/e-steps" C0
-; C0 skips the nozzle confirmation (the load path has just asked), Q1 = silent (no
-; message boxes). An R parameter never reaches a macro (M98 consumes it as its pause
+; C0: called from the filament load, which has confirmed the nozzle, put the head in place
+; and retracts and cleans the nozzle itself - only the measurement runs, with a progress
+; box. Without it (the flow, a DWC macro) the macro asks for the tool (T<n> skips that,
+; lib/ask-tool.g), explains the run, confirms the nozzle, homes when needed and moves the
+; head to the front centre with the bed at least 200 mm down - the ~85 mm extruded here must
+; fall free, a blob on the bed or a part pushes back and falsifies the measurement. While a
+; job is paused the head stays at pause.g's park position. At the end it retracts 12.5 mm
+; and cleans the nozzle as the load does, and shows the result. Q1 = silent (no message
+; boxes). An R parameter never reaches a macro (M98 consumes it as its pause
 ; flag), so the calibration temperature cannot be passed in - it always comes from the
 ; profile: filaments/<name>/temps.g, for a profile predating temps.g the tool's active
 ; setpoint. The tool is heated to it here and the macro waits: below the cold-extrusion
 ; limit the extruder does not move at all, and a measurement at standby or at a leftover
 ; DWC setpoint would be filed as the profile's calibration.
+; Not while a job prints; a paused job is allowed, the filament load of a paused print
+; calibrates here. Every exit after the measurement started goes through
+; filament/end-mfm-calibration.g (filament monitor, filament errors, progress box).
 
 ; params
 var calDistance = exists(param.D) ? param.D : 25.3/2 ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear
-var tool = exists(param.T) ? param.T : 0            ; tool number
 var tolerance = exists(param.S) ? param.S : 0.25    ; tolerance in %
 var repeatCount = exists(param.A) ? param.A : 3     ; number of iterations
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
-var confirmNozzle = exists(param.C) ? (param.C != 0) : true ; C0: the caller has already confirmed the nozzle
+var standalone = exists(param.C) ? (param.C != 0) : true ; C0: called from the filament load, see above
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
-var validValue = {50 * move.extruders[0].microstepping.value} ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 
 if var.silent
   set var.silent = true;
 
 set global.result = 0
+
+; a running print owns the motion queue; a paused one is parked by pause.g
+if job.file.fileName != null && state.status != "paused"
+  echo "Error: a print job is running - abort!"
+  set global.result = 8
+  M99
 
 ; outside automatic mode the cold-extrusion prevention (M302 S500, operating-mode/default.g)
 ; refuses every extruder move - hardened read, see globals
@@ -39,22 +63,56 @@ if ("" ^ global.machine_mode) != "automatic"
   set global.result = 6
   M99
 
+; the tool: T<n>, else asked - lib/ask-tool.g hands it back in global.result, -1 = cancelled.
+; The filament load passes neither and is tool 0.
+var tool = 0
+if exists(param.T)
+  set var.tool = param.T
+elif var.standalone && !var.silent
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"Welchen Druckkopf kalibrieren?"
+  set var.tool = global.result
+  if var.tool < 0
+    echo "Error: e-steps calibration cancelled"
+    set global.result = 9
+    M99
+
 var previousTool = state.currentTool                ; store current tool
 
 var extruder = tools[var.tool].filamentExtruder     ; get current extruder
 var currentHeater = tools[var.tool].heaters[0]      ; get current heater
 var filament = move.extruders[var.extruder].filament
 var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+var validValue = {50 * move.extruders[var.extruder].microstepping.value} ; Base Value of the Extruder is 50 steps/mm at 200 steps/rev
 
 if var.filament == null || var.filament == ""
   echo "Error: no filament loaded! abort!"
   set global.result = 1
   M99
 
+if var.standalone && !var.silent
+  ;; Die Maschine misst, wie viel Filament der Extruder wirklich fördert, und vergleicht es mit
+  ;; dem Filamentmonitor. Daraus berechnet sie die E-Steps (Schritte je mm) und speichert sie im
+  ;; Profil – für dieses Filament mit diesem Filament- und Düsendurchmesser.
+  ;;
+  ;; - Der Druckkopf fährt nach vorne in die Mitte, das Druckbett mindestens 200 mm nach unten.
+  ;;   Sind die Achsen nicht referenziert, referenziert die Maschine sie vorher.
+  ;; - Die Düse heizt auf die Temperatur des Profils.
+  ;; - Etwa 85 mm Filament werden extrudiert und fallen auf das Druckbett –
+  ;;   **das Druckbett muss frei sein**. Das dauert wenige Minuten, danach wird die Düse gereinigt.
+  ;;
+  ;; Beim Laden von Filament kalibriert die Maschine die E-Steps von selbst. Von Hand nötig nach
+  ;; einem Düsenwechsel. Meldet der Filamentmonitor immer wieder Fehler, zuerst Extruder und
+  ;; Andruckrolle prüfen: Eine verschlissene Rolle rutscht und verfälscht auch diese Messung.
+  M291 R"E-Steps kalibrieren" P{"E-Steps von T" ^ var.tool ^ " für " ^ var.filament ^ " kalibrieren? Etwa 85 mm Filament werden extrudiert, das Druckbett muss frei sein."} S3 J2
+  if result != 0
+    echo "Error: e-steps calibration cancelled"
+    set global.result = 9
+    M99
+
 ; the result is filed under the installed nozzle - ask which one it is the same way the
 ; filament change does (hardware/confirm-nozzle-diameter.g: choice buttons with the configured
 ; diameter preselected, cancelling keeps it). The load path has just asked and passes C0.
-if var.confirmNozzle && !var.silent
+if var.standalone && !var.silent
   M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-diameter.g" T{var.tool}
 
 ; calibration temperature: the profile's active temperature (temps.g sets
@@ -75,6 +133,41 @@ if var.targetTemp <= 0
   set global.result = 7
   M99
 
+; the prompts above leave the operator time to open a door, which drops the machine to
+; default mode - nothing heats or moves before automatic mode is back (wait-automatic.g
+; confirms it, global.result 0 on the next line only)
+if var.standalone
+  M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+  if global.result != 0
+    echo "Error: machine not in automatic mode - abort!"
+    set global.result = 6
+    M99
+
+; the head is put in place only here: the filament load has done it (C0), and pause.g has
+; parked a paused job off the part
+var placeHead = var.standalone && state.status != "paused"
+
+if var.standalone && !var.silent
+  ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+  ;;
+  ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+  ;;
+  ;; Die Achsen werden referenziert, falls nötig. Der Druckkopf fährt nach vorne in die Mitte, das
+  ;; Druckbett mindestens 200 mm nach unten, und die Düse heizt auf die Temperatur des Profils.
+  ;;
+  ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
+  ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
+  M291 R"Düse heizt auf · E-Steps" P{(var.placeHead ? "Der Druckkopf fährt nach vorne, die" : "Die") ^ " Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+
+if var.placeHead && (!move.axes[0].homed || !move.axes[1].homed || !move.axes[2].homed || !move.axes[3].homed)
+  G28
+  if result != 0 || global.result != 0
+    if state.messageBox != null
+      M292                                          ; the progress box above
+    echo "Error: homing failed - abort!"
+    set global.result = 10
+    M99
+
 set global.mfm_ignore_events = true
 
 T-1                                                 ; deselect any tool
@@ -85,9 +178,28 @@ T{var.tool}                                         ; select tool
 if heat.heaters[var.currentHeater].state != "active" || heat.heaters[var.currentHeater].active != var.targetTemp
   echo "Heating tool " ^ var.tool ^ " to " ^ var.targetTemp ^ "C for the e-steps calibration"
   M568 P{var.tool} S{var.targetTemp} A2
+if var.placeHead                                    ; heats while the head moves
+  var axis = tools[var.tool].axes[0][0]             ; the carriage this tool's X moves (U for T1)
+  G90
+  if move.axes[2].machinePosition < 200
+    G1 Z200 F6000                                   ; bed down only, never up - a part may stand on it
+  G1 X{(move.axes[var.axis].min + move.axes[var.axis].max) / 2} Y{move.axes[1].min} F60000   ; front, centre of the carriage's travel
+  M400
 if heat.heaters[var.currentHeater].current < heat.heaters[var.currentHeater].active
   M116 P{var.tool}                                  ; wait only when heating up
 var currentTemp = heat.heaters[var.currentHeater].active ; calibration temperature, recorded in the result file
+
+if !var.silent
+  ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+  ;;
+  ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+  ;;
+  ;; Der Extruder fördert dreimal ein kurzes Stück, der Filamentmonitor misst, wie viel Filament
+  ;; wirklich durchläuft. Aus dem Mittel berechnet die Maschine die neuen E-Steps.
+  ;;
+  ;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
+  ;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m and m.avgPercentage %} · Filamentmonitor **{{ m.avgPercentage }} %**{% endif %}{% endif %}
+  M291 R"E-Steps werden gemessen" P"Die E-Steps werden gemessen. Türen geschlossen halten." S1 T0
 
 M83                                                 ; use relative distances for extrusion
 M107                                                ; fan off
@@ -96,6 +208,7 @@ M221 D{var.extruder} S100                           ; reset flow rate
 M572 D{var.extruder} S0                             ; reset pressure advance
 M592 D{var.extruder} A0 B0                          ; reset non linear extrusion
 
+var oldESteps = move.extruders[var.extruder].stepsPerMm ; for the result shown at the end
 var count = var.repeatCount
 var avgFlow = 0.0
 
@@ -110,6 +223,7 @@ while var.count > 0
     echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.result = 2
@@ -121,11 +235,12 @@ while var.count > 0
     echo "Error: unable to calibrate filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to calibrate filament monitor. Please check the configuration of the filament monitor." S2
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.result = 3
     M99                                               ; exit macro
-    
+
   G1 E{var.calDistance} F{var.baseSpeed}              ; extrude the specified distance
   M400                                                ; wait for moves to finish
   G4 S1
@@ -135,6 +250,7 @@ while var.count > 0
     echo "Error: Extrusion too low or too high, please check the filament and extruder. Flow: " ^ var.flow
     if !var.silent
       M291 P"Extrusion too low or to hight, please check the filament and extruder." S2
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
     set global.result = 4
@@ -154,6 +270,7 @@ if var.newESteps < {var.validValue * 0.9} || var.newESteps > {var.validValue * 1
   echo "Error: new E-Steps out of range, please check the configuration."
   if !var.silent
     M291 P"New E-Steps out of range, please check the configuration." S2
+  M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
   T-1                                               ; deselect tool
   T{var.previousTool}                               ; select previous tool
   set global.result = 5
@@ -165,20 +282,41 @@ if var.newESteps < {var.validValue * 0.9} || var.newESteps > {var.validValue * 1
 ; directly after the call that set it
 M98 P"0:/sys/meltingplot/filament-profile/calibration-key.g" T{var.tool}
 var calKey = global.result
-var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-esteps-" ^ var.calKey ^ ".g"
+var autoFile = "0:/filaments/" ^ var.filament ^ "/config-auto-esteps-" ^ var.calKey ^ ".g"
 echo >{var.autoFile} "; calibration temperature: " ^ var.currentTemp ^ ", filament-nozzle: " ^ var.calKey ^ " mm"
 echo >>{var.autoFile} "M92 E" ^ var.newESteps
 
 M92 E{var.newESteps} ; activate new e-steps
 
-M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
-M98 P"0:/sys/overrides/machine-override"                ; Load Machine specific overrides
+; the state a filament load leaves behind: filament retracted 12.5 mm (resume.g re-feeds
+; it after a pause) and the nozzle wiped - the load path does both itself
+if var.standalone
+  G1 E-12.5 F180                                    ; retract filament
+  M400
+  M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+
+M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
 
 T-1                                               ; deselect tool
 T{var.previousTool}                               ; select previous tool
 
-set global.mfm_ignore_events = false
+if var.standalone && !var.silent
+  ;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+  ;;
+  ;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+  ;;
+  ;; Die neuen E-Steps sind aktiv und im Profil gespeichert – für dieses Filament mit diesem
+  ;; Filament- und Düsendurchmesser. Die Maschine lädt sie bei jedem Werkzeugwechsel.
+  ;;
+  ;; Das extrudierte Filament vom Druckbett nehmen, die Düse ist noch heiß. Nach einem
+  ;; Düsenwechsel als Nächstes **NLE kalibrieren**.
+  M291 R"E-Steps gespeichert" P{"T" ^ var.tool ^ ", " ^ var.filament ^ ", " ^ var.calKey ^ " mm: " ^ var.newESteps ^ " Schritte/mm, vorher " ^ round(var.oldESteps) ^ ". Filament vom Druckbett nehmen."} S2
 
-; the lib/format-number.g call above left the nozzle key string in global.result - restore the
+; the calibration-key.g call above left the key string in global.result - restore the
 ; integer success code so the caller can compare it against the error codes set here
 set global.result = 0
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion").
+; Not from the filament load (C0): the change-filament flow ends with its own line.
+if var.standalone
+  echo ";; Completed"

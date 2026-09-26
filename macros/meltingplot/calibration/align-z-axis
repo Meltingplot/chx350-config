@@ -29,3 +29,8 @@ M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 if global.result != 0
   M99
 M98 P"0:/sys/meltingplot/z-axis/align-motors.g"
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion").
+; Not when calibration/z-height runs it as one of its steps (C0): its own line ends that flow.
+if !exists(param.C) || param.C != 0
+  echo ";; Completed"

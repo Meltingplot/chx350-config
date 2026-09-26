@@ -47,3 +47,6 @@ M98 P"0:/sys/meltingplot/spool/confirm.g" T{var.tool}
 ;; (material.g des Filamentprofils).
 M291 R"Spule erfasst" P{"T" ^ var.tool ^ ": " ^ floor(global.spool_remaining[var.tool]) ^ " g von " ^ global.spool_net_weight[var.tool] ^ " g" ^ (global.spool_density[var.tool] > 0 ? "" : " (ohne Dichte, nicht gezählt)")} S2
 M400 ; sbc specific
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

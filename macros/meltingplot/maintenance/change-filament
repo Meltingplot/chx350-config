@@ -152,3 +152,6 @@ if state.status == "paused"
 if state.messageBox != null
   M292
 echo "Filament change on T" ^ var.tool ^ " finished: " ^ ((var.name == "") ? "unloaded" : var.name)
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

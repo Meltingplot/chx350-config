@@ -31,4 +31,11 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].ho
     echo "Error: homing failed - abort!"
     M99
 
+set global.result = 1                           ; stays 1 unless mesh.g ran to the end
 G29 ; run /sys/mesh.g
+if global.result != 0
+  echo "Error: height map not created"
+  M99
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

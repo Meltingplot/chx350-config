@@ -21,6 +21,7 @@ if job.file.fileName != null
 
 if move.axes[2].babystep == 0
   echo "No Z babystep active - nothing to take over"
+  echo ";; Completed"
   M99
 
 ;; {% set b = move.axes[2].babystep %}
@@ -37,6 +38,7 @@ if result != 0             ; J2 leaves input undefined - result must be tested r
 if input == 1
   M290 R0 S0                                  ; discard
   echo "Z babystep discarded"
+  echo ";; Completed"
   M99
 
 M98 P"0:/macros/meltingplot/z-probe/offset/apply-babystepping"
@@ -45,3 +47,6 @@ M98 P"0:/macros/meltingplot/z-probe/offset/apply-babystepping"
 ;;
 ;; Z-Offset der Sonde: **{{ global.szp_touch_z_offset | round(3) }} mm**
 M291 R"Z-Versatz übernommen" P{"Übernommen. Z-Offset der Sonde jetzt " ^ global.szp_touch_z_offset ^ " mm."} S2
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

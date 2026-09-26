@@ -2,7 +2,7 @@
 ; title: Z-Nullpunkt kalibrieren
 ; description: Sonde kalt und warm gegen das Z-Einstellgerät einmessen · bis zu 40 min
 ; icon: mdi-target
-; page: calibrate
+; page: service
 ; order: 110
 ; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and sensors.analog[4].lastReading <= 35 }}"
 ; hint: Nur in Betriebsart Automatik und mit kaltem Druckkopf (unter 35 °C)
@@ -32,13 +32,14 @@ if ("" ^ global.machine_mode) != "automatic"
 ; wasted if the procedure cannot start anyway
 if sensors.analog[4].lastReading > 35
   M291 P{"Printer temp is above 35°C - current " ^ sensors.analog[4].lastReading ^ "<br>Wait until the printer is cold and repeat."} R"Prerequirements" S2
+  echo "Error: print head above 35 C (" ^ sensors.analog[4].lastReading ^ " C) - wait until it is cold"
   M99
 
 ;; Die Z-Motoren werden am unteren Anschlag ausgerichtet, danach referenziert die Maschine X, Y
 ;; und U. Das dauert einige Minuten.
 M291 R"Ausrichten und referenzieren" P"Z-Achse wird ausgerichtet, X, Y und U werden referenziert." S1 T0
 set global.result = 0
-M98 P"0:/macros/meltingplot/calibration/align-z-axis"
+M98 P"0:/macros/meltingplot/calibration/align-z-axis" C0   ; C0: part of this flow, no completion line of its own
 if global.result != 0
   echo "Error: Z-Axis not aligned!"
   M99
@@ -106,7 +107,7 @@ while true
   else
     M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
   if iterations > 2
-    echo "Abort! Mehrfach einen Wert außerhalb des Intervalls 0 - 3mm angegeben."
+    echo "Error: gauge reading outside 0 - 3 mm three times - abort!"
     M99
 
 G92 Z{100 + var.reading}
@@ -144,7 +145,7 @@ while true
     break
   set var.driveCurrent = var.driveCurrent + 1
   if iterations > 10
-    echo "abort! can't find drive current value!"
+    echo "Error: no SZP drive current found for standard mode - abort!"
     M99
 
 ; go down to trigger height and calc R such that the trigger value is 9000
@@ -194,7 +195,7 @@ while true
   set var.driveCurrent = var.driveCurrent + 1
   
   if iterations > 10 || var.driveCurrent > 31
-    echo "abort! can't find drive current value for touch mode wit"
+    echo "Error: no SZP drive current found for touch mode - abort!"
     M99
 
 ; go down to zero height and calc R such that the trigger value is 9000
@@ -228,7 +229,7 @@ while true
   if sensors.analog[4].lastReading > 50
     break
   if iterations >= 60
-    echo "Unable to heat up SZP above 50°C in 10min - abort!"
+    echo "Error: SZP not above 50 C after 10 min - abort!"
     M99
   G4 S10
 
@@ -279,7 +280,7 @@ while true
   else
     M291 P"Der Wert liegt außerhalb des gültigen Bereichs von 0 bis 3mm." R"Ungültiger Wert" S2
   if iterations > 2
-    echo "Abort! Mehrfach einen Wert außerhalb des Intervalls 0 - 3mm angegeben."
+    echo "Error: gauge reading outside 0 - 3 mm three times - abort!"
     M99
 
 G92 Z{100 + var.reading}
@@ -318,7 +319,7 @@ while true
     break
   set var.driveCurrent = var.driveCurrent + 1
   if iterations > 10
-    echo "abort! can't find drive current value!"
+    echo "Error: no SZP drive current found for standard mode - abort!"
     M99
 
 ; go down to trigger height and calc R such that the trigger value is 9000
@@ -358,7 +359,7 @@ while true
   set var.driveCurrent = var.driveCurrent + 1
   
   if iterations > 10 || var.driveCurrent > 31
-    echo "abort! can't find drive current value for touch mode!"
+    echo "Error: no SZP drive current found for touch mode - abort!"
     M99
 
 ; go down to trigger height and calc R such that the trigger value is 9000
@@ -380,3 +381,6 @@ echo >{"0:/sys/generated/szp-touch-mode-warm.g"} "M558.2 K0 S" ^ {var.driveCurre
 if state.messageBox != null
   M292
 echo "Finished successful"
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

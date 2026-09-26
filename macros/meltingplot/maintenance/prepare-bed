@@ -58,4 +58,7 @@ M291 R"Teil entnehmen" P"Tür öffnen, Teil entnehmen, dann OK." S2
 ;; Eingesetzt laut Maschine: **{{ names[global.bed_surface] or global.bed_surface }}**
 M291 R"Druckplatte prüfen" P{"Platte prüfen und einrasten lassen. Eingesetzt: " ^ global.bed_surface} S4 K{"Gleiche Platte","Andere Platte"} F0
 if input == 1
-  M98 P"0:/macros/meltingplot/maintenance/set-bed-surface"
+  M98 P"0:/macros/meltingplot/maintenance/set-bed-surface" C0   ; C0: part of this flow, no completion line of its own
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

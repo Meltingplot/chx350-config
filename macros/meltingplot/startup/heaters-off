@@ -31,3 +31,6 @@ while iterations < #heat.chamberHeaterMapping
   if #heat.chamberHeaterMapping[iterations] > 0
     M141 P{iterations} S-273.15
 echo "All heaters off"
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

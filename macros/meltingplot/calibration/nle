@@ -1,23 +1,37 @@
+; ---
+; title: NLE kalibrieren
+; description: "{% for t in tools %}{% set i = loop.index0 %}{% if t and t.extruders | length %}{% set n = move.extruders[t.extruders[0]].nonlinear %}{{ ' · ' if i }}T{{ i }}: {{ 'NLE aktiv' if n.a or n.b else 'keine NLE' }}{% endif %}{% endfor %} · 10 bis 20 min"
+; icon: mdi-speedometer
+; page: calibrate
+; order: 140
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and (move.extruders | selectattr('filament') | length) > 0 }}"
+; hint: Nur in Betriebsart Automatik und mit geladenem Filament
+; ---
 ; calibration/nle
 ; Measures the non-linear extrusion correction (M592 A/B) against the filament monitor
 ; over extrusion speeds up to the profile's maximum volumetric flow rate and writes
 ; filaments/<name>/config-auto-nle-<key>.g (loaded back by tpost0.g). Runs from
-; filament/load-procedure.g after a load without an NLE file, or as a macro from DWC.
+; filament/load-procedure.g after a load without an NLE file, and as a flow of the CHX 350
+; UI (CLAUDE.md, "Flows in the CHX 350 UI") or a macro from DWC.
 ;   M98 P"0:/macros/meltingplot/calibration/nle" C0
-; C0 skips the nozzle confirmation (the load path has just asked), Q1 = silent (no
-; message boxes). The calibration temperature always comes from the profile
-; (filaments/<name>/temps.g; a profile predating temps.g needs the tool active above the
-; cold-extrusion limit) and the tool is heated to it here - see calibration/e-steps.
+; C0: called from the filament load, which has confirmed the nozzle and retracts and cleans
+; the nozzle itself - only the measurement runs, with a progress box. Without it (the flow,
+; a DWC macro) the macro asks for the tool (T<n> skips that, lib/ask-tool.g), explains the
+; run, confirms the nozzle, waits for automatic mode, and at the end retracts 12.5 mm and
+; cleans the nozzle as the load does, and shows the result. Q1 = silent (no message boxes).
+; The calibration temperature always comes from the profile (filaments/<name>/temps.g; a
+; profile predating temps.g needs the tool active above the cold-extrusion limit) and the
+; tool is heated to it here - see calibration/e-steps. Every exit after the measurement
+; started goes through filament/end-mfm-calibration.g (filament monitor, filament errors,
+; progress box).
 
 ; params
-var tool = exists(param.T) ? param.T : 0            ; tool number
 var calDistance = exists(param.D) ? param.D : 60    ; distance to move in mm for calibration per iteration - should be at least one circumference of the MFM gear and double the distance of the melt zone
 var tolerance = exists(param.S) ? param.S : 0.05    ; tolerance in %
-var filamentDiameter = global.filament_diameter[var.tool] ; filament diameter in mm (globals, machine-local)
 var baseSpeed = exists(param.F) ? param.F / 60 : 0.5 ; base speed in mm/min
 var minDistance = 15                                ; minimum distance to extrude in mm for filament sensor calibration
 var silent = exists(param.Q) ? param.Q : false      ; silent mode
-var confirmNozzle = exists(param.C) ? (param.C != 0) : true ; C0: the caller has already confirmed the nozzle
+var standalone = exists(param.C) ? (param.C != 0) : true ; C0: called from the filament load, see above
 
 if var.silent
   set var.silent = true;
@@ -41,23 +55,56 @@ if ("" ^ global.machine_mode) != "automatic"
   set global.result = 12
   M99
 
+; the tool: T<n>, else asked - lib/ask-tool.g hands it back in global.result, -1 = cancelled.
+; The filament load passes neither and is tool 0.
+var tool = 0
+if exists(param.T)
+  set var.tool = param.T
+elif var.standalone && !var.silent
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"Welchen Druckkopf kalibrieren?"
+  set var.tool = global.result
+  if var.tool < 0
+    echo "Error: NLE calibration cancelled"
+    set global.result = 17
+    M99
+
 var previousTool = state.currentTool                ; store current tool
 
 var extruder = tools[var.tool].filamentExtruder     ; get current extruder
 var currentHeater = tools[var.tool].heaters[0]      ; get current heater
 var filament = move.extruders[var.extruder].filament
 var previousSampleDistance = sensors.filamentMonitors[var.extruder].configured.sampleDistance ; store current sample distance
+var filamentDiameter = global.filament_diameter[var.tool] ; filament diameter in mm (globals, machine-local)
 
 if var.filament == null || var.filament == ""
   echo "Error: no filament loaded! abort!"
   set global.result = 13
   M99
 
+if var.standalone && !var.silent
+  ;; Die NLE-Kalibrierung misst, wie weit der Extruder bei hohem Durchsatz hinter dem Soll
+  ;; zurückbleibt, und gleicht es mit M592 aus. Gemessen wird mit dem Filamentmonitor, bei
+  ;; steigender Geschwindigkeit bis zum maximalen Durchsatz, den das Profil für diese Düse
+  ;; angibt. Das Ergebnis gilt für dieses Filament mit diesem Filament- und Düsendurchmesser.
+  ;;
+  ;; - Die Achsen werden referenziert, falls nötig, das Druckbett fährt mindestens 200 mm nach
+  ;;   unten und die Düse heizt auf die Temperatur des Profils.
+  ;; - Bei jeder Messung extrudiert der Druckkopf einen Strang, während er über das Bett fährt.
+  ;;   Die Stränge fallen auf das Druckbett – **das Druckbett muss leer sein**.
+  ;; - Dauer etwa 10 bis 20 Minuten, Verbrauch 1 bis 2 m Filament.
+  ;;
+  ;; NLE baut auf den E-Steps auf: Nach einem Düsenwechsel zuerst **E-Steps kalibrieren**.
+  M291 R"NLE kalibrieren" P{"NLE von T" ^ var.tool ^ " für " ^ var.filament ^ " kalibrieren? Filamentstränge fallen auf das Druckbett, es muss leer sein. Dauer 10 bis 20 min."} S3 J2
+  if result != 0
+    echo "Error: NLE calibration cancelled"
+    set global.result = 17
+    M99
+
 ; the result is filed under the installed nozzle and the flow rate below comes from the
 ; nozzle file - ask which nozzle it is the same way the filament change does
 ; (hardware/confirm-nozzle-diameter.g: choice buttons, configured diameter preselected, cancel
 ; keeps it). The load path has just asked and passes C0.
-if var.confirmNozzle && !var.silent
+if var.standalone && !var.silent
   M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-diameter.g" T{var.tool}
 
 ; calibration temperature: the profile's active temperature (temps.g sets
@@ -87,7 +134,8 @@ if var.requestedVolumetricFlowRate <= 0
     M291 P"No maximum volumetric flow rate configured for this filament and nozzle - add it to the profile's nozzle file first." S2
   set global.result = 15
   M99
-var requestedMaxSpeed = {ceil(var.requestedVolumetricFlowRate / (pow(var.filamentDiameter,2) * 3.14159 / 4.0) * 2.0) / 2.0} ; volumetric flow rate in mm/s
+var area = {pow(var.filamentDiameter,2) * 3.14159 / 4.0} ; filament cross section in mm^2
+var requestedMaxSpeed = {ceil(var.requestedVolumetricFlowRate / var.area * 2.0) / 2.0} ; volumetric flow rate in mm/s
 
 echo "Requested volumetric flow rate: " ^ {var.requestedVolumetricFlowRate} ^ "mm^3/s"
 echo "Filament diameter: " ^ {var.filamentDiameter} ^ "mm"
@@ -102,11 +150,35 @@ while iterations < (var.sampleCount / 2)
 
 echo "Extrusion speeds: " ^ {var.extrusionSpeeds}
 
+; the prompts above leave the operator time to open a door, which drops the machine to
+; default mode - nothing heats or moves before automatic mode is back (wait-automatic.g
+; confirms it, global.result 0 on the next line only)
+if var.standalone
+  M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+  if global.result != 0
+    echo "Error: machine not in automatic mode - abort!"
+    set global.result = 12
+    M99
+
+if var.standalone && !var.silent
+  ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+  ;;
+  ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+  ;;
+  ;; Die Achsen werden referenziert, falls nötig. Das Druckbett fährt mindestens 200 mm nach unten,
+  ;; und die Düse heizt auf die Temperatur des Profils.
+  ;;
+  ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
+  ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
+  M291 R"Düse heizt auf · NLE" P{"Das Druckbett fährt nach unten, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+
 ; the samples move X across the bed at Z 200 - all axes have to be homed for that
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false
   echo "Axes not homed - homing first"
   G28
   if result != 0 || global.result != 0
+    if state.messageBox != null
+      M292                                          ; the progress box above
     echo "Error: homing failed - abort!"
     set global.result = 16
     M99
@@ -137,6 +209,22 @@ var sampleValues = vector(var.sampleCount, 0.0) ; // create vector for sample va
 if move.axes[2].machinePosition < 200
   G90 G1 Z200 F6000
 
+if !var.silent
+  M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.requestedMaxSpeed} D1 W0
+  ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+  ;;
+  ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+  ;;
+  ;; Bei jeder Geschwindigkeit extrudiert der Druckkopf einen Strang, während er über das Bett
+  ;; fährt, und der Filamentmonitor misst, wie viel Filament wirklich durchläuft. Die Messreihe
+  ;; läuft zweimal, dann prüft die Maschine die berechneten Werte mit einer dritten.
+  ;;
+  ;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
+  ;;
+  ;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
+  ;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m and m.avgPercentage %} · Filamentmonitor **{{ m.avgPercentage }} %**{% endif %}{% endif %}
+  M291 R"NLE wird gemessen" P{"NLE wird gemessen: " ^ floor(var.sampleCount / 2) ^ " Geschwindigkeiten von 1 bis " ^ global.result ^ " mm/s. Türen geschlossen halten."} S1 T0
+
 while iterations < #var.sampleValues / 2
   M591 D{var.extruder} S0                             ; disable filament monitoring
   M400                                                ; wait for moves to finish
@@ -148,9 +236,9 @@ while iterations < #var.sampleValues / 2
     echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 1
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
@@ -163,9 +251,9 @@ while iterations < #var.sampleValues / 2
   G4 S1
   if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 ; 0 = no movement seen, and 100 / 0 is not finite
     echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 2
     M99                                               ; exit macro
   var correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
@@ -199,7 +287,9 @@ while iterations < #var.sampleValues / 2
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
     echo "Error: Value to high - stop NLE calibration - possible grinding or other issues"
-    set global.mfm_ignore_events = false
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
+    T-1                                               ; deselect tool
+    T{var.previousTool}                               ; select previous tool
     set global.result = 3
     M99
   
@@ -224,9 +314,9 @@ while iterations < var.sampleCount / 2
     echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
     if !var.silent
       M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 4
     M99                                               ; exit macro
   G90                                                ; use absolute coordinates
@@ -239,9 +329,9 @@ while iterations < var.sampleCount / 2
   G4 S1
   if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 ; 0 = no movement seen, and 100 / 0 is not finite
     echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 5
     M99                                               ; exit macro
   var correction = 100 / sensors.filamentMonitors[var.extruder].avgPercentage
@@ -273,14 +363,17 @@ while iterations < var.sampleCount / 2
       echo "problem solved - continue NLE calibration with sampleCount: " ^ {var.sampleCount/2}
       break
     echo "Error: Value (" ^ var.correction ^ ") to high - stop NLE calibration - possible grinding or other issues"
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
+    T-1                                               ; deselect tool
+    T{var.previousTool}                               ; select previous tool
     set global.result = 6
     M99
   elif var.correction >= 1.3 && iterations == 0
     echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2+1]} ^ " mm/s, Correction factor: " ^ {var.correction}
     echo "Error: NLE calibration failed! - check the filament and extruder"
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 7
     M99
   echo "Extrusion speed: " ^ {var.extrusionSpeeds[iterations*2+1]} ^ " mm/s, Correction factor: " ^ {var.correction}
@@ -341,9 +434,9 @@ while true
   ; assignment crashes DSF in SBC mode (isnan afterwards is too late and misses inf)
   if var.Delta <= 0
     echo "Error: fewer than two different extrusion speeds measured (" ^ var.sampleCount ^ " samples) - no fit for A and B possible, abort!"
+    M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
     T-1                                               ; deselect tool
     T{var.previousTool}                               ; select previous tool
-    set global.mfm_ignore_events = false
     set global.result = 8
     M99                                               ; exit macro
   set var.nle_a = {(var.S_t * var.S_v3 - var.S_tv * var.S_v2) / var.Delta}
@@ -364,9 +457,9 @@ while true
       echo "Error: unable to reset filament monitor. Please check the configuration of the filament monitor."
       if !var.silent
         M291 P"Unable to reset filament monitor. Please check the configuration of the filament monitor." S2
+      M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
       T-1                                               ; deselect tool
       T{var.previousTool}                               ; select previous tool
-      set global.mfm_ignore_events = false
       set global.result = 9
       M99                                               ; exit macro
     G90                                                ; use absolute coordinates
@@ -374,16 +467,16 @@ while true
     M400                                               ; wait for moves to finish
     G4 S1
     G91                                               ; use relative coordinates
-    var startPos = move.extruders[0].position
+    var startPos = move.extruders[var.extruder].position
     G1 X{var.calDistance} E{var.calDistance} F{var.extrusionSpeeds[var.x * 2] * 60}              ; extrude the specified distance
     M400                                                ; wait for moves to finish
     G4 S1
-    var diffPos = move.extruders[0].position - var.startPos 
+    var diffPos = move.extruders[var.extruder].position - var.startPos
     if sensors.filamentMonitors[var.extruder].avgPercentage == null || sensors.filamentMonitors[var.extruder].avgPercentage <= 0 || var.diffPos <= 0 ; both are divisors below
       echo "Error: Unvalid values from Filament Monitor received - Check the filament path!"
+      M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
       T-1                                               ; deselect tool
       T{var.previousTool}                               ; select previous tool
-      set global.mfm_ignore_events = false
       set global.result = 10
       M99                                               ; exit macro
     var correction = {(100 * var.calDistance) / (sensors.filamentMonitors[var.extruder].avgPercentage * var.diffPos)};
@@ -396,9 +489,9 @@ while true
       set var.sampleCount = {max(var.x * 2 - 2, 0)} ; set sample count to current iteration to stop further iterations
       if var.sampleCount == 0
         echo "Error: No more samples to remove - failed NLE calibration"
+        M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
         T-1                                               ; deselect tool
         T{var.previousTool}                               ; select previous tool
-        set global.mfm_ignore_events = false
         set global.result = 11
         M99
       set var.failed = true ; set failed flag to true
@@ -415,19 +508,44 @@ echo "M592 D" ^ var.extruder ^ " A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 ; - loaded back by tpost0.g
 M98 P"0:/sys/meltingplot/filament-profile/calibration-key.g" T{var.tool}
 var calKey = global.result
-var autoFile = "0:/filaments/" ^ move.extruders[0].filament ^ "/config-auto-nle-" ^ var.calKey ^ ".g"
-echo >{var.autoFile} "; max F" ^ {var.extrusionSpeeds[var.sampleCount -1] * 60} ^ " mm/min or " ^ {var.extrusionSpeeds[var.sampleCount -1] * 6.38} ^ "mm³/s"
+var autoFile = "0:/filaments/" ^ var.filament ^ "/config-auto-nle-" ^ var.calKey ^ ".g"
+var maxSpeed = var.extrusionSpeeds[var.sampleCount - 1] ; the fastest speed measured, in mm/s
+echo >{var.autoFile} "; max F" ^ {var.maxSpeed * 60} ^ " mm/min or " ^ {var.maxSpeed * var.area} ^ "mm³/s"
 echo >>{var.autoFile} "; temp: " ^ var.currentTemp ^ " °C, filament-nozzle: " ^ var.calKey ^ " mm"
 echo >>{var.autoFile} "M592 D0 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ " L0.2"
 
-M591 D{var.extruder} A1 S1 E{var.previousSampleDistance}  ; reset filament sensor
-M98 P"0:/sys/overrides/machine-override"                ; Load Machine specific overrides
+; the state a filament load leaves behind: filament retracted 12.5 mm and the nozzle wiped -
+; the load path does both itself
+if var.standalone
+  G1 E-12.5 F180                                    ; retract filament
+  M400
+  M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+
+M98 P"0:/sys/meltingplot/filament/end-mfm-calibration.g" D{var.extruder} E{var.previousSampleDistance}
 
 T-1                                               ; deselect tool
 T{var.previousTool}                               ; select previous tool
 
-set global.mfm_ignore_events = false                ; reactivate filament errors
+if var.standalone && !var.silent
+  ; lib/format-number.g returns in global.result - read it straight away
+  M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.maxSpeed} D1 W0
+  var text = "T" ^ var.tool ^ ", " ^ var.filament ^ ", " ^ var.calKey ^ " mm: M592 A" ^ var.nle_a ^ " B" ^ var.nle_b ^ ", gemessen bis " ^ global.result ^ " mm/s"
+  M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.maxSpeed * var.area} D1 W0
+  ;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+  ;;
+  ;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+  ;;
+  ;; Die NLE-Werte sind aktiv und im Profil gespeichert – für dieses Filament mit diesem
+  ;; Filament- und Düsendurchmesser. Die Maschine lädt sie bei jedem Werkzeugwechsel.
+  ;;
+  ;; Die Filamentstränge vom Druckbett nehmen, die Düse ist noch heiß.
+  M291 R"NLE gespeichert" P{var.text ^ " (" ^ global.result ^ " mm³/s). Stränge vom Druckbett nehmen."} S2
 
-; the lib/format-number.g call above left the nozzle key string in global.result - restore the
-; integer success code so the caller can compare it against the error codes set here
+; the calibration-key.g and lib/format-number.g calls above left a string in global.result -
+; restore the integer success code so the caller can compare it against the error codes set here
 set global.result = 0
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion").
+; Not from the filament load (C0): the change-filament flow ends with its own line.
+if var.standalone
+  echo ";; Completed"

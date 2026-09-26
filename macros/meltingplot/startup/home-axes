@@ -73,3 +73,6 @@ while iterations < #move.axes
 ;; {% set open = move.axes | selectattr('visible') | rejectattr('homed') | join(', ', 'letter') %}
 ;; {% if open %}Referenziert. Noch nicht referenziert: **{{ open }}**{% else %}Alle Achsen sind referenziert.{% endif %}
 M291 R"Referenzierung abgeschlossen" P{(var.open == "") ? "Alle Achsen sind referenziert." : "Referenziert. Noch nicht referenziert: " ^ var.open} S2
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

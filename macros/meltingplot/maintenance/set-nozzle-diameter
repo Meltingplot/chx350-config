@@ -343,7 +343,7 @@ if var.guided
 M98 P"0:/sys/meltingplot/lib/format-number.g" F{global.nozzle_diameter[var.tool]} D2 W0
 var key = global.result
 
-var next = "Z-Nullpunkt und PA/NLE für diese Düse kalibrieren."
+var next = "E-Steps, NLE und PA für diese Düse kalibrieren, die Höhe beim ersten Druck mit Babystepping nachstellen."
 if state.status == "paused"
   set var.next = "Druck fortsetzen und die erste Schicht beobachten."
 
@@ -352,12 +352,17 @@ if state.status == "paused"
 ;; Eine andere Düse sitzt anders hoch und fördert anders.
 ;; {% if state.status == 'paused' %}
 ;; Den Druck fortsetzen und die erste Schicht beobachten. Sitzt die Düse anders hoch, mit
-;; Babystepping nachstellen.
+;; Babystepping nachstellen – nach dem Druck übernimmt **Babystepping übernehmen** den Versatz.
 ;; {% else %}
 ;; Als Nächstes:
 ;;
-;; 1. **Z-Nullpunkt kalibrieren**, sobald der Druckkopf unter 35 °C abgekühlt ist.
-;; 2. Pressure Advance und NLE für diese Düse kalibrieren.
+;; 1. **E-Steps kalibrieren** und **NLE kalibrieren** für diese Düse, dann Pressure Advance.
+;; 2. Beim ersten Druck die erste Schicht beobachten. Sitzt die Düse anders hoch, mit Babystepping
+;;    nachstellen – nach dem Druck übernimmt **Babystepping übernehmen** den Versatz als Z-Offset
+;;    der Sonde. Ein neuer Z-Nullpunkt ist dafür nicht nötig.
 ;; {% endif %}
 M291 R"Düse erfasst" P{"T" ^ var.tool ^ ": " ^ var.key ^ " mm, " ^ global.nozzle_type[var.tool] ^ ". " ^ var.next} S2
 M400 ; sbc specific
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"

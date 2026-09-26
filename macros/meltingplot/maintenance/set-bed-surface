@@ -26,3 +26,8 @@ M98 P"0:/sys/meltingplot/hardware/confirm-bed-surface.g"
 ;; Ist die neue Platte dicker oder dünner als die alte, den Z-Offset prüfen.
 M291 R"Druckplatte erfasst" P{"Druckplatte: " ^ global.bed_surface ^ ". Z-Offset prüfen, wenn sich die Plattendicke geändert hat."} S2
 M400 ; sbc specific
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion").
+; Not when maintenance/prepare-bed runs it as one of its steps (C0): its own line ends that flow.
+if !exists(param.C) || param.C != 0
+  echo ";; Completed"
