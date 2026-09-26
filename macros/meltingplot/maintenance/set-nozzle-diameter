@@ -1,5 +1,5 @@
 ; ---
-; title: Düse gewechselt
+; title: Düse wechseln
 ; description: "{% for d in global.nozzle_diameter %}{% set i = loop.index0 %}{% if tools[i] %}{{ ' · ' if i }}T{{ i }}: {{ d }} mm, {{ global.nozzle_type[i] }}{% endif %}{% endfor %}"
 ; icon: mdi-printer-3d-nozzle-outline
 ; page: [calibrate, job]
@@ -8,8 +8,28 @@
 ; hint: Nur im Leerlauf oder bei pausiertem Druck
 ; ---
 ; set-nozzle-diameter
-; Records which nozzle is installed after a nozzle change: diameter and type. The
-; diameter step is the same one the filament load runs at its feed prompt - one call to
+; Guides the operator through a nozzle change and records which nozzle is installed
+; afterwards: diameter and type. Two ways in:
+; - "Düse wechseln", the guided change: safety notes (ISO 7010 signs, rendered from the
+;   operating manual into sys/meltingplot/flows/img/) and tools, unload the filament
+;   (M702, as maintenance/change-filament does), head to the front, heat, remove the old
+;   nozzle hot, screw the new one in, heat again and tighten it hot, then record it.
+; - "Nur erfassen": the nozzle is already changed, only diameter and type are recorded.
+; The guided change heats and moves, so it needs automatic mode, and the operator works in
+; the build chamber with a door open, which drops the machine to default mode (trigger4.g:
+; heater off, no motion) - the nozzle is handled while it cools down. Before every heat-up
+; ce-declaration/operating-mode/wait-automatic.g waits for the doors to be closed and for
+; automatic mode (it also walks the operator through the door check), and a nozzle that
+; cooled down too far is heated again on request. It is changed hot: a cold nozzle sticks
+; in the plastic residue, and one tightened cold can leak at printing temperature. The
+; ;; texts name swap_temp (285 C, the usual hot-tightening temperature of V6/Volcano
+; style hotends) - keep them in step. At the end the heater is switched off and kept off
+; (trigger3.g would restore it when the doors close); a cancelled prompt or a failed step
+; ends in hardware/cancel-nozzle-change.g, which does the same. The filament is not loaded
+; again here: the load path would run one macro level deeper than maintenance/change-
+; filament, already at depth 8 of 10 - the summary points to that flow, whose feed prompt
+; then confirms the new diameter.
+; Recording is the step the filament load runs at its feed prompt - one call to
 ; hardware/confirm-nozzle-diameter.g: it asks with choice buttons (configured diameter
 ; preselected, "Other..." for a free value), persists a changed value per tool in
 ; sys/generated/nozzle<tool>.g via hardware/store-nozzle-diameter.g, offers
@@ -21,7 +41,8 @@
 ; filament: the diameter selects, for every profile, the nozzle file and the calibration
 ; results (config-auto-pa-<key>.g, -nle-, -esteps-), <key> being the diameter with two
 ; decimals: 0.40, 1.20.
-; Allowed while a print is paused (a nozzle swap after a clog), never while it prints.
+; Allowed while a print is paused (a nozzle swap after a clog), never while it prints; a
+; paused job is handed back with no tool selected, as pause.g left it.
 ; The tool is T<n> when called with it, else asked by lib/ask-tool.g when more than one
 ; tool has an extruder. A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"),
 ; which starts it without parameters.
@@ -35,21 +56,260 @@ var tool = 0
 if exists(param.T)
   set var.tool = (param.T == 1) ? 1 : 0
 else
-  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"An welchem Druckkopf wurde die Düse gewechselt?"
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"An welchem Druckkopf wird die Düse gewechselt?"
   set var.tool = global.result
   if var.tool < 0
-    echo "Error: nozzle entry cancelled"
+    echo "Error: nozzle change cancelled"
     M99
+
+;; Beim **geführten Wechsel** entlädt die Maschine das Filament, fährt den Druckkopf nach vorne,
+;; heizt die Düse auf und führt Schritt für Schritt durch Ausbau, Einbau und Festziehen.
+;;
+;; **Nur erfassen**, wenn die neue Düse schon eingebaut ist: Die Maschine fragt dann nur
+;; Durchmesser und Typ ab.
+M291 R"Düsenwechsel" P{"Düse an T" ^ var.tool ^ " jetzt wechseln oder nur die schon eingebaute Düse erfassen?"} S4 K{"Düse wechseln","Nur erfassen"} F0 J2
+if result != 0             ; J2 leaves input undefined - result must be tested right here
+  echo "Error: nozzle change cancelled"
+  M99
+var guided = (input == 0)
+
+if var.guided
+  var swap_temp = 285                                ; loosen and tighten hot - the ;; texts name it
+  ; a prompt shown while the nozzle can be hot times out after 15 min and ends like a cancel:
+  ; the running macro keeps the machine "busy", so daemon.g's idle heater cutoff never fires
+  var timeout = 900
+  var heater = tools[var.tool].heaters[0]
+  var extruder = tools[var.tool].extruders[0]
+  var axis = tools[var.tool].axes[0][0]              ; the carriage this tool's X moves (U for T1)
+  var loaded = move.extruders[var.extruder].filament
+  if var.loaded == null
+    set var.loaded = ""
+
+  ;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+  ;; ![Warnung vor Handverletzungen](0:/sys/meltingplot/flows/img/iso7010-w024.webp)
+  ;; ![Handschutz benutzen](0:/sys/meltingplot/flows/img/iso7010-m009.webp)
+  ;; ![Anleitung beachten](0:/sys/meltingplot/flows/img/iso7010-m002.webp)
+  ;;
+  ;; **Düsenwechsel nur durch Fachpersonal** (Servicezone Druckmodul).
+  ;;
+  ;; - **Heiße Oberfläche:** Die Düse wird zum Wechseln auf 285 °C geheizt. Düse und Heizblock
+  ;;   bleiben nach dem Abschalten minutenlang heiß.
+  ;; - **Handschutz benutzen:** Hitzeschutzhandschuhe tragen. Die ausgebaute Düse nur mit Werkzeug
+  ;;   anfassen.
+  ;; - **Handverletzungen:** Erst in den Bauraum greifen, wenn ein Schritt dazu auffordert. Bei
+  ;;   offener Tür schaltet die Maschine in den Default Mode: keine Bewegung, Heizung aus.
+  ;; - **Anleitung beachten:** Es gelten die Sicherheitshinweise der Betriebsanleitung.
+  M291 R"Sicherheitshinweise" P{"Nur für Fachpersonal. Die Düse wird " ^ var.swap_temp ^ " °C heiß: Hitzeschutzhandschuhe tragen. Erst in den Bauraum greifen, wenn ein Schritt es sagt."} S3 J2
+  if result != 0
+    echo "Error: nozzle change cancelled"
+    M99
+
+  ;; ![Handschutz benutzen](0:/sys/meltingplot/flows/img/iso7010-m009.webp)
+  ;;
+  ;; Alles bereitlegen, bevor die Düse heiß ist:
+  ;;
+  ;; - die neue Düse
+  ;; - Düsenschlüssel und einen Gabelschlüssel zum Gegenhalten am Heizblock
+  ;; - Hitzeschutzhandschuhe
+  ;; - eine hitzefeste Ablage für die heiße Düse, z. B. eine Metallschale
+  ;; - eine Messingbürste für das Gewinde im Heizblock
+  M291 R"Werkzeug bereitlegen" P"Neue Düse, Düsenschlüssel, Gabelschlüssel, Hitzeschutzhandschuhe, hitzefeste Ablage und Messingbürste bereitlegen." S3 J2
+  if result != 0
+    echo "Error: nozzle change cancelled"
+    M99
+
+  ; heats and moves from here on: automatic mode, reached through the door check when the
+  ; machine is not in it - wait-automatic.g confirms it (global.result 0, next line only)
+  M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+  if global.result != 0
+    echo "Error: machine not in automatic mode - abort!"
+    M99
+
+  if var.loaded != ""
+    ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+    ;;
+    ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+    ;;
+    ;; Die Düse heizt auf, die Maschine zieht das Filament zurück, damit die Düse leer ist.
+    ;; Danach fragt sie, ob das Filament frei ist.
+    ;;
+    ;; {% for t in tools %}{% if t and t.heaters | length %}{% set h = heat.heaters[t.heaters[0]] %}
+    ;; {{ ' · ' if not loop.first }}Düse T{{ loop.index0 }}: **{{ h.current | round }} °C**
+    ;; {% if h.state == 'active' %} von {{ h.active | round }} °C{% endif %}{% endif %}{% endfor %}
+    M291 R"Filament entladen" P"Das Filament wird entladen, damit die Düse leer ist. Türen geschlossen halten." S1 T0
+  T{var.tool}                                        ; the unload needs it; pause.g deselected it
+  if state.currentTool != var.tool
+    M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: tool could not be selected"
+    M99
+  if var.loaded != ""
+    M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.loaded}
+    ; filament/unload-procedure.g sets filament_unload_done as its last step - right after
+    ; M702 it tells whether the physical unload ran to the end (see change-filament)
+    set global.filament_unload_done = false
+    M702
+    if !global.filament_unload_done
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S{"stopped: unloading " ^ var.loaded ^ " did not finish"}
+      M99
+
+  ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+  ;;
+  ;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+  ;;
+  ;; Der Druckkopf fährt nach vorne in die Mitte. Das Druckbett bleibt mindestens 200 mm unter der
+  ;; Düse – Platz für die Schlüssel.
+  M291 R"Druckkopf fährt nach vorne" P"Der Druckkopf fährt nach vorne. Türen geschlossen halten." S1 T0
+  if !move.axes[0].homed || !move.axes[1].homed || !move.axes[3].homed
+    G28 X                                            ; homes Y and U as well, as filament/unload-procedure.g
+    if result != 0 || global.result != 0
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: homing failed"
+      M99
+  G90
+  if move.axes[2].homed && move.axes[2].machinePosition < 200
+    G1 Z200 F60000                                   ; bed down only, never up (limited by M203) - a part may stand on it
+  G1 X{(move.axes[var.axis].min + move.axes[var.axis].max) / 2} Y{move.axes[1].min} F60000   ; front, centre of the carriage's travel
+  M400
+
+  ; loosen hot: heat, then the operator opens a door (default mode, heater off) and works
+  ; while the nozzle cools down; a nozzle that is too cold to come loose is heated again
+  while true
+    if iterations > 5
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: old nozzle not removed after 6 heat-ups"
+      M99
+    ; a door may have been open since the last heat-up - automatic mode before heating
+    M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+    if global.result != 0
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: machine not in automatic mode"
+      M99
+
+    ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+    ;;
+    ;; > Türen geschlossen halten, bis die Düse heiß ist.
+    ;;
+    ;; Die Düse heizt auf 285 °C. Heiß löst sie sich aus den Kunststoffresten, ohne das Gewinde im
+    ;; Heizblock zu beschädigen.
+    ;;
+    ;; {% for t in tools %}{% if t and t.heaters | length %}{% set h = heat.heaters[t.heaters[0]] %}
+    ;; {{ ' · ' if not loop.first }}Düse T{{ loop.index0 }}: **{{ h.current | round }} °C**
+    ;; {% if h.state == 'active' %} von {{ h.active | round }} °C{% endif %}{% endif %}{% endfor %}
+    M291 R"Düse heizt auf" P{"Die Düse heizt auf " ^ var.swap_temp ^ " °C. Türen geschlossen halten."} S1 T0
+    M568 P{var.tool} S{min(var.swap_temp, heat.heaters[var.heater].max)} A2
+    M116 P{var.tool}
+
+    ;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+    ;; ![Handschutz benutzen](0:/sys/meltingplot/flows/img/iso7010-m009.webp)
+    ;;
+    ;; {% for t in tools %}{% if t and t.heaters | length %}{% set h = heat.heaters[t.heaters[0]] %}
+    ;; {{ ' · ' if not loop.first }}Düse T{{ loop.index0 }}: **{{ h.current | round }} °C**
+    ;; {% endif %}{% endfor %}
+    ;;
+    ;; 1. Hitzeschutzhandschuhe anziehen und eine Tür öffnen. Die Heizung schaltet ab und die Düse
+    ;;    kühlt ab – zügig arbeiten.
+    ;; 2. Die Silikonsocke vom Heizblock abziehen.
+    ;; 3. Mit dem Gabelschlüssel am Heizblock gegenhalten und die alte Düse mit dem Düsenschlüssel
+    ;;    herausdrehen.
+    ;; 4. Die heiße Düse auf die hitzefeste Ablage legen, nie mit bloßen Händen anfassen.
+    ;;
+    ;; Sitzt die Düse fest, weil sie zu weit abgekühlt ist: **Nochmal aufheizen**.
+    M291 R"Alte Düse ausbauen" P"Handschuhe an, Tür öffnen, gegenhalten und die alte Düse herausdrehen. Zu kalt: Nochmal aufheizen." S4 K{"Alte Düse ist ausgebaut","Nochmal aufheizen"} F0 J2 T{var.timeout}
+    if result != 0
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool}
+      M99
+    if input == 0
+      break
+
+  ;; ![Handschutz benutzen](0:/sys/meltingplot/flows/img/iso7010-m009.webp)
+  ;;
+  ;; 1. Das Gewinde im Heizblock mit der Messingbürste von Kunststoffresten befreien.
+  ;; 2. Die neue Düse von Hand bis zum Anschlag eindrehen – noch nicht festziehen.
+  ;; 3. Die Türen schließen. Danach heizt die Düse zum Festziehen auf.
+  M291 R"Neue Düse eindrehen" P"Gewinde reinigen, die neue Düse von Hand bis zum Anschlag eindrehen, dann die Türen schließen." S3 J2 T{var.timeout}
+  if result != 0
+    M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool}
+    M99
+
+  ; tighten hot, so the nozzle seals at printing temperature - same heat-up and retry as above
+  while true
+    if iterations > 5
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: new nozzle not tightened after 6 heat-ups"
+      M99
+    M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+    if global.result != 0
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool} S"stopped: machine not in automatic mode"
+      M99
+
+    ;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+    ;;
+    ;; > Türen geschlossen halten, bis die Düse heiß ist.
+    ;;
+    ;; Die Düse heizt wieder auf 285 °C. Heiß festgezogen dichtet sie auch bei Drucktemperatur –
+    ;; kalt festgezogen kann sie später Kunststoff durchlassen.
+    ;;
+    ;; {% for t in tools %}{% if t and t.heaters | length %}{% set h = heat.heaters[t.heaters[0]] %}
+    ;; {{ ' · ' if not loop.first }}Düse T{{ loop.index0 }}: **{{ h.current | round }} °C**
+    ;; {% if h.state == 'active' %} von {{ h.active | round }} °C{% endif %}{% endif %}{% endfor %}
+    M291 R"Düse heizt zum Festziehen auf" P{"Die Düse heizt zum Festziehen auf " ^ var.swap_temp ^ " °C. Türen geschlossen halten."} S1 T0
+    M568 P{var.tool} S{min(var.swap_temp, heat.heaters[var.heater].max)} A2
+    M116 P{var.tool}
+
+    ;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+    ;; ![Handschutz benutzen](0:/sys/meltingplot/flows/img/iso7010-m009.webp)
+    ;;
+    ;; {% for t in tools %}{% if t and t.heaters | length %}{% set h = heat.heaters[t.heaters[0]] %}
+    ;; {{ ' · ' if not loop.first }}Düse T{{ loop.index0 }}: **{{ h.current | round }} °C**
+    ;; {% endif %}{% endfor %}
+    ;;
+    ;; 1. Hitzeschutzhandschuhe anziehen und eine Tür öffnen.
+    ;; 2. Mit dem Gabelschlüssel am Heizblock gegenhalten und die Düse mit dem Düsenschlüssel
+    ;;    festziehen – fest, aber ohne Gewalt. Das Drehmoment gibt der Hersteller des Hotends vor.
+    ;; 3. Die Silikonsocke wieder aufsetzen.
+    ;; 4. Die Türen schließen.
+    ;;
+    ;; Zu weit abgekühlt: **Nochmal aufheizen**.
+    M291 R"Düse festziehen" P"Handschuhe an, Tür öffnen, gegenhalten und die Düse festziehen. Silikonsocke aufsetzen, Türen schließen." S4 K{"Düse ist festgezogen","Nochmal aufheizen"} F0 J2 T{var.timeout}
+    if result != 0
+      M98 P"0:/sys/meltingplot/hardware/cancel-nozzle-change.g" T{var.tool}
+      M99
+    if input == 0
+      break
+
+  ; heater off and kept off: the door opened for the tightening made trigger4.g save the
+  ; heater as "active", and trigger3.g would heat it again when the doors close. "off" is
+  ; what trigger3.g leaves behind itself, and the restrictive value (globals).
+  set global.saved_tool_heater_states[var.tool] = "off"
+  M568 P{var.tool} A0
+
 M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-diameter.g" T{var.tool}
 M98 P"0:/sys/meltingplot/hardware/confirm-nozzle-type.g" T{var.tool}
+
+if var.guided
+  M568 P{var.tool} A0                                ; again: a trigger3.g restore may have raced the one above
+  ; a paused job gets back the tool state pause.g left it in: no tool selected, heater on
+  ; standby. resume.g re-selects with T R1 and heats up before it moves.
+  if state.status == "paused"
+    T-1 P0
 
 ; lib/format-number.g returns the key in global.result - read it straight away
 M98 P"0:/sys/meltingplot/lib/format-number.g" F{global.nozzle_diameter[var.tool]} D2 W0
 var key = global.result
 
+var next = "Z-Nullpunkt und PA/NLE für diese Düse kalibrieren."
+if var.guided && state.status == "paused"
+  set var.next = "Filament mit »Filament wechseln« laden, dann fortsetzen und die erste Schicht beobachten."
+elif var.guided
+  set var.next = "Filament mit »Filament wechseln« laden, dann Z-Nullpunkt und PA/NLE kalibrieren."
+
 ;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
 ;;
-;; Eine andere Düse sitzt anders hoch und fördert anders: den Z-Offset prüfen und Pressure
-;; Advance und NLE für diese Düse kalibrieren.
-M291 R"Düse erfasst" P{"T" ^ var.tool ^ ": " ^ var.key ^ " mm, " ^ global.nozzle_type[var.tool] ^ ". Z-Offset prüfen und PA/NLE für diese Düse kalibrieren."} S2
+;; Eine andere Düse sitzt anders hoch und fördert anders. Als Nächstes:
+;;
+;; 1. Filament laden, falls es entladen ist: **Filament wechseln**. Dabei fragt die Maschine die
+;;    Düse noch einmal ab.
+;; {% if state.status == 'paused' %}
+;; 2. Den Druck fortsetzen und die erste Schicht beobachten. Sitzt die Düse anders hoch, mit
+;;    Babystepping nachstellen.
+;; {% else %}
+;; 2. **Z-Nullpunkt kalibrieren**, sobald der Druckkopf unter 35 °C abgekühlt ist.
+;; 3. Pressure Advance und NLE für diese Düse kalibrieren.
+;; {% endif %}
+M291 R"Düse erfasst" P{"T" ^ var.tool ^ ": " ^ var.key ^ " mm, " ^ global.nozzle_type[var.tool] ^ ". " ^ var.next} S2
 M400 ; sbc specific

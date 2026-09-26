@@ -41,6 +41,9 @@ elif var.key == "1.00"
 elif var.key == "1.20"
   set var.choice = 4
 
+;; Welcher Düsendurchmesser ist eingebaut? Er gehört zum Druckkopf, nicht zum Filament: Jedes
+;; Profil nimmt damit seine Düsenwerte und die Kalibrierungen dieser Düse. Vorgewählt ist der
+;; bisher eingetragene Durchmesser, **Other...** fragt nach einem freien Wert.
 M291 R"Nozzle diameter" P{"Which nozzle is installed on tool " ^ var.tool ^ "?"} S4 K{"0.40 mm","0.60 mm","0.80 mm","1.00 mm","1.20 mm","Other..."} F{var.choice} J2
 if result != 0             ; J2 leaves input undefined - result must be tested right here
   M99
@@ -58,7 +61,8 @@ elif var.choice == 3
 elif var.choice == 4
   set var.diameter = 1.2
 else
-  M291 R"Nozzle diameter" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm:"} S6 L0.1 H2 F{global.nozzle_diameter[var.tool]} J2
+  ;; Den Durchmesser der Düse in mm eingeben, zum Beispiel 0.5.
+  M291 R"Nozzle diameter (other)" P{"Nozzle diameter of tool " ^ var.tool ^ " in mm:"} S6 L0.1 H2 F{global.nozzle_diameter[var.tool]} J2
   if result != 0
     M99
   set var.diameter = input

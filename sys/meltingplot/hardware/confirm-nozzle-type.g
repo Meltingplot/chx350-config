@@ -22,6 +22,9 @@ while iterations < #var.keys
     set var.choice = iterations
     break
 
+;; Welche Art Düse ist eingebaut? **CHT** hat einen geteilten Schmelzkanal für mehr Durchsatz.
+;; **Hardened steel** und **Tungsten carbide** (Hartmetall) sind für abrasive Filamente mit
+;; Kohle- oder Glasfaser.
 M291 R"Nozzle type" P{"Which nozzle is installed on tool " ^ var.tool ^ "?"} S4 K{"Brass","Brass CHT","Hardened steel","Hardened steel CHT","Tungsten carbide","Plated copper","Other"} F{var.choice} J2
 if result != 0             ; J2 leaves input undefined - result must be tested right here
   M99
