@@ -10,11 +10,17 @@ set global.sensorless_z_homing = 0x55555555  ; expected Z stalls (hardened true 
 
 G91                                        ; relative position
 M400                                       ; make sure everything has stopped before we reset the motor currents
-M913 Z{500/move.axes[2].current*100}       ; reduce motor current to 500mA
+M913 Z{500/move.axes[2].current*100}       ; reduce motor current to 500mA - a motor that reaches its stop skips instead of pressing
 M915 Z R0 ; ignore stall events for the next moves
 G1 H2 Z5 F600                              ; lower z-axis if it is already stalled
+M400
+; free all motors at full current: the driver updates its stall bit only on full steps, so a
+; lift at 500 mA can end with the bit still set, and a motor that starts the G1 H1 below with
+; it set stops at once and never reaches its stop (Duet wiki, "Stall detection")
+M913 Z{var.motor_current}
 G1 H2 Z-5 F600                             ; raise z-axis to free up speed friction move
 M400                                       ; wait for moves to finish
+M913 Z{500/move.axes[2].current*100}       ; back to 500mA for the stall move
 G4 P500
 M915 Z R2 ; enable stall events again
 

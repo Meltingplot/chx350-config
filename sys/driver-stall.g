@@ -21,6 +21,12 @@ if param.B == 0 && param.D < 4
     if ("" ^ global.z_motor_stalled[0]) == "1431655765" && ("" ^ global.z_motor_stalled[1]) == "1431655765" && ("" ^ global.z_motor_stalled[2]) == "1431655765" && ("" ^ global.z_motor_stalled[3]) == "1431655765"
       set global.z_motor_stall_deadline = 0 ; reset timer
       set global.z_motor_stalled = vector(4, 0xAAAAAAAA) ; reset counter
+
+    ; when each Z motor's stall was handled, so a trigger5.g halt shows which motor came late
+    ; and by how much. Event log only (L2 without P, DSF logs it at M929 S2 and keeps it out of
+    ; the console). Last in the branch: nothing in front of the reset may throw. upTime and
+    ; msUpTime are two reads, across a second rollover the time reads up to 1 s low.
+    M118 S{"Z stall: driver " ^ param.D ^ " at " ^ state.upTime ^ "." ^ (state.msUpTime < 10 ? "00" : (state.msUpTime < 100 ? "0" : "")) ^ state.msUpTime ^ " s, deadline " ^ global.z_motor_stall_deadline} L2
   else
     echo "Z-Motor stall detected! E-Stop!"
     M112
