@@ -40,6 +40,7 @@ if var.x_parts < 0
 else
   G1 X{min(var.x_parts + var.clearance, move.axes[0].max - 5)} F60000   ; beam just beyond the parts
 M400                                                ; the photo waits for the head to stand still
+G4 P1000                                            ; compensate the capture delay
 M240                                                ; take the photo (sys/M240.g), blocks until it is taken
 
 G1 R3 X0 Y0 U0 F60000                               ; back above the print position
