@@ -51,6 +51,7 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
   - `hardware/` — the installed hardware recorded in `sys/generated/`: `confirm-nozzle-diameter.g`, `store-nozzle-diameter.g`, `confirm-nozzle-type.g`, `confirm-filament-diameter.g`, `confirm-bed-surface.g`; `cancel-nozzle-change.g` is the safe exit of the guided nozzle change
   - `spool/` — the mounted spool and its consumption: `confirm.g`, `store.g`, `track.g`, `read-catalog.g`
   - `z-axis/` (`align-motors.g`, `set-new-height.g`), `z-probe/` (`probe-here.g`, `standard-mode.g`, `touch-mode.g`, `cancel-calibration.g`), `nozzle-cleaner/`
+  - `timelapse/` — `take-photo.g`, called by the slicer's timelapse G-code at every layer change (`M98 P"0:/sys/meltingplot/timelapse/take-photo.g"`): retract, lift, park at `pause.g`'s position, `M400`, `M240`, back through restore point 3, unretract — inline, without `M25`. `M240` runs `sys/M240.g` (RRF has no M240 of its own and runs the macro of that name); it ships empty and must block until the photo is taken
   - `lib/` — helpers that belong to no subsystem: `format-number.g`, `set-led-color.g`, `ask-tool.g` (which tool a macro acts on, built from `tools`)
 - **`filaments/`** — 30 material profiles, each with the user-editable `config-override.g` and `temps.g` and the machine-generated `config.g`, `load.g` and `unload.g` (see "Filament Loading and DWC Interaction"). A profile added to or removed from the repo is added to or removed from the list in `sys/meltingplot/filament-profile/read-index.g`, otherwise the material choice of `maintenance/change-filament` does not offer it
 - **`macros/meltingplot/`** — the operator's macros in DWC: `calibration/` (`e-steps`, `nle`, `pressure-advance`, `z-height`, `heightmap`, `magnetic-table`, `align-z-axis`), `maintenance/` (bed preparation, filament change, nozzle, spool, bed surface, nozzle cleaner, coolant), `startup/` (`preheat`, `heaters-off`, `home-axes`, `heatup-and-home`), `z-probe/offset/`
@@ -104,7 +105,7 @@ An operator macro can carry comments that the CHX 350 operator UI (DWC plugin `C
 
 `tpost0.g` regenerates a profile on its next tool change (once it has a `temps.g`), macro `repair-filament-profile` does it at once; the 30 shipped profiles come with the update. A forwarding file adds one macro nesting level, so an outdated profile loads at depth 8 of the 10 RRF allows.
 
-**Slicer entry points — kept, silent, deprecated with RRF 3.8.** The OrcaSlicer, PrusaSlicer and SuperSlicer profiles call no other path under `sys/meltingplot/` than these two, and every file already sliced keeps calling them. They forward without a warning for now; with RRF 3.8 they get the same `M118 P0 L1` warning as the profile hooks, and are removed once the slicer profiles call the new paths.
+**Slicer entry points — kept, silent, deprecated with RRF 3.8.** Apart from `timelapse/take-photo.g` (no old path), the OrcaSlicer, PrusaSlicer and SuperSlicer profiles call no other path under `sys/meltingplot/` than these two, and every file already sliced keeps calling them. They forward without a warning for now; with RRF 3.8 they get the same `M118 P0 L1` warning as the profile hooks, and are removed once the slicer profiles call the new paths.
 
 | Old path in `sys/meltingplot/` | New path | Still called by |
 |---|---|---|
