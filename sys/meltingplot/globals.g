@@ -455,6 +455,7 @@ global pause_extruder_peak = 0.0
 
 ; --- timelapse ----------------------------------------------------------------
 global timelapse_park_x = -1              ; machine X of the beam for the job's photos (-1 = not set yet); set by timelapse/take-photo.g, reset by start.g
+global timelapse_park_z = -1              ; highest machine Z the job's photos were taken at (-1 = none yet); set by timelapse/take-photo.g, reset by start.g
 
 ; --- scanning Z probe ---------------------------------------------------------
 global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)

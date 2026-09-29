@@ -12,6 +12,14 @@ if state.status == "simulating"
 M400                                                ; finish the layer: the queue then holds only the moves below
 G60 S3                                              ; print position to restore point 3 (1 = pause, 2 = tool change)
 
+; Z: 2 mm above the layer, but never below the highest park position of the job (reset by
+; start.g). In sequential printing ("by object") the objects printed before stand taller than the
+; current layer: each had a photo at its last layer change, so the highest park position is 2 mm
+; above that layer, more than a layer height above the object's top. Machine coordinates, read at
+; rest (M400 above), like the G53 moves below; the profiles' M207 Z hop (at most 0.6 mm) stays
+; below the 2 mm, so this move always goes up.
+set global.timelapse_park_z = min(max(move.axes[2].machinePosition + 2, global.timelapse_park_z), move.axes[2].max)
+
 ; The photos of a job are compared with each other, so the beam and both heads stand in the same
 ; place in every one of them: Y and U in their end positions (pause.g's park position), the beam in
 ; X beyond everything printed so far - the camera looks from the X min side and the beam spans the
@@ -40,17 +48,13 @@ if var.x_parts >= 0
 ; in before the G11. G10 also applies the tool's Z hop, which RRF keeps as a tool offset, so the
 ; return to the restore point's Z lands one hop high and the G11 takes it off again.
 G10                                                 ; firmware retract (M207 of the loaded filament)
-M83                                                 ; relative extruder moves
-G1 E-0.8 F1200                                      ; plus 0.8 mm
-G91
-G1 Z2 F1200                                         ; lift Z clear of the part
 G90
-G53 G1 X{var.park_x} Y{move.axes[1].min} U{move.axes[3].max} F60000   ; beam behind the parts, heads in their end positions
+G53 G1 Z{global.timelapse_park_z} F1200            ; first up, clear of everything printed in this job
+G53 G1 X{var.park_x} Y{move.axes[1].min} U{move.axes[3].max} F60000   ; then beam behind the parts, heads in their end positions
 ; RRF starts sys/M240.g at once, without waiting for the moves above: a camera that needs the beam
 ; at rest waits for it there (M400).
 M240                                                ; take the photo (sys/M240.g), blocks until it is taken
 
-G1 R3 X0 Y0 U0 F60000                               ; back above the print position
+G1 R3 X0 Y0 U0 F60000                               ; back above the print position, still at the park height
 G1 R3 Z0 F1200                                      ; down to the print height
-G1 E0.8 F1200                                       ; the extra 0.8 mm back
 G11                                                 ; unretract, drops the Z hop
