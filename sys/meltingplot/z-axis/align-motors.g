@@ -6,6 +6,16 @@ var motor_current = move.axes[2].percentCurrent
 var max_travel = move.axes[2].max - move.axes[2].min + 5 ; max travel + 5mm extra
 var max_time = {var.max_travel / move.axes[2].speed * 1.1}
 
+; A stall move starts only with the Z stall watchdog disarmed: trigger5.g disarms the last Z
+; homing up to z_motor_stall_time_max + 1 s after its first stall, and stalls before that would
+; count against its complete flag. After 40 s T5 has disarmed or halted, so a deadline still
+; set means the watchdog does not work - halt rather than drive the motors into their stops.
+while global.z_motor_stall_deadline != 0
+  if iterations >= 400
+    echo "Error: Z stall watchdog still armed after 40 s - machine halt!"
+    M112
+  G4 P100
+
 set global.sensorless_z_homing = 0x55555555  ; expected Z stalls (hardened true pattern, see globals) - cleared at the end of this file
 
 G91                                        ; relative position

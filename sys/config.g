@@ -197,7 +197,12 @@ M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Loggi
 ; instead (R1, job.file.fileName) and their macros check "processing" themselves. A literal
 ; would also need firmware 3.7.0-rc.1+3-mp.4 or later (before it, it deadlocked the main task
 ; and reset the board).
-; T5 Z stall watchdog: the Z homing deadline armed by driver-stall.g passed, or lies > 30 s ahead
+; T5 Z stall watchdog: the deadline driver-stall.g armed for a Z homing passed, or lies > 30 s
+; ahead; trigger5.g disarms it or halts. The deadline only changes where no lookup order can
+; fire this: 0 -> armed (the guard reads 0 or the fresh deadline, neither passes) and back to 0
+; only in trigger5.g, while the expression is already true. Each global. reference is a lookup
+; of its own and the SBC task writes a set in between - driver-stall.g's former reset to 0
+; after the guard halted one Z homing in four (CLAUDE.md, "Expression triggers").
 M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor_stall_deadline || global.z_motor_stall_deadline > state.upTime + 30)" R0
 ; T7 MFM suppression expiry while a job is loaded - trigger7.g ends the window only while
 ; "processing" (a window survives a pause). The guard is 0 outside a job (print/finish.g).

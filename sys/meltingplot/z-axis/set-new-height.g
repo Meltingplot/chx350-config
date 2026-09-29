@@ -1,4 +1,12 @@
 var motor_current = move.axes[2].percentCurrent
+
+; a stall move starts only with the Z stall watchdog disarmed, see z-axis/align-motors.g
+while global.z_motor_stall_deadline != 0
+  if iterations >= 400
+    echo "Error: Z stall watchdog still armed after 40 s - machine halt!"
+    M112
+  G4 P100
+
 set global.sensorless_z_homing = 0x55555555  ; expected Z stalls (hardened true pattern, see globals) - cleared at the end of this file
 
 M915 Z R2                            ; set z axis to stall detection mode

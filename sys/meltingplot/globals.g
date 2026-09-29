@@ -69,7 +69,8 @@ M98 P"0:/sys/meltingplot/migrate.g"
 ;                                  idle_heater_pause_hold[]
 ;   permissive 0x55555555 (true):  door_left_switch_checked, door_right_switch_checked,
 ;                                  sensorless_z_homing, closed_loop_homing,
-;                                  idle_heater_cutoff_done[], z_motor_stalled[]
+;                                  idle_heater_cutoff_done[], z_motor_stalled[],
+;                                  z_motor_stall_complete
 ; Never a bare "if global.x", never "== true"/"== false", never a numeric comparison
 ; against a pattern. Strings in this tier (machine_mode, saved_*_heater_state*) are read
 ; the same way, ("" ^ global.machine_mode) != "automatic", for the same reason.
@@ -200,16 +201,20 @@ global saved_bed_heater_state = "off"                    ; bed heater state befo
 global saved_tool_heater_states = vector(2, "off")       ; per-tool heater state before door open
 
 ; --- stall and driver watchdog ------------------------------------------------
-; Z homing runs the four Z motors into their stops; driver-stall.g counts the stalls and
-; arms z_motor_stall_deadline. If not all four report within
-; z_motor_stall_time_max seconds, trigger5.g (expression trigger T5, config.g) halts the
-; machine with M112 - a Z motor that keeps driving against its stop breaks the bed's
-; joints. A process function, not CE.
+; Z homing runs the four Z motors into their stops; driver-stall.g flags the stalls, arms
+; z_motor_stall_deadline at the first and sets z_motor_stall_complete when all four
+; reported. When the deadline has passed, trigger5.g (expression trigger T5, config.g)
+; disarms the watchdog if all four reported within z_motor_stall_time_max seconds and halts
+; the machine with M112 otherwise - a Z motor that keeps driving against its stop breaks
+; the bed's joints. A process function, not CE.
 ; z_motor_stall_deadline is numeric: armed, it must lie within [upTime, upTime + 30] - past
-; means the motors did not report, further ahead means it changed without driver-stall.g
-; writing it; trigger5.g halts on both. z_motor_stall_time_max is accepted in 1..30 by
+; means the time is up, further ahead means it changed without driver-stall.g writing it
+; (trigger5.g halts). Only trigger5.g writes it back to 0: T5 reads it three times per pass,
+; and a reset between two of those lookups fired T5 (config.g); a stall move waits for the
+; disarm (z-axis/align-motors.g). z_motor_stall_time_max is accepted in 1..30 by
 ; driver-stall.g, anything else arms 5 s with a warning.
 global z_motor_stalled = vector(4, 0xAAAAAAAA)       ; per Z motor: 0x55555555 stalled (permissive: counts towards "all reported"), 0xAAAAAAAA not
+global z_motor_stall_complete = 0xAAAAAAAA           ; 0x55555555 all four Z motors reported (permissive: trigger5.g disarms), 0xAAAAAAAA not - cleared by trigger5.g
 ; z_motor_stall_deadline is declared at the end of this file (trigger T5 reads it on every
 ; main-loop pass, see "read by expression triggers")
 global z_motor_stall_time_max = 5                    ; seconds all four Z motors have to report their stall
@@ -511,7 +516,7 @@ global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer 
 ; pass comes last. They belong to the groups named in their comments.
 global spool_track_time = 0               ; spool: upTime of trigger8.g's last run (60 s print tick) - T8 reads it while printing
 global mfm_suppress_until = 0             ; MFM: upTime until which to suppress (0 = not active) - T7 guard, ends it while printing
-global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = no homing in progress) - T5 guard
+global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = disarmed, only trigger5.g disarms) - T5 guard
 
 ; Per-machine overrides. Values only - anything that needs G-code (drive directions,
 ; sensor wiring, ...) belongs in machine-override instead. The file lives in
