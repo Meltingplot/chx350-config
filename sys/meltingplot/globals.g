@@ -453,6 +453,9 @@ global pause_extruder = -1
 global pause_extruder_pos = 0.0
 global pause_extruder_peak = 0.0
 
+; --- timelapse ----------------------------------------------------------------
+global timelapse_park_x = -1              ; machine X of the beam for the job's photos (-1 = not set yet); set by timelapse/take-photo.g, reset by start.g
+
 ; --- scanning Z probe ---------------------------------------------------------
 global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)
 global szp_warm_threshold = 40           ; temperature (°C) above which warm calibration is used for scanning Z-probe

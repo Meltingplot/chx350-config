@@ -18,4 +18,7 @@ if state.status == "simulating"
 set global.spool_track_baseline = vector(2, 0.0)
 set global.spool_report_pending = true
 
+; Timelapse (timelapse/take-photo.g): the fixed photo position is set anew by the job's first photo.
+set global.timelapse_park_x = -1
+
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
