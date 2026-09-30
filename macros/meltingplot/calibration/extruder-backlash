@@ -1,0 +1,321 @@
+; ---
+; title: Extruder-Wechselspiel messen
+; description: Spiel von Getriebe, Antriebsrad und Andruckrolle beim Richtungswechsel, gemessen mit dem Filamentmonitor · etwa 8 min
+; icon: mdi-swap-horizontal
+; page: service
+; order: 150
+; enabled: "{{ state.status == 'idle' and global.machine_mode == 'automatic' and (move.extruders | selectattr('filament') | length) > 0 }}"
+; hint: Nur in Betriebsart Automatik und mit geladenem Filament
+; ---
+; calibration/extruder-backlash
+; Measures the extruder's backlash: how far the extruder turns after a change of direction
+; before the filament follows - gearbox, drive gear, idler and the give of the filament
+; between gear and monitor. Nothing is written and no setting is changed; the result is shown
+; and echoed. A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI") or a macro:
+;   M98 P"0:/macros/meltingplot/calibration/extruder-backlash" T<tool> D<mm> N<count> F<mm/min> H<lsb>
+; T: the tool, else asked (lib/ask-tool.g). D: largest reversal, 3 mm - the three amplitudes
+; are D/3, 2D/3 and D. N: measurements per amplitude, 8. F: feed rate, 30 mm/min - 0.5 mm/s,
+; 3.2 mm³/s at 2.85 mm, slow enough that the melt hardly pushes back. The first run at
+; F120 (12.8 mm³/s) read k 0.885 and a spread of 0.07-0.09 mm: the flow deficit NLE corrects
+; (reset here) and slip under load, both of which widen the measured backlash.
+; H: hysteresis of the monitor's sensor in LSB of its 12-bit angle, 3 (see below), H0 = none.
+;
+; Signal: sensors.filamentMonitors[].position, the raw 10-bit angle of the monitor's wheel
+; (0..1023 per revolution, 0.025 mm of filament at L25.3). The toolboard sends it in every
+; CAN status report whatever the enable mode (FilamentMonitor::Spin, Clear() also reads the
+; sensor), at rest at least every 2 s (StatusUpdateInterval) - so the monitor stays in its
+; configuration and every reading waits 2.5 s at rest.
+;
+; Method: a reversal of commanded length s moves the filament by m = k * (s - b) - the
+; backlash b is lost at every change of direction, k is measured over commanded feed
+; (e-steps, the monitor's L). The extruder runs a zig-zag, back s, forward s + step, back,
+; forward ..., so every reading is one reversal. A straight line through m over s, fitted
+; per direction, has the slope k and meets the s axis at b = mean(s) - mean(m) / k: b does
+; not depend on the e-steps or on L. The two directions are two estimates of the same b.
+;
+; Resolution by superposition (vernier / dither): one count is 0.025 mm, the backlash of a
+; good extruder a few counts. A single reading is off by up to a count, and the angle error
+; of the magnet, periodic with the wheel, skews a short distance by about as much. Between
+; two cycles the filament advances by step = (one revolution + one count) / (3 N): the N
+; measurements of each amplitude start at N positions spread evenly over one revolution -
+; the periodic angle error cancels in the mean up to its (N-1)th harmonic - and at once over
+; N sub-steps of one count, so the rounding of the readings averages down to 1/N of a count.
+; A real feed a percent off the command scatters the sub-count phases anyway; the extra
+; count spreads them where it does not.
+;
+; The monitor's AS5601 holds its output within 3 LSB of its 12-bit angle (ConfHYST_LSB3,
+; MagneticFilamentMonitor main.cpp) - a dead band the sensor adds to every reversal. It is
+; subtracted as 3/4 count per reversal; that it acts as a plain dead band is the datasheet's
+; wording, not measured here - H sets it, the echo shows the value with it.
+;
+; The nozzle heats to the profile's temperature (the filament must move both ways), the head
+; moves to the front centre with the bed at least 200 mm down, about 30 mm of filament fall
+; onto the bed, and at the end it retracts 12.5 mm and cleans the nozzle like
+; calibration/e-steps. Not while a job is loaded.
+
+var maxAmp = exists(param.D) ? min(max(param.D, 0.6), 6) : 3    ; largest reversal in mm
+var phases = exists(param.N) ? min(max(floor(param.N), 2), 16) : 8 ; measurements per amplitude (loop bound, clamped)
+var feed = exists(param.F) ? min(max(param.F, 15), 600) : 30    ; feed rate in mm/min
+var hysteresis = exists(param.H) ? max(param.H, 0) : 3          ; sensor hysteresis in LSB of 4096 per revolution
+var settle = 2500                                   ; ms at rest before a reading - the toolboard reports at least every 2 s
+
+set global.result = 0
+
+; the zig-zag needs the extruder alone - never with a job loaded, and only in automatic mode
+; (default mode blocks extrusion via M302 S500) - hardened read, see globals
+if job.file.fileName != null
+  echo "Error: a print job is loaded - abort!"
+  set global.result = 1
+  M99
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: machine not in automatic mode - abort!"
+  set global.result = 1
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - abort!"
+  set global.result = 1
+  M99
+
+; the tool: T<n>, else asked - lib/ask-tool.g hands it back in global.result, -1 = cancelled
+var tool = 0
+if exists(param.T)
+  set var.tool = param.T
+else
+  M98 P"0:/sys/meltingplot/lib/ask-tool.g" S"Welchen Druckkopf messen?"
+  set var.tool = global.result
+  if var.tool < 0
+    echo "Error: backlash measurement cancelled"
+    set global.result = 2
+    M99
+
+var previousTool = state.currentTool
+var extruder = tools[var.tool].filamentExtruder
+var heater = tools[var.tool].heaters[0]
+var filament = move.extruders[var.extruder].filament
+
+if var.filament == null || var.filament == ""
+  echo "Error: no filament loaded on tool " ^ var.tool ^ " - abort!"
+  set global.result = 3
+  M99
+if #sensors.filamentMonitors <= var.extruder || sensors.filamentMonitors[var.extruder] == null || sensors.filamentMonitors[var.extruder].type != "rotatingMagnet"
+  echo "Error: extruder " ^ var.extruder ^ " has no rotating magnet filament monitor - abort!"
+  set global.result = 3
+  M99
+
+;; Die Maschine misst das Wechselspiel des Extruders: wie weit der Extruder nach einem
+;; Richtungswechsel dreht, bevor sich das Filament bewegt – Spiel in Getriebe, Antriebsrad und
+;; Andruckrolle. Der Extruder fährt immer wieder ein Stück zurück und vor, der Filamentmonitor
+;; misst, wie weit das Filament jedes Mal wirklich mitgeht.
+;;
+;; - Der Druckkopf fährt nach vorne in die Mitte, das Druckbett mindestens 200 mm nach unten.
+;;   Sind die Achsen nicht referenziert, referenziert die Maschine sie vorher.
+;; - Die Düse heizt auf die Temperatur des Profils.
+;; - Etwa 30 mm Filament werden extrudiert und fallen auf das Druckbett –
+;;   **das Druckbett muss frei sein**. Dauer etwa 8 Minuten, danach wird die Düse gereinigt.
+;;
+;; Die Messung ändert keine Einstellung. Ein großes oder wachsendes Spiel deutet auf Verschleiß.
+M291 R"Wechselspiel messen" P{"Wechselspiel des Extruders von T" ^ var.tool ^ " (" ^ var.filament ^ ") messen? Etwa 30 mm Filament werden extrudiert, das Druckbett muss frei sein. Dauer etwa 8 min."} S3 J2
+if result != 0
+  echo "Error: backlash measurement cancelled"
+  set global.result = 2
+  M99
+
+; measuring temperature: the profile's active temperature (temps.g sets
+; global.filament_temp_active - reset, run and copy in consecutive steps, it is a transfer
+; value). A profile predating temps.g needs the tool active above the cold-extrusion limit.
+var targetTemp = 0
+if fileexists("0:/filaments/" ^ var.filament ^ "/temps.g")
+  set global.filament_temp_active = 0
+  M98 P{"0:/filaments/" ^ var.filament ^ "/temps.g"}
+  set var.targetTemp = global.filament_temp_active
+elif heat.heaters[var.heater].state == "active" && heat.heaters[var.heater].active >= heat.coldExtrudeTemperature
+  set var.targetTemp = heat.heaters[var.heater].active
+if var.targetTemp <= 0
+  echo "Error: no temperature - filaments/" ^ var.filament ^ "/temps.g missing or invalid (run macro repair-filament-profile) and tool " ^ var.tool ^ " not heated"
+  M291 P"Keine Temperatur: temps.g des Profils fehlt oder ist ungültig, und der Druckkopf ist nicht geheizt. Makro repair-filament-profile ausführen." S2
+  set global.result = 4
+  M99
+
+; the prompt above leaves the operator time to open a door, which drops the machine to
+; default mode - nothing heats or moves before automatic mode is back (wait-automatic.g
+; confirms it, global.result 0 on the next line only)
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+if global.result != 0
+  echo "Error: machine not in automatic mode - abort!"
+  set global.result = 1
+  M99
+
+;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+;;
+;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+;;
+;; Die Achsen werden referenziert, falls nötig. Der Druckkopf fährt nach vorne in die Mitte, das
+;; Druckbett mindestens 200 mm nach unten, und die Düse heizt auf die Temperatur des Profils.
+;;
+;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
+;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
+M291 R"Düse heizt auf · Wechselspiel" P{"Der Druckkopf fährt nach vorne, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+
+if !move.axes[0].homed || !move.axes[1].homed || !move.axes[2].homed || !move.axes[3].homed
+  set global.result = 0
+  G28
+  if result != 0 || global.result != 0
+    if state.messageBox != null
+      M292                                          ; the progress box above
+    echo "Error: homing failed - abort!"
+    set global.result = 5
+    M99
+
+T-1                                                 ; deselect any tool
+T{var.tool}                                         ; select the tool to measure
+
+if heat.heaters[var.heater].state != "active" || heat.heaters[var.heater].active != var.targetTemp
+  M568 P{var.tool} S{var.targetTemp} A2             ; heats while the head moves
+var axis = tools[var.tool].axes[0][0]               ; the carriage this tool's X moves (U for T1)
+G90
+if move.axes[2].machinePosition < 200
+  G1 Z200 F6000                                     ; bed down only, never up - a part may stand on it
+G1 X{(move.axes[var.axis].min + move.axes[var.axis].max) / 2} Y{move.axes[1].min} F60000   ; front, centre of the carriage's travel
+M400
+if heat.heaters[var.heater].current < heat.heaters[var.heater].active
+  M116 P{var.tool}                                  ; wait only when heating up
+
+;; ![Hineinfassen verboten](0:/sys/meltingplot/flows/img/iso7010-p015.webp)
+;;
+;; > Türen geschlossen halten. Nicht in den Bauraum greifen.
+;;
+;; Der Extruder fährt abwechselnd 1 bis 3 mm zurück und wieder vor, nach jeder Bewegung liest
+;; die Maschine die Stellung des Messrads im Filamentmonitor. Zwischen den Messungen rückt das
+;; Filament ein Stück vor, sodass die Messungen über eine ganze Umdrehung des Rads verteilt
+;; liegen – so heben sich die Messfehler des Monitors gegenseitig auf.
+;;
+;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
+;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m %} · Messrad **{{ m.position }}** von 1024{% endif %}{% endif %}
+M291 R"Wechselspiel wird gemessen" P{"Das Wechselspiel wird gemessen: " ^ (6 * var.phases) ^ " Richtungswechsel. Türen geschlossen halten."} S1 T0
+
+M83                                                 ; relative extrusion
+M220 S100                                           ; speed factor 100 %
+M221 D{var.extruder} S100                           ; extrusion factor 100 %
+M572 D{var.extruder} S0                             ; no pressure advance
+M592 D{var.extruder} A0 B0                          ; no non-linear extrusion - the tool change at the end restores all three
+
+var mmPerCount = sensors.filamentMonitors[var.extruder].configured.mmPerRev / 1024  ; filament per count of the wheel angle
+var step = {(sensors.filamentMonitors[var.extruder].configured.mmPerRev + var.mmPerCount) / (3 * var.phases)} ; advance per cycle, see above
+var readings = {6 * var.phases}                     ; 3 amplitudes x N phases x back and forth
+var error = ""
+var reading = 0                                     ; wheel angle 0..1023
+var dir = 0                                         ; 0 = back, 1 = forward
+var s = 0.0                                         ; commanded length of the reversal in mm
+var m = 0.0                                         ; length the wheel measured in mm, positive in the commanded direction
+var sumS = vector(2, 0.0)                           ; sums of the line fit, per direction
+var sumM = vector(2, 0.0)
+var sumSS = vector(2, 0.0)
+var sumSM = vector(2, 0.0)
+var sumMM = vector(2, 0.0)
+
+; 5 mm forward: takes up the play in the feed direction and shows which way the wheel turns.
+; Angle differences are wrapped to -512..511 counts, a move stays well below half a turn.
+G4 P{var.settle}
+var pos = sensors.filamentMonitors[var.extruder].position
+G1 E5 F{var.feed}
+G4 P{var.settle}                                    ; G4 waits for the move to end first
+set var.reading = sensors.filamentMonitors[var.extruder].position
+var preload = mod(var.reading - var.pos + 1536, 1024) - 512
+var sign = (var.preload < 0) ? -1 : 1               ; -1: the wheel counts down on this mounting
+set var.pos = var.reading
+echo "Backlash: 5 mm forward read " ^ var.preload ^ " counts (" ^ {var.preload * var.mmPerCount} ^ " mm)"
+if sensors.filamentMonitors[var.extruder].status != "ok" || abs(var.preload) < {2.5 / var.mmPerCount} || abs(var.preload) > {7.5 / var.mmPerCount}
+  set var.error = "Der Filamentmonitor misst die Förderung nicht richtig (5 mm vor, gemessen " ^ var.preload ^ " von etwa " ^ round(5 / var.mmPerCount) ^ " Schritten)."
+
+while var.error == "" && iterations < var.readings
+  set var.dir = mod(iterations, 2)
+  set var.s = {var.maxAmp * (mod(floor(iterations / 2), 3) + 1) / 3 + var.dir * var.step}
+  G1 E{(var.dir == 0) ? -var.s : var.s} F{var.feed}
+  G4 P{var.settle}                                  ; G4 waits for the move to end first
+  set var.reading = sensors.filamentMonitors[var.extruder].position
+  set var.m = {((var.dir == 0) ? -var.sign : var.sign) * (mod(var.reading - var.pos + 1536, 1024) - 512) * var.mmPerCount}
+  set var.pos = var.reading
+  echo "Backlash " ^ (iterations + 1) ^ "/" ^ var.readings ^ " " ^ ((var.dir == 0) ? "back" : "forward") ^ ": commanded " ^ var.s ^ " mm, measured " ^ var.m ^ " mm"
+  ; a door opened drops to default mode, which refuses extrusion - hardened read, see globals
+  if ("" ^ global.machine_mode) != "automatic"
+    set var.error = "Die Maschine hat die Betriebsart Automatik verlassen (Tür geöffnet?)."
+  elif sensors.filamentMonitors[var.extruder].status != "ok" || var.m < {2 * var.mmPerCount} || var.m > {1.5 * var.s}
+    set var.error = "Messung " ^ (iterations + 1) ^ " unplausibel: Das Filament ist kaum oder zu weit mitgegangen. Spiel größer als die Bewegung, oder das Filament rutscht."
+  else
+    set var.sumS[var.dir] = var.sumS[var.dir] + var.s
+    set var.sumM[var.dir] = var.sumM[var.dir] + var.m
+    set var.sumSS[var.dir] = {var.sumSS[var.dir] + var.s * var.s}
+    set var.sumSM[var.dir] = {var.sumSM[var.dir] + var.s * var.m}
+    set var.sumMM[var.dir] = {var.sumMM[var.dir] + var.m * var.m}
+
+; least squares per direction: m = k * s - k * b over the n readings of that direction
+var n = {3 * var.phases}
+var k = vector(2, 0.0)                              ; measured over commanded feed
+var b = vector(2, 0.0)                              ; backlash in commanded mm, sensor hysteresis subtracted
+var spread = vector(2, 0.0)                         ; residual standard deviation in mm
+while var.error == "" && iterations < 2
+  var sxx = {var.sumSS[iterations] - var.sumS[iterations] * var.sumS[iterations] / var.n}
+  var sxy = {var.sumSM[iterations] - var.sumS[iterations] * var.sumM[iterations] / var.n}
+  var syy = {var.sumMM[iterations] - var.sumM[iterations] * var.sumM[iterations] / var.n}
+  set var.k[iterations] = var.sxy / var.sxx         ; sxx > 0: three different amplitudes
+  ; checked before k divides - a non-finite var assignment crashes DSF in SBC mode
+  if var.k[iterations] < 0.5 || var.k[iterations] > 1.5
+    set var.error = "Förderverhältnis " ^ {round(var.k[iterations] * 100)} ^ " % unplausibel – E-Steps oder Filamentmonitor prüfen."
+    break
+  set var.b[iterations] = {(var.sumS[iterations] - var.sumM[iterations] / var.k[iterations]) / var.n - var.hysteresis * var.mmPerCount / 4 / var.k[iterations]}
+  set var.spread[iterations] = {sqrt(max(0, var.syy - var.k[iterations] * var.sxy) / (var.n - 2))}
+
+if var.error != ""
+  T-1                                             ; deselect tool
+  T{var.previousTool}                               ; select previous tool - tpost0.g restores PA, NLE and e-steps
+  ;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+  ;;
+  ;; Die Messung wurde abgebrochen, es wurde nichts verändert. Filamentweg, Andruckrolle und
+  ;; Filamentmonitor prüfen und die Messung wiederholen. Die Düse ist noch heiß.
+  M291 R"Wechselspiel nicht gemessen" P{var.error} S2
+  echo "Error: backlash measurement failed - " ^ var.error
+  set global.result = 6
+  M99
+
+var backlash = (var.b[0] + var.b[1]) / 2
+echo "Extruder backlash T" ^ var.tool ^ " (" ^ var.filament ^ ", " ^ heat.heaters[var.heater].active ^ " C, F" ^ var.feed ^ "): " ^ var.backlash ^ " mm"
+echo "  back: " ^ var.b[0] ^ " mm, k " ^ var.k[0] ^ ", spread " ^ var.spread[0] ^ " mm; forward: " ^ var.b[1] ^ " mm, k " ^ var.k[1] ^ ", spread " ^ var.spread[1] ^ " mm"
+echo "  sensor hysteresis subtracted: " ^ var.hysteresis ^ " LSB = " ^ {var.hysteresis * var.mmPerCount / 4} ^ " mm per reversal; " ^ var.readings ^ " readings, step " ^ var.step ^ " mm"
+
+; the state a filament load leaves behind: filament retracted 12.5 mm, nozzle wiped
+G1 E-12.5 F180
+M400
+M98 P"0:/sys/meltingplot/nozzle-cleaner/clean.g"
+
+T-1                                                 ; deselect tool
+T{var.previousTool}                                 ; select previous tool - tpost0.g restores PA, NLE and e-steps
+
+; lib/format-number.g returns in global.result - read it straight away
+M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.backlash} D3 W0
+var text = "T" ^ var.tool ^ ", " ^ var.filament ^ ": Wechselspiel " ^ global.result ^ " mm"
+M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.b[0]} D3 W0
+set var.text = var.text ^ " (zurück " ^ global.result
+M98 P"0:/sys/meltingplot/lib/format-number.g" F{var.b[1]} D3 W0
+set var.text = var.text ^ ", vor " ^ global.result ^ " mm), Streuung "
+M98 P"0:/sys/meltingplot/lib/format-number.g" F{max(var.spread[0], var.spread[1])} D3 W0
+set var.text = var.text ^ global.result ^ " mm"
+if max(var.spread[0], var.spread[1]) > 0.1           ; first guess, not yet set on the machine
+  set var.text = var.text ^ " – zu hoch, das Filament rutscht: Andruckrolle und Antriebsrad prüfen"
+;; ![Warnung vor heißer Oberfläche](0:/sys/meltingplot/flows/img/iso7010-w017.webp)
+;;
+;; {% if state.messageBox %}**{{ state.messageBox.message }}**{% endif %}
+;;
+;; Das Wechselspiel ist der Weg, den der Extruder bei jedem Richtungswechsel verliert – beim
+;; Einziehen wie beim Wiedervorschieben. Beide Richtungen sollten fast gleich sein. Die Streuung
+;; zeigt, wie gleichmäßig der Extruder fördert: Über 0,1 mm rutscht das Filament.
+;;
+;; Die Messung hat keine Einstellung geändert. Das extrudierte Filament vom Druckbett nehmen,
+;; die Düse ist noch heiß.
+M291 R"Wechselspiel gemessen" P{var.text ^ ". Filament vom Druckbett nehmen."} S2
+
+; the format-number.g calls above left a string in global.result - hand back success
+set global.result = 0
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"
