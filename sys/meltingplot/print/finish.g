@@ -47,9 +47,10 @@ M98 P"0:/sys/meltingplot/spool/track.g" J1
 ; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
 ; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
 ; MUST run BEFORE the M400/G4 S1 settle below: M92 rewrites the extruder motor position from
-; the rescaled step endpoint (AdjustEndpoint: lrintf(steps * ratio), float-rounded), so the
-; reported move.extruders[].position shifts by an epsilon the daemon's exact-compare motion
-; tracker reads as extruder movement. Placed after the settle, that "movement" lands inside
+; the movement state's endpoint (AdjustEndpoint -> Move::ChangeSingleEndpointAfterHoming), so
+; the reported move.extruders[].position jumps - to 0 in every M92 E the QA journals recorded
+; (2026-09-30, 10-02) - and the daemon's exact-compare motion tracker reads that as extruder
+; movement. Placed after the settle, that "movement" lands inside
 ; the daemon's 0.25s motion window right as the switch_checked flags are cleared at the end
 ; of this file → unsafe-state M112 at print end (happened 2026-08-22). Before the settle,
 ; the G4 S1 lets the window expire while the flags are still true (automatic branch, harmless).
@@ -70,6 +71,7 @@ set global.mfm_ignore_events = false
 set global.mfm_error_start_pos = null
 set global.mfm_normal_since = 0
 set global.mfm_recovery_resume_time = 0
+set global.mfm_recovery_relapses = 0
 set global.mfm_feed_stall = -1
 set global.mfm_recovery_requested = false
 set global.mfm_recovery_result = -1

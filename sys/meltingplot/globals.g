@@ -431,6 +431,8 @@ global mfm_sample_time = 0.0              ; last MFM check timestamp (sub-second
 global mfm_error_start_pos = null         ; extruder position at first error in sequence (null = no active tracking)
 global mfm_normal_since = 0               ; upTime when sustained normal readings began
 global mfm_recovery_resume_time = 0       ; upTime of last auto-recovery pass + auto-resume (0 = none); loop breaker in filament-error.g
+global mfm_recovery_resume_pos = 0.0      ; extruder position where the print last restarted (resume.g, after its M92); loop breaker
+global mfm_recovery_relapses = 0          ; auto-recoveries in a row that did not hold (stall again within 50 mm); the 2nd stays paused
 global mfm_recovery_requested = false     ; armed by filament-error.g right before its M25, consumed by pause.g (runs the recovery before the pause commits)
 global mfm_recovery_result = -1           ; verdict of the recovery run by pause.g: -1 = did not run, 0 = false positive, 1+ = real issue
 
@@ -458,9 +460,11 @@ global mfm_feed_stall = -1                ; ratio of the window that raised the 
 ; --- pause / resume re-prime bookkeeping --------------------------------------
 ; pause_extruder is the extruder drive of the tool active at pause (-1 = paused without
 ; tool), pause_extruder_pos its position counter (move.extruders[].position accumulates
-; every commanded move, is not reset by G92 or pause/resume - only at print start) at the
-; end of pause.g, re-taken at the end of filament/mfm-recovery.g so the recovery's own
-; test/purge extrusion doesn't count as manual.
+; every commanded move and is not reset by G92 - but print start and every M92 E set it
+; to 0, so the tool re-select in resume.g, whose M703 loads the e-steps file, zeroes it;
+; resume.g reads it before that) at the end of pause.g, re-taken at the end of
+; filament/mfm-recovery.g so the recovery's own test/purge extrusion doesn't count as
+; manual.
 ; pause_extruder_peak is the melt-zone "full" mark: the position at which the nozzle is
 ; primed again (snapshot + 12.7), raised by daemon.g to the highest position reached
 ; while paused. Forward extrusion beyond the mark is purge that leaves the nozzle, so

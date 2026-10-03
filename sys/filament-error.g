@@ -113,16 +113,26 @@ if param.P == 4 || param.P == 5
         echo "MFM: hard-pause skipped (state=" ^ state.status ^ ", no active job)"
       M99
 
-    ; Loop breaker: a hard pause this soon after a successful auto-recovery means the
-    ; pass verdict didn't hold (e.g. regrind from a downstream cause the purge-through
-    ; can't fix) — skip the test, stay paused for the operator. Cleared here so the
-    ; next hard pause after an operator resume gets a fresh auto-recovery attempt.
-    if global.mfm_recovery_resume_time != 0 && (state.upTime - global.mfm_recovery_resume_time) < 300
+    ; Loop breaker: a stall within 50 mm of extrusion after an auto-resume means the pass
+    ; verdict didn't hold (e.g. a downstream cause the purge-through can't fix). Counted in
+    ; filament, not time: the 300 s it replaced were 1-8 layers depending on the flow, and
+    ; at 0.1 mm layers the stall was not even detected within them. The first such relapse
+    ; gets one more auto-recovery - in job 20261002-154706 the recovery after an immediate
+    ; relapse held for 45 min - the second in a row stays paused for the operator. A stall
+    ; after more than 50 mm is a new incident. Cleared here so the next hard pause after an
+    ; operator resume gets a fresh auto-recovery attempt.
+    if global.mfm_recovery_resume_time != 0
+      if abs(move.extruders[0].position - global.mfm_recovery_resume_pos) < 50
+        set global.mfm_recovery_relapses = global.mfm_recovery_relapses + 1
+      else
+        set global.mfm_recovery_relapses = 0
+    if global.mfm_recovery_relapses >= 2
       set global.mfm_recovery_resume_time = 0
+      set global.mfm_recovery_relapses = 0
       M25
       M400
       T-1 P0
-      M291 P{"Filament Sensor " ^ param.D ^ ": repeated error shortly after auto-recovery. Check filament for grinding and resume."} S1 T0
+      M291 P{"Filament Sensor " ^ param.D ^ ": the filament stalled again right after two auto-recoveries. Check the extruder, filament path and nozzle, then resume."} S1 T0
       M99
 
     ; The auto-recovery runs INSIDE pause.g (armed via mfm_recovery_requested), so the firmware
@@ -137,7 +147,10 @@ if param.P == 4 || param.P == 5
     M400
 
     if global.mfm_recovery_result != 0
-        ; Recovery failed or never ran — tool already deselected by pause.g, stay paused for operator
+        ; Recovery failed or never ran — tool already deselected by pause.g, stay paused for operator.
+        ; The operator's resume starts over: no relapse is counted against an earlier auto-resume.
+        set global.mfm_recovery_resume_time = 0
+        set global.mfm_recovery_relapses = 0
         if param.P == 4
           M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed. Check filament and resume."} S1 T0
         else
