@@ -70,6 +70,7 @@ set global.mfm_ignore_events = false
 set global.mfm_error_start_pos = null
 set global.mfm_normal_since = 0
 set global.mfm_recovery_resume_time = 0
+set global.mfm_feed_stall = -1
 set global.mfm_recovery_requested = false
 set global.mfm_recovery_result = -1
 ; (the M92 e-steps baseline restore runs above, before the M400/G4 S1 settle — see comment there)

@@ -26,3 +26,8 @@
 ; Bed temperature the preheat flow (macro startup/preheat) heats to when none of the
 ; loaded filament profiles sets one in its temps.g (set global.filament_temp_bed = ...).
 ;set global.preheat_bed_temp = 60
+
+; Net-feed watchdog (daemon.g): pauses the print when the filament monitor's wheel moved less
+; than this share of the commanded extrusion over 3 mm. 0 switches it off; the filament
+; monitor's own check (M591 in machine-override) stays active either way.
+;set global.mfm_feed_min_ratio = 0.4
