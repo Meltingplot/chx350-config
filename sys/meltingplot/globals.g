@@ -410,11 +410,12 @@ global filament_unload_skip = false          ; daemon-initiated M702: one-shot, 
 global filament_broken_profile = ""          ; profile name captured by the watchdog before the forced unload (for the repair macro)
 
 ; --- MFM: error tolerance -----------------------------------------------------
-; filament-error.g only counts the first 3 P=4/P=5 errors within 30 mm of extrusion and
-; pauses on the next; an error 30 s or more after the previous one starts a fresh count.
-; The speed is never lowered - a reduced speed makes the MFM read lower still (the M220
-; backoff it replaced made the errors worse, removed 2026-09).
-global mfm_error_count = 0                ; tolerated P=4/P=5 errors of the current sequence (0..3)
+; filament-error.g pauses on the first P=4 (too little movement). It only counts the first
+; 3 P=5 errors within 30 mm of extrusion and pauses on the next; an error 30 s or more
+; after the previous one starts a fresh count. The speed is never lowered - a reduced
+; speed makes the MFM read lower still (the M220 backoff it replaced made the errors
+; worse, removed 2026-09).
+global mfm_error_count = 0                ; tolerated P=5 errors of the current sequence (0..3)
 global mfm_error_time = 0                 ; upTime of the last P=4/P=5 error
 global mfm_ignore_events = false          ; filament-error.g ignores MFM events (swing suppression, calibration macros)
 
@@ -430,6 +431,8 @@ global mfm_sample_time = 0.0              ; last MFM check timestamp (sub-second
 global mfm_error_start_pos = null         ; extruder position at first error in sequence (null = no active tracking)
 global mfm_normal_since = 0               ; upTime when sustained normal readings began
 global mfm_recovery_resume_time = 0       ; upTime of last auto-recovery pass + auto-resume (0 = none); loop breaker in filament-error.g
+global mfm_recovery_resume_pos = 0.0      ; extruder position where the print last restarted (resume.g, after its M92); loop breaker
+global mfm_recovery_relapses = 0          ; auto-recoveries in a row that did not hold (stall again within 50 mm); the 2nd stays paused
 global mfm_recovery_requested = false     ; armed by filament-error.g right before its M25, consumed by pause.g (runs the recovery before the pause commits)
 global mfm_recovery_result = -1           ; verdict of the recovery run by pause.g: -1 = did not run, 0 = false positive, 1+ = real issue
 
@@ -443,12 +446,25 @@ global mfm_esteps_drift_avg = 0           ; avgPercentage at the start of the se
 global mfm_esteps_suggested = 0           ; bounded (±5%) target steps/mm computed by the detector (0 = none pending)
 global mfm_esteps_baseline = 0.0          ; e-steps captured before the correction was applied (0 = not applied; for print/finish.g restore)
 
+; --- MFM: net-feed watchdog -----------------------------------------------------
+; daemon.g compares the filament the wheel really moved (the raw angle
+; sensors.filamentMonitors[0].position, unwrapped) with the extruder's commanded movement
+; over every 3 mm, from the first layer on, and raises the P=4 filament error itself (M957)
+; when the filament moved less than mfm_feed_min_ratio of it. It sees what the MFM's own
+; check misses: feed lost in retract/unretract cycles (A0 checks printing moves only), the
+; 10 mm recalibration after every resume, and P=4 events that never reach filament-error.g
+; (CLAUDE.md, MFM).
+global mfm_feed_min_ratio = 0.4           ; measured/commanded below this over 3 mm = stalled (0 = watchdog off); may be set in global-override.g
+global mfm_feed_stall = -1                ; ratio of the window that raised the event, handed to filament-error.g (-1 = none pending)
+
 ; --- pause / resume re-prime bookkeeping --------------------------------------
 ; pause_extruder is the extruder drive of the tool active at pause (-1 = paused without
 ; tool), pause_extruder_pos its position counter (move.extruders[].position accumulates
-; every commanded move, is not reset by G92 or pause/resume - only at print start) at the
-; end of pause.g, re-taken at the end of filament/mfm-recovery.g so the recovery's own
-; test/purge extrusion doesn't count as manual.
+; every commanded move and is not reset by G92 - but print start and every M92 E set it
+; to 0, so the tool re-select in resume.g, whose M703 loads the e-steps file, zeroes it;
+; resume.g reads it before that) at the end of pause.g, re-taken at the end of
+; filament/mfm-recovery.g so the recovery's own test/purge extrusion doesn't count as
+; manual.
 ; pause_extruder_peak is the melt-zone "full" mark: the position at which the nozzle is
 ; primed again (snapshot + 12.7), raised by daemon.g to the highest position reached
 ; while paused. Forward extrusion beyond the mark is purge that leaves the nozzle, so

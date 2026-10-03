@@ -20,7 +20,15 @@ if global.mfm_esteps_suggested != 0 && global.mfm_esteps_baseline == 0
   M92 E{global.mfm_esteps_suggested}
   echo "MFM: applied flow-bias e-steps correction " ^ global.mfm_esteps_baseline ^ " -> " ^ global.mfm_esteps_suggested
 
-if exists(global.mfm_ignore_events) && global.mfm_ignore_events == true
+; The net-feed watchdog in daemon.g raised this event (M957): the wheel moved less than
+; mfm_feed_min_ratio of the commanded extrusion. That measurement does not depend on the
+; MFM's segment check, so the MFM's suppression windows (swing, after a recovery) do not
+; apply to it. Consumed here, so the next event is judged on its own.
+var watchdog = param.P == 4 && global.mfm_feed_stall >= 0
+if var.watchdog
+  set global.mfm_feed_stall = -1
+
+if exists(global.mfm_ignore_events) && global.mfm_ignore_events == true && !var.watchdog
   ; During suppression, still enforce distance limit for stuck spool detection —
   ; but only when an active running job could actually be hard-paused. Otherwise
   ; (calibration, manual loading, paused state) the bypass's side effects would
@@ -54,9 +62,10 @@ if param.P == 5
       echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
 
 ; --- Common error tolerance / pause / auto-recovery for P=4 and P=5 ---
-; The first 3 errors within 30 mm of extrusion are only counted - one segment the MFM
-; misreads must not pause the print. The speed is never lowered: a reduced speed makes the
-; MFM read lower still, the former M220 backoff made the errors worse (CLAUDE.md, MFM).
+; P=4 pauses at once. For P=5 the first 3 errors within 30 mm of extrusion are only
+; counted - one segment the MFM misreads must not pause the print. The speed is never
+; lowered: a reduced speed makes the MFM read lower still, the former M220 backoff made the
+; errors worse (CLAUDE.md, MFM).
 if param.P == 4 || param.P == 5
     ; a sequence ends 30 s after its last error - the next error starts a fresh count
     if state.upTime - global.mfm_error_time >= 30
@@ -70,16 +79,26 @@ if param.P == 4 || param.P == 5
 
     var error_dist = abs(move.extruders[0].position - global.mfm_error_start_pos)
 
-    ; Within safety margin and tolerance left — count and continue
-    if var.error_dist < 30 && global.mfm_error_count < 3
+    ; Within safety margin and tolerance left — count and continue. P=5 only: no P=4 has been
+    ; a misread so far. In the QA journals of 10 jobs (2026-09-29 .. 10-02) none of the 2745
+    ; segments in which the raw wheel angle showed the filament moving (>= 80 % of the
+    ; commanded) read below 74 %, and in every segment below 60 % it had stalled (0-62 %).
+    ; The tolerance only delayed the pause: at 0.1 mm layers a 5 mm segment takes 20-60 s,
+    ; so the errors came more than 30 s apart, each one started a fresh count, and only the
+    ; 30 mm guard paused, 2-4 min into the stall (job 20261002-154706: 4 layers at Z 18.2).
+    if param.P == 5 && var.error_dist < 30 && global.mfm_error_count < 3
         set global.mfm_error_count = global.mfm_error_count + 1
         if global.debug
           echo "MFM: error " ^ global.mfm_error_count ^ " of 3 tolerated (dist=" ^ var.error_dist ^ "mm)"
         M99
 
-    ; Hard pause — tolerance exhausted or 30mm safety distance exceeded
+    ; Hard pause — P=4, P=5 tolerance exhausted or 30mm safety distance exceeded
     if global.debug
-      if var.error_dist >= 30
+      if var.watchdog
+        echo "MFM: net-feed watchdog — hard pause"
+      elif param.P == 4
+        echo "MFM: too little movement — hard pause"
+      elif var.error_dist >= 30
         echo "MFM: " ^ var.error_dist ^ "mm extruded during error sequence — hard pause"
       else
         echo "MFM: error tolerance exhausted — pause"
@@ -94,16 +113,26 @@ if param.P == 4 || param.P == 5
         echo "MFM: hard-pause skipped (state=" ^ state.status ^ ", no active job)"
       M99
 
-    ; Loop breaker: a hard pause this soon after a successful auto-recovery means the
-    ; pass verdict didn't hold (e.g. regrind from a downstream cause the purge-through
-    ; can't fix) — skip the test, stay paused for the operator. Cleared here so the
-    ; next hard pause after an operator resume gets a fresh auto-recovery attempt.
-    if global.mfm_recovery_resume_time != 0 && (state.upTime - global.mfm_recovery_resume_time) < 300
+    ; Loop breaker: a stall within 50 mm of extrusion after an auto-resume means the pass
+    ; verdict didn't hold (e.g. a downstream cause the purge-through can't fix). Counted in
+    ; filament, not time: the 300 s it replaced were 1-8 layers depending on the flow, and
+    ; at 0.1 mm layers the stall was not even detected within them. The first such relapse
+    ; gets one more auto-recovery - in job 20261002-154706 the recovery after an immediate
+    ; relapse held for 45 min - the second in a row stays paused for the operator. A stall
+    ; after more than 50 mm is a new incident. Cleared here so the next hard pause after an
+    ; operator resume gets a fresh auto-recovery attempt.
+    if global.mfm_recovery_resume_time != 0
+      if abs(move.extruders[0].position - global.mfm_recovery_resume_pos) < 50
+        set global.mfm_recovery_relapses = global.mfm_recovery_relapses + 1
+      else
+        set global.mfm_recovery_relapses = 0
+    if global.mfm_recovery_relapses >= 2
       set global.mfm_recovery_resume_time = 0
+      set global.mfm_recovery_relapses = 0
       M25
       M400
       T-1 P0
-      M291 P{"Filament Sensor " ^ param.D ^ ": repeated error shortly after auto-recovery. Check filament for grinding and resume."} S1 T0
+      M291 P{"Filament Sensor " ^ param.D ^ ": the filament stalled again right after two auto-recoveries. Check the extruder, filament path and nozzle, then resume."} S1 T0
       M99
 
     ; The auto-recovery runs INSIDE pause.g (armed via mfm_recovery_requested), so the firmware
@@ -118,7 +147,10 @@ if param.P == 4 || param.P == 5
     M400
 
     if global.mfm_recovery_result != 0
-        ; Recovery failed or never ran — tool already deselected by pause.g, stay paused for operator
+        ; Recovery failed or never ran — tool already deselected by pause.g, stay paused for operator.
+        ; The operator's resume starts over: no relapse is counted against an earlier auto-resume.
+        set global.mfm_recovery_resume_time = 0
+        set global.mfm_recovery_relapses = 0
         if param.P == 4
           M291 P{"Filament Sensor " ^ param.D ^ ": issue confirmed. Check filament and resume."} S1 T0
         else

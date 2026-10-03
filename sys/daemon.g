@@ -40,6 +40,18 @@ var fil_watch_until = 0
 ; at the end of the loop
 var spool_next = 0
 var spool_saved_at = 0
+; net-feed watchdog (MFM block at the end of the loop): when it last sampled, this sample's
+; wheel angle and extruder position (cached - each is used twice), the angle and extruder
+; position of the previous sample and of the window start, the counts the wheel turned
+; since the window start, and whether the window is only a reference (the first one after
+; a gap: job start, pause, resume)
+var feed_seen = 0
+var feed_pos = 0
+var feed_epos = 0.0
+var feed_fm = 0
+var feed_e = 0.0
+var feed_mag = 0
+var feed_skip = true
 
 while state.status != "halted" && global.daemon_reload == false
   set var.now = state.upTime + state.msUpTime/1000
@@ -299,10 +311,50 @@ while state.status != "halted" && global.daemon_reload == false
   if state.status == "paused" && global.pause_extruder != -1
     set global.pause_extruder_peak = max(global.pause_extruder_peak, move.extruders[global.pause_extruder].position)
 
-  ; while printing: the MFM sample stream below. The MFM suppression expiry (trigger7.g) and
-  ; the 60 s print tick - spool booking and flow-bias sample - (trigger8.g) run as
-  ; expression triggers.
+  ; while printing: the net-feed watchdog and the MFM sample stream below. The MFM
+  ; suppression expiry (trigger7.g) and the 60 s print tick - spool booking and flow-bias
+  ; sample - (trigger8.g) run as expression triggers.
   if state.status == "processing" && job.file.fileName != null
+    ; Net-feed watchdog, once a second from the first layer on (print/prepare.g's prime and
+    ; moves before it pull the filament around without printing). It unwraps the wheel's raw
+    ; 10-bit angle (1024 counts = mmPerRev; a sample moves far less than half a turn: at most
+    ; 1.6 mm/s at 10 mm³/s against 12.65 mm) and compares it with the extruder's commanded
+    ; movement, retractions included, over every 3 mm. Below mfm_feed_min_ratio the filament
+    ; stalled: it raises the same P=4 event the MFM raises (M957 only queues it - it does not
+    ; wait for motion, and RRF drops it while a filament error of the same kind is queued or
+    ; being handled, Event::AddEventV), and filament-error.g pauses. abs() because the angle
+    ; counts down on a wheel mounted the other way. Replayed on the QA journals of 10 jobs
+    ; (2026-09-29 .. 10-02): every stall caught about 25 s after it began and 2-5 min before
+    ; the MFM chain paused, no hit outside a stall. The MFM's own check needs a whole 5 mm
+    ; segment of printing moves (20-60 s at 0.1 mm layers), recalibrates over the first 10 mm
+    ; after every resume, never sees feed lost in retract cycles, and about half of its P=4
+    ; events never reached filament-error.g (CLAUDE.md, MFM). A gap over 2.5 s (job start,
+    ; pause, resume) or a drop of the extruder position (M92 sets it to 0) starts a new
+    ; reference window, which never raises.
+    if (var.now - var.feed_seen) >= 1 && job.layer != null
+      set var.feed_pos = sensors.filamentMonitors[0].position
+      set var.feed_epos = move.extruders[0].position
+      if (var.now - var.feed_seen) > 2.5 || var.feed_pos == null || var.feed_fm == null || var.feed_epos < var.feed_e - 10
+        set var.feed_fm = var.feed_pos
+        set var.feed_e = var.feed_epos
+        set var.feed_mag = 0
+        set var.feed_skip = true
+      else
+        set var.feed_mag = var.feed_mag + mod(var.feed_pos - var.feed_fm + 1536, 1024) - 512
+        set var.feed_fm = var.feed_pos
+        if var.feed_epos - var.feed_e >= 3
+          if !var.feed_skip && global.mfm_feed_min_ratio > 0
+            var ratio = {abs(var.feed_mag) * sensors.filamentMonitors[0].configured.mmPerRev / 1024 / (var.feed_epos - var.feed_e)}
+            if var.ratio < global.mfm_feed_min_ratio
+              M118 P0 S{"MFM watchdog: the filament moved " ^ floor(var.ratio * 100) ^ " % of the last 3 mm commanded - filament error raised"}
+              ; B20: the toolboard the monitor and the extruder sit on (machine-override
+              ; C"20.io1.in"), so RRF drops this event while the MFM's own P=4 is queued
+              set global.mfm_feed_stall = var.ratio
+              M957 E"filament_error" D0 B20 P4
+          set var.feed_e = var.feed_epos
+          set var.feed_mag = 0
+          set var.feed_skip = false
+      set var.feed_seen = var.now
     if (var.now - global.mfm_sample_time) >= 0.5 && global.mfm_suppress_until == 0
       set global.mfm_sample_time = var.now
       ; var.pct cached for atomicity — branches/writeback all need same value

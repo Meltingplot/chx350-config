@@ -4,6 +4,18 @@
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 
+; Re-prime deficit of the melt zone (see below), read BEFORE T R1: the tool re-select runs
+; M703, whose e-steps file sends M92 E, and every M92 E sets move.extruders[].position to 0
+; (RRF 3.7: M92 -> AdjustEndpoint -> Move::ChangeSingleEndpointAfterHoming; seen at every
+; resume of job 20261002-154706 and at an unchanged 801 steps/mm in job 20260930-075116).
+; Read after it, peak - 0 clamped to the full 12.7 mm whatever had been purged. A position
+; more than 30 mm below the pause snapshot means the counter was zeroed during the pause
+; (filament change, tool re-select): the deficit is unknown then, re-prime in full.
+var deficit = 12.7
+if global.pause_extruder != -1
+  if move.extruders[global.pause_extruder].position >= global.pause_extruder_pos - 30
+    set var.deficit = global.pause_extruder_peak - move.extruders[global.pause_extruder].position
+
 T R1                    ; put last tool into active
 M106 R1                 ; enable fan in its last state
 
@@ -18,15 +30,15 @@ M83                       ; relative extruder moves
 if state.currentTool != -1
   ; Re-prime deficit of the melt zone after manual filament moves while paused (e.g.
   ; purging after fixing a filament error), measured BEFORE G11 so firmware-retract
-  ; accounting cannot skew it. The deficit is the retraction below the peak that
-  ; daemon.g tracked while paused (initialised to the primed mark, snapshot + 12.7),
-  ; NOT the net delta since the snapshot: after +100 mm purge and -12.7 mm retract the
-  ; net delta says "87.3 extruded", but the purge left the nozzle and the melt zone is
-  ; exactly as empty as right after pause.g. The per-drive position counter accumulates
-  ; every commanded move and is not reset by G92 or pause/resume (only at print start).
-  ; A drive mismatch with the snapshot falls back to the full re-prime.
-  var drive = tools[state.currentTool].extruders[0]
-  var deficit = var.drive == global.pause_extruder ? global.pause_extruder_peak - move.extruders[var.drive].position : 12.7
+  ; accounting cannot skew it, and before T R1 (top of this file). The deficit is the
+  ; retraction below the peak that daemon.g tracked while paused (initialised to the
+  ; primed mark, snapshot + 12.7), NOT the net delta since the snapshot: after +100 mm
+  ; purge and -12.7 mm retract the net delta says "87.3 extruded", but the purge left the
+  ; nozzle and the melt zone is exactly as empty as right after pause.g. The per-drive
+  ; position counter accumulates every commanded move and is not reset by G92 - only by
+  ; print start and M92. A drive mismatch with the snapshot falls back to the full re-prime.
+  if tools[state.currentTool].extruders[0] != global.pause_extruder
+    set var.deficit = 12.7
   G11                       ; unretract
   ; Feed exactly the deficit: the full 12.7mm on top of an already primed melt zone
   ; would grind immediately. Extra manual retraction is NOT re-fed (clamped to 0..12.7):
@@ -57,3 +69,7 @@ if global.mfm_ignore_events
   set global.mfm_suppress_until = state.upTime + 30
 if global.mfm_error_start_pos != null
   set global.mfm_error_start_pos = move.extruders[0].position
+; where the print restarts, for the loop breaker in filament-error.g (a stall within 50 mm
+; of it after an auto-recovery is a relapse); after the M92 above, so it is in the frame
+; the print runs in from here
+set global.mfm_recovery_resume_pos = move.extruders[0].position
