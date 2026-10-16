@@ -3,7 +3,16 @@ if global.debug
   echo "z-axis/align-motors.g"
 
 var motor_current = move.axes[2].percentCurrent
-var max_travel = move.axes[2].max - move.axes[2].min + 5 ; max travel + 5mm extra
+; Z of the stop in the frame of the nozzle contact (globals, z_lower_stop). Every move until the
+; touch probe relies on it: above max + 10 the bed could hit the nozzle on its way to the
+; probe's start at Z12, below max the contact lies out of the probe's reach. Read and checked
+; before anything moves - a non-numeric value from a broken global-override.g throws here, not
+; after sensorless_z_homing is set.
+var z_stop = global.z_lower_stop
+if var.z_stop < move.axes[2].max || var.z_stop > move.axes[2].max + 10
+  M118 P0 L1 S{"Warning: z_lower_stop " ^ var.z_stop ^ " outside " ^ move.axes[2].max ^ ".." ^ (move.axes[2].max + 10) ^ " - aligned Z set to the axis max, homing may not reach the bed"}
+  set var.z_stop = move.axes[2].max
+var max_travel = var.z_stop - move.axes[2].min + 5 ; full travel + 5mm extra - from Z0 the stop is z_stop away, not M208's max
 var max_time = {var.max_travel / move.axes[2].speed * 1.1}
 
 ; A stall move starts only with the Z stall watchdog disarmed: trigger5.g disarms the last Z
@@ -45,9 +54,13 @@ M400
 G4 S1
 M913 Z{var.motor_current}                  ; restore motor current
 M17 Z ; enable Motor
-G92 Z{move.axes[2].max}
+; Z of this position in the frame of the nozzle contact: the CAD nominal travel (globals,
+; z_lower_stop), not M208's max - that keeps the bed 5 mm off the stop once the datum is
+; probed. Set to the max, the contact would lie 5 mm below Z0, out of reach of homez.g's
+; touch probe (it goes no deeper than Z min - dive height + touch H = Z-2.1).
+G92 Z{var.z_stop}
 M400
-G91 G1 Z-5
+G90 G1 Z{move.axes[2].max}                 ; off the stop, onto the soft limit
 M400
 G4 P500
 M915 Z R2 ; enable stall events again

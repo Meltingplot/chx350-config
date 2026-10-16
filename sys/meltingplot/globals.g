@@ -219,6 +219,16 @@ global z_motor_stall_complete = 0xAAAAAAAA           ; 0x55555555 all four Z mot
 ; main-loop pass, see "read by expression triggers")
 global z_motor_stall_time_max = 5                    ; seconds all four Z motors have to report their stall
 
+; Z of the bed at its lower stop (after z-axis/align-motors.g's 1 mm spring relief), in the
+; frame where Z0 is the nozzle touching the bed: the CAD nominal travel. align-motors.g sets
+; it after squaring the bed, so the contact lies near Z0 until homez.g's touch probe sets the
+; datum - that probe reaches no deeper than Z-2.1 (M208 Z min - dive height + touch H). Not
+; M208's Z max (945), which keeps the bed 5 mm off the stop once the datum is probed. A
+; longer nozzle or a thicker plate shortens the travel and puts the contact above Z0, which
+; the probe reaches from its start at Z12; only a machine whose travel exceeds this value by
+; more than ~2 mm assigns its own in global-override.g.
+global z_lower_stop = 950.3                          ; mm, CAD nominal
+
 ; stall/driver-error suppression flags. They switch the machine's reaction to a stall
 ; off, so they must always be cleared again on every exit path of the macro that set
 ; them - a flag left set silently disables the watchdog for the rest of the session.

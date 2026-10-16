@@ -31,3 +31,8 @@
 ; than this share of the commanded extrusion over 3 mm. 0 switches it off; the filament
 ; monitor's own check (M591 in machine-override) stays active either way.
 ;set global.mfm_feed_min_ratio = 0.4
+
+; Z of the bed at its lower stop, measured from the nozzle touching the bed (CAD nominal
+; 950.3 mm). Only for a machine whose travel exceeds it by more than ~2 mm: homez.g's touch
+; probe reaches no deeper than 2.1 mm below this frame's Z0 after aligning.
+;set global.z_lower_stop = 950.3

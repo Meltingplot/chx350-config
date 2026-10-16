@@ -15,8 +15,9 @@
 ; The Z zero point comes from z-probe/scan-contact.g, which moves the bed up under the nozzle
 ; in steps until the probe reading stops rising - the nozzle touches the bed. It replaces the
 ; Z height gauge. The cold scan runs in the frame align-z-axis leaves (bed at its lower stop =
-; Z945), where the contact lies between Z0 (945 mm travel) and Z-5 (950 mm), depending on
-; nozzle and build plate; the warm one in the frame of the cold contact.
+; global.z_lower_stop, the CAD nominal 950.3 mm), where the contact lies near Z0: above it by
+; what a longer nozzle or a thicker plate takes off the travel, below it by the tolerance. The
+; warm one runs in the frame of the cold contact.
 ; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI"): the ;; lines are the
 ; progress steps' texts there. A failed step lowers the bed, restores the soft limits and
 ; switches the heaters off (z-probe/scan-contact.g, z-probe/cancel-calibration.g).
@@ -81,9 +82,10 @@ if global.result != 0
   M99
 G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z20 F6000
-; the contact lies between Z0 (945 mm travel) and Z-5 (950 mm) of the aligned frame:
-; start 5 mm above, never below Z-5.5
-M98 P"0:/sys/meltingplot/z-probe/scan-contact.g" S5 L-5.5
+; the contact lies near Z0 of the aligned frame - up to +5 for a thick plate (glass), down to
+; -2 for a travel 2 mm over the nominal, where homez.g's touch probe (Z-2.1) ends too:
+; start 3 mm above the highest, never below Z-2.5
+M98 P"0:/sys/meltingplot/z-probe/scan-contact.g" S8 L-2.5
 if global.result != 0
   M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g"
   M99
