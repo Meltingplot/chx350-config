@@ -22,6 +22,10 @@
 ; if any stage fails, X, Y and U are left unhomed rather than wrong, which also makes the conditional
 ; homing in homez.g and bed.g repeat the whole sequence instead of moving on a bad reference.
 
+; no homing while config.g runs - see CLAUDE.md, "Homing only after the start"
+if state.status == "starting"
+  abort "Error: homing refused - the machine is still starting (config.g)"
+
 set global.result = 0
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"

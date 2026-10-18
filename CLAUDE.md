@@ -39,6 +39,10 @@ Files whose location RRF fixes stay where they are and keep their explicit entri
 
 `start.g` → `print/prepare.g` (called by the slicer start G-code: door checks → homing → bed leveling → nozzle clean → prime) → print → `stop.g` → `print/finish.g` (cleanup, safety reset)
 
+### Homing only after the start
+
+RRF and DSF accept codes on every other channel while `config.g` runs: `RunStartupFile` spins all channels until the file ends (`RepRap.cpp`), and DSF holds nothing back (`SetExecutingConfig` only collects the startup error). A G28 from DWC, PanelDue or USB would home on drives, closed loop, endstops and a door interlock that are not configured yet, possibly before `globals.g` declared anything, and `daemon.g` only starts after `config.g`. Every homing file (`homeall.g`, `homex.g`, `homey.g`, `homeu.g`, `homez.g`) therefore refuses as its first statement while `state.status` reads `"starting"` (the status while the firmware processes `config.g`, `RepRap::GetStatusIndex`). It refuses with `abort`, not `M99`: `global.result` may not exist yet to report the refusal, and `abort` also ends the caller (`bed.g`, `homez.g`, a macro or job that sent the G28), which must not move on an axis that was not homed. During the start there is no running print for it to kill, so the abort ban of the filament path (which homes in `filament/load-procedure.g`) is not touched. A new homing file gets the same guard.
+
 ### Key Directories
 
 - **`sys/`** — System config and firmware hooks (`start.g`, `stop.g`, `pause.g`, `resume.g`, `homeall.g`, `daemon.g`, `trigger*.g`, …) — names fixed by RRF
