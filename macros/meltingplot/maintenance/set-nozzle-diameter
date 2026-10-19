@@ -162,7 +162,7 @@ if var.guided
     ;;
     ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
     ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-    M291 R"Düse heizt auf" P{((iterations == 0) ? "Druckkopf fährt nach vorne, " : "") ^ "Düse heizt auf " ^ var.swap_temp ^ " °C, Filament wird in die kalte Zone gezogen. Türen geschlossen halten."} S1 T0
+    M291 R"Düse heizt auf" P{((iterations == 0) ? "Druckkopf fährt nach vorne, " : "") ^ "Düse heizt auf " ^ var.swap_temp ^ " °C, Filament wird in die kalte Zone gezogen. Türen geschlossen halten."} S1 T3600
     if iterations == 0
       ; select before heating: tpost0.g waits for the tool's own setpoint (M116), which the
       ; M568 below would otherwise turn into a wait for the swap temperature before the move
@@ -246,7 +246,7 @@ if var.guided
     ;;
     ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
     ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-    M291 R"Düse heizt zum Festziehen auf" P{"Die Düse heizt zum Festziehen auf " ^ var.swap_temp ^ " °C. Türen geschlossen halten."} S1 T0
+    M291 R"Düse heizt zum Festziehen auf" P{"Die Düse heizt zum Festziehen auf " ^ var.swap_temp ^ " °C. Türen geschlossen halten."} S1 T3600
     M568 P{var.tool} S{min(var.swap_temp, heat.heaters[var.heater].max)} A2
     M116 P{var.tool}
 
@@ -308,7 +308,7 @@ if var.guided && var.pulled > 0
   ;;
   ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
   ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-  M291 R"Neue Düse wird gefüllt" P"Die neue Düse wird mit Filament gefüllt und gereinigt. Türen geschlossen halten." S1 T0
+  M291 R"Neue Düse wird gefüllt" P"Die neue Düse wird mit Filament gefüllt und gereinigt. Türen geschlossen halten." S1 T3600
   M568 P{var.tool} S{min(var.prime_temp, heat.heaters[var.heater].max)} A2
   G90
   G1 X{move.axes[tools[var.tool].axes[0][0]].max - 5} Y{move.axes[1].min} F60000   ; pause.g's park position - the purge falls off the part

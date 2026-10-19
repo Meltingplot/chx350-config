@@ -170,7 +170,7 @@ if var.standalone && !var.silent
   ;;
   ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
   ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-  M291 R"Düse heizt auf · NLE" P{"Das Druckbett fährt nach unten, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+  M291 R"Düse heizt auf · NLE" P{"Das Druckbett fährt nach unten, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T3600
 
 ; the samples move X across the bed at Z 200 - all axes have to be homed for that
 if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[2].homed == false || move.axes[3].homed == false
@@ -223,7 +223,7 @@ if !var.silent
   ;;
   ;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
   ;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m and m.avgPercentage %} · Filamentmonitor **{{ m.avgPercentage }} %**{% endif %}{% endif %}
-  M291 R"NLE wird gemessen" P{"NLE wird gemessen: " ^ floor(var.sampleCount / 2) ^ " Geschwindigkeiten von 1 bis " ^ global.result ^ " mm/s. Türen geschlossen halten."} S1 T0
+  M291 R"NLE wird gemessen" P{"NLE wird gemessen: " ^ floor(var.sampleCount / 2) ^ " Geschwindigkeiten von 1 bis " ^ global.result ^ " mm/s. Türen geschlossen halten."} S1 T3600
 
 while iterations < #var.sampleValues / 2
   M591 D{var.extruder} S0                             ; disable filament monitoring

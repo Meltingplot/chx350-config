@@ -157,7 +157,7 @@ if var.standalone && !var.silent
   ;;
   ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
   ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-  M291 R"Düse heizt auf · E-Steps" P{(var.placeHead ? "Der Druckkopf fährt nach vorne, die" : "Die") ^ " Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+  M291 R"Düse heizt auf · E-Steps" P{(var.placeHead ? "Der Druckkopf fährt nach vorne, die" : "Die") ^ " Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T3600
 
 if var.placeHead && (!move.axes[0].homed || !move.axes[1].homed || !move.axes[2].homed || !move.axes[3].homed)
   G28
@@ -199,7 +199,7 @@ if !var.silent
   ;;
   ;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
   ;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m and m.avgPercentage %} · Filamentmonitor **{{ m.avgPercentage }} %**{% endif %}{% endif %}
-  M291 R"E-Steps werden gemessen" P"Die E-Steps werden gemessen. Türen geschlossen halten." S1 T0
+  M291 R"E-Steps werden gemessen" P"Die E-Steps werden gemessen. Türen geschlossen halten." S1 T3600
 
 M83                                                 ; use relative distances for extrusion
 M107                                                ; fan off

@@ -53,7 +53,7 @@ if sensors.analog[4].lastReading > 35
 
 ;; Die Z-Motoren werden am unteren Anschlag ausgerichtet, danach referenziert die Maschine X, Y
 ;; und U. Das dauert einige Minuten.
-M291 R"Ausrichten und referenzieren" P"Z-Achse wird ausgerichtet, X, Y und U werden referenziert." S1 T0
+M291 R"Ausrichten und referenzieren" P"Z-Achse wird ausgerichtet, X, Y und U werden referenziert." S1 T3600
 set global.result = 0
 M98 P"0:/macros/meltingplot/calibration/align-z-axis" C0   ; C0: part of this flow, no completion line of its own
 if global.result != 0
@@ -73,7 +73,7 @@ M140 S0 ; bed must be cold!
 ;; Die Düse heizt auf 250 °C, das Bett bleibt für die kalte Messung aus.
 ;;
 ;; Düse: **{{ heat.heaters[tools[0].heaters[0]].current | round }} °C** von 250 °C
-M291 R"Düse heizt auf · kalt" P"Die Düse heizt auf 250 °C." S1 T0
+M291 R"Düse heizt auf · kalt" P"Die Düse heizt auf 250 °C." S1 T3600
 M116 ; wait for heaters
 
 ;; Die Düse wird gereinigt – Reste an der Spitze verschieben den Nullpunkt. Danach fährt das
@@ -82,7 +82,7 @@ M116 ; wait for heaters
 ;; dort hebt die Düse ab, das ist der Nullpunkt.
 ;;
 ;; Z: **{{ move.axes[2].userPosition | round(2) }} mm** · Sondenwert: **{{ sensors.probes[0].value[0] }}**
-M291 R"Kontakt suchen · kalt" P"Die Düse wird gereinigt, dann fährt das Bett an die Düse, bis die Sonde den Kontakt erkennt." S1 T0
+M291 R"Kontakt suchen · kalt" P"Die Düse wird gereinigt, dann fährt das Bett an die Düse, bis die Sonde den Kontakt erkennt." S1 T3600
 ; the contact lies near Z0 of the aligned frame - up to +5 for a thick plate (glass), down to
 ; -2 for a travel 2 mm over the nominal, where homez.g's touch probe (Z-2.1) ends too:
 ; start 3 mm above the highest, never below Z-2.5
@@ -93,7 +93,7 @@ if global.result != 0
 
 ;; Die Düse tastet das Druckbett an vier Punkten an, die Z-Motoren richten es danach aus.
 ;; Nicht in den Bauraum greifen.
-M291 R"Bett ausrichten · kalt" P"Das Druckbett wird an vier Punkten angetastet und ausgerichtet." S1 T0
+M291 R"Bett ausrichten · kalt" P"Das Druckbett wird an vier Punkten angetastet und ausgerichtet." S1 T3600
 ; level the bed in the frame of the contact just found: bed.g's touch probes dive to Z1.9 and
 ; end at Z-2.1, too narrow for the aligned frame. G32 fits all four leadscrews exactly, the mean
 ; included (ZLeadscrewKinematics.cpp: residuals 0), so it moves the bed at the centre by the
@@ -115,7 +115,7 @@ if global.result != 0
 ;; dann sucht das Bett den Kontakt erneut – dieser Nullpunkt gilt für die Kalibrierung.
 ;;
 ;; Z: **{{ move.axes[2].userPosition | round(2) }} mm** · Sondenwert: **{{ sensors.probes[0].value[0] }}**
-M291 R"Kontakt nachmessen · kalt" P"Die Düse wird gereinigt, dann sucht das Bett den Kontakt im ausgerichteten Bett erneut." S1 T0
+M291 R"Kontakt nachmessen · kalt" P"Die Düse wird gereinigt, dann sucht das Bett den Kontakt im ausgerichteten Bett erneut." S1 T3600
 ; the levelling moved the centre by the mean of the touch heights, tenths of a millimetre, and
 ; never by more than its touch probes measure (dive from Z1.9, end at Z-2.1):
 ; start 2.5 mm above, never below Z-2
@@ -127,7 +127,7 @@ if global.result != 0
 ;; Der Nullpunkt ist gefunden. Die Maschine kalibriert die Sonde im Standard- und im
 ;; Touch-Modus und tastet fünfmal an, um zu messen, wo der Touch-Modus stoppt. Nicht in den
 ;; Bauraum greifen.
-M291 R"Sonde kalibrieren · kalt" P"Die Sonde wird kalibriert." S1 T0
+M291 R"Sonde kalibrieren · kalt" P"Die Sonde wird kalibriert." S1 T3600
 M568 P0 S250 A2 ; heat tool
 M116 ; wait for heaters
 M98 P"0:/sys/meltingplot/z-probe/calibrate.g" S"cold"   ; touch stop height reported, not taken over
@@ -142,7 +142,7 @@ M140 S90 ; enable bed heater
 ;;
 ;; Bett: **{{ heat.heaters[heat.bedHeaterMapping[0][0]].current | round }} °C** von 90 °C ·
 ;; Druckkopf: **{{ sensors.analog[4].lastReading | round }} °C** von 50 °C
-M291 R"Aufwärmen" P"Die kalte Messung ist gespeichert. Das Druckbett heizt auf 90 °C, der Druckkopf wärmt sich auf." S1 T0
+M291 R"Aufwärmen" P"Die kalte Messung ist gespeichert. Das Druckbett heizt auf 90 °C, der Druckkopf wärmt sich auf." S1 T3600
 M116 ; wait for bed heater
 
 while true
@@ -159,7 +159,7 @@ while true
 ;; kalten Nullpunkt, den die Wärme verschiebt.
 ;;
 ;; Z: **{{ move.axes[2].userPosition | round(2) }} mm** · Sondenwert: **{{ sensors.probes[0].value[0] }}**
-M291 R"Kontakt suchen · warm" P"Die Düse wird gereinigt, dann fährt das Bett an die Düse, bis die Sonde den Kontakt erkennt." S1 T0
+M291 R"Kontakt suchen · warm" P"Die Düse wird gereinigt, dann fährt das Bett an die Düse, bis die Sonde den Kontakt erkennt." S1 T3600
 ; the frame is the cold contact now, the heat moves it (+0.7 mm on 2026-10-19, bed at 90 C,
 ; head just above 50 C): start 2.5 mm above, never below Z-2
 M98 P"0:/sys/meltingplot/z-probe/scan-contact.g" S2.5 L-2
@@ -172,7 +172,7 @@ if global.result != 0
 ;; Sonde. Nicht in den Bauraum greifen.
 ;;
 ;; Z-Offset der Sonde: **{{ global.szp_touch_z_offset | round(3) }} mm**
-M291 R"Sonde kalibrieren · warm" P"Die Sonde wird kalibriert und ihr Z-Offset neu bestimmt." S1 T0
+M291 R"Sonde kalibrieren · warm" P"Die Sonde wird kalibriert und ihr Z-Offset neu bestimmt." S1 T3600
 M568 P0 S250 A2 ; heat tool
 M116 ; wait for heaters
 M98 P"0:/sys/meltingplot/z-probe/calibrate.g" S"warm" H1   ; H1: the touch stop height becomes szp_touch_z_offset
@@ -183,7 +183,7 @@ if global.result != 0
 ;M140 S-273.1 ; disable bed heater
 ;M568 P0 A0 ; disable hotend
 
-; close the last progress box (M291 S1 T0 above) - it would stay open for its hour otherwise
+; close the last progress box (M291 S1 T3600 above) - it would stay open for its hour otherwise
 if state.messageBox != null
   M292
 echo "Finished successful - szp_touch_z_offset " ^ global.szp_touch_z_offset

@@ -49,7 +49,7 @@ M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
 ;;
 ;; Die Maschine fährt die Achsen an ihre Endlagen. Greifen Sie während der Bewegung nicht in
 ;; den Bauraum.
-M291 R"Referenzierung läuft" P"Die Maschine fährt die Achsen an ihre Endlagen. Nicht in den Bauraum greifen." S1 T0
+M291 R"Referenzierung läuft" P"Die Maschine fährt die Achsen an ihre Endlagen. Nicht in den Bauraum greifen." S1 T3600
 set global.result = 0
 if var.choice == 0
   G28

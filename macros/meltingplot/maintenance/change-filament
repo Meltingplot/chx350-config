@@ -98,7 +98,7 @@ if var.loaded != ""
   ;; Die Düse heizt auf die Entladetemperatur, dann zieht die Maschine das alte Filament zurück.
   ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
   ;; Düse: **{{ h.current | round }} °C** von {{ h.active | round }} °C{% endif %}
-  M291 R"Filament wird entladen" P"Die Düse heizt auf, das alte Filament wird entladen. Düse wird heiß - nicht in den Bauraum greifen." S1 T0
+  M291 R"Filament wird entladen" P"Die Düse heizt auf, das alte Filament wird entladen. Düse wird heiß - nicht in den Bauraum greifen." S1 T3600
   T{var.tool}
   if state.currentTool != var.tool
     if state.messageBox != null
@@ -124,7 +124,7 @@ if var.name != ""
   ;; und Spule, Sie führen das Filament ein, und sie fördert es selbstständig bis zur Düse.
   ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
   ;; Düse: **{{ h.current | round }} °C** von {{ h.active | round }} °C{% endif %}
-  M291 R"Filament wird geladen" P"Die Düse heizt auf, danach wird das neue Filament eingefördert. Düse wird heiß - nicht in den Bauraum greifen." S1 T0
+  M291 R"Filament wird geladen" P"Die Düse heizt auf, danach wird das neue Filament eingefördert. Düse wird heiß - nicht in den Bauraum greifen." S1 T3600
   T{var.tool}                ; no-op when the unload above selected it already
   if state.currentTool != var.tool
     if state.messageBox != null

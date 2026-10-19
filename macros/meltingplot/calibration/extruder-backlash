@@ -155,7 +155,7 @@ if global.result != 0
 ;;
 ;; {% if state.currentTool >= 0 %}{% set h = heat.heaters[tools[state.currentTool].heaters[0]] %}
 ;; Düse jetzt **{{ h.current | round }} °C**{% if h.state == 'active' %}, Ziel **{{ h.active | round }} °C**{% endif %}{% endif %}
-M291 R"Düse heizt auf · Wechselspiel" P{"Der Druckkopf fährt nach vorne, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T0
+M291 R"Düse heizt auf · Wechselspiel" P{"Der Druckkopf fährt nach vorne, die Düse heizt auf " ^ var.targetTemp ^ " °C. Türen geschlossen halten."} S1 T3600
 
 if !move.axes[0].homed || !move.axes[1].homed || !move.axes[2].homed || !move.axes[3].homed
   set global.result = 0
@@ -192,7 +192,7 @@ if heat.heaters[var.heater].current < heat.heaters[var.heater].active
 ;;
 ;; {% if state.currentTool >= 0 %}{% set t = tools[state.currentTool] %}{% set m = sensors.filamentMonitors[t.extruders[0]] %}
 ;; Düse **{{ heat.heaters[t.heaters[0]].current | round }} °C**{% if m %} · Messrad **{{ m.position }}** von 1024{% endif %}{% endif %}
-M291 R"Wechselspiel wird gemessen" P{"Das Wechselspiel wird gemessen: " ^ (6 * var.phases) ^ " Richtungswechsel. Türen geschlossen halten."} S1 T0
+M291 R"Wechselspiel wird gemessen" P{"Das Wechselspiel wird gemessen: " ^ (6 * var.phases) ^ " Richtungswechsel. Türen geschlossen halten."} S1 T3600
 
 M83                                                 ; relative extrusion
 M220 S100                                           ; speed factor 100 %

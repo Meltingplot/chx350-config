@@ -29,7 +29,7 @@ if ("" ^ global.machine_mode) != "automatic"
 
 ;; Die Druckköpfe fahren zur Seite, das Druckbett fährt ganz nach unten. Bauraum geschlossen
 ;; lassen, bis die Bewegung steht.
-M291 R"Bett fährt nach unten" P"Die Druckköpfe fahren zur Seite, das Druckbett fährt nach unten." S1 T0
+M291 R"Bett fährt nach unten" P"Die Druckköpfe fahren zur Seite, das Druckbett fährt nach unten." S1 T3600
 
 G90
 if move.axes[2].homed
