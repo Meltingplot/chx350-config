@@ -68,3 +68,9 @@ M915 Z R2 ; enable stall events again
 set global.sensorless_z_homing = 0xAAAAAAAA  ; a Z stall is an E-stop again
 
 M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g"
+
+; aligned - set after the mode reload, as the last statement: its automatic.g runs M703 while
+; a tool is selected, and the profile's config.g leaves a path in global.result
+; (filament-profile/find-calibration-file.g). calibration/z-height read that string through
+; calibration/align-z-axis, compared it with 0 and stopped (2026-10-19).
+set global.result = 0
