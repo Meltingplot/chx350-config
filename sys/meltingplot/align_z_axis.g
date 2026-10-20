@@ -39,3 +39,10 @@ M915 Z R2 ; enable stall events again
 set global.sensorless_z_homing = false      ; ignore stall events on z-axis
 
 M98 P"0:/sys/meltingplot/ce-declaration/reload-operating-mode.g"
+
+; aligned - set after the mode reload, as the last statement: its automatic.g runs M703 while
+; a tool is selected, and the profile's config.g leaves the nozzle key of sformat.g (a string)
+; in global.result (load_nozzle_config.g). macro calibrate_z_height_automatic compares it with
+; 0 through macro align_z_axis and stopped with "cannot convert operands to same type" on a
+; second run, with T0 still selected (seen on the 3.7 branch, 2026-10-19).
+set global.result = 0
