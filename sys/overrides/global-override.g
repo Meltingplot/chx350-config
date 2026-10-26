@@ -23,6 +23,14 @@
 ; Exhaust / chamber fan on fan 3 (out1). OrcaSlicer addresses it as M106 P3 (air filtration).
 ;set global.has_exhaust_fan = true
 
+; Exhaust clean cycle after a boot (s, only with the exhaust fan): config.g runs the exhaust
+; this long right after the start. 0 = none.
+;set global.fan_exhaust_boot_run_on = 600
+
+; Part cooling fans switched on by hand (CHX 350 UI) go off when their values have not
+; changed for this long (s) while the machine is idle or paused. Capped at 7200 s.
+;set global.fan_idle_timeout = 1800
+
 ; Bed temperature the preheat flow (macro startup/preheat) heats to when none of the
 ; loaded filament profiles sets one in its temps.g (set global.filament_temp_bed = ...).
 ;set global.preheat_bed_temp = 60

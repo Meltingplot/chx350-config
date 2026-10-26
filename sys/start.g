@@ -40,11 +40,12 @@ set global.spool_report_pending = true
 set global.timelapse_park_x = -1
 set global.timelapse_park_z = -1
 
-; Exhaust run-on (trigger9.g): in a job the slicer sets the exhaust (P3), so a run-on left
-; from before the job ends here - trigger10.g switches the fan off, only it writes 0. Opening
-; the doors for the check below starts a run-on of its own, which ends when they close.
+; Exhaust run-on (trigger9.g): in a job the slicer sets the exhaust (P3), starting from off. A
+; run-on left from before the job ends here - trigger10.g switches the fan off, only it writes
+; 0. Opening the doors for the check below starts a run-on of its own, which ends when they
+; close.
+set global.fan_exhaust_job_value = 0
 if global.fan_exhaust_until > 0
-  set global.fan_exhaust_job_value = 0
   set global.fan_exhaust_until = state.upTime
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"

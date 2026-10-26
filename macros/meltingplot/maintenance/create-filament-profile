@@ -7,7 +7,7 @@
 ;   material.g         - density and the usual spool sizes (consumption tracking, spool
 ;                        prompts). Written by filament-profile/create-material-file.g.
 ;   config-override.g  - material parameters that do NOT depend on the nozzle (M143, the
-;                        exhaust run-on after a door opens - global.filament_exhaust_run_on)
+;                        exhaust run-on after a job and when a door opens - global.filament_exhaust_run_on)
 ;   nozzle-<key>.g     - parameters of the installed filament diameter and nozzle
 ;                        (<key> = "2.85-0.40", filament-profile/calibration-key.g): max volumetric flow rate,
 ;                        pressure advance, firmware retraction, heater feedforward.
@@ -99,16 +99,16 @@ if !var.addNozzleOnly
   M291 R{"Profile: " ^ var.name} P"Hotend temperature limit (M143) for this material:" S5 L{var.active} H450 F{var.maxtemp} J2
   if result == 0                 ; cancelling keeps the default rather than dropping out
     set var.maxtemp = input
-  ; exhaust run-on after a door opens (trigger9.g, only a machine with an exhaust fan runs
+  ; exhaust run-on after a job and when a door opens (trigger9.g, only a machine with an exhaust fan runs
   ; it). Written also as 0, so the setting shows in the file.
   var runOn = 0
-  M291 R{"Profile: " ^ var.name} P"Exhaust run-on after a door opens, in seconds (0 = none, e.g. 600 for ABS/ASA; only with an exhaust fan):" S5 L0 H3600 F0 J2
+  M291 R{"Profile: " ^ var.name} P"Exhaust run-on after a job and when a door opens, in seconds (0 = none, e.g. 600 for ABS, ASA, PA and filled materials; only with an exhaust fan):" S5 L0 H3600 F0 J2
   if result == 0                 ; cancelling keeps 0
     set var.runOn = input
   echo >{var.dir ^ "config-override.g"} "; " ^ var.name ^ " - user customizations that do NOT depend on the nozzle"
   echo >>{var.dir ^ "config-override.g"} "; nozzle-specific values (flow rate, M572, M207, M309) live in nozzle-<diameter>.g"
   echo >>{var.dir ^ "config-override.g"} "M143 H1 S" ^ var.maxtemp ^ "     ; hotend temperature limit for this material"
-  echo >>{var.dir ^ "config-override.g"} "set global.filament_exhaust_run_on = " ^ var.runOn ^ "     ; exhaust run-on (s) after a door opens, 0 = none"
+  echo >>{var.dir ^ "config-override.g"} "set global.filament_exhaust_run_on = " ^ var.runOn ^ "     ; exhaust run-on (s) after a job and when a door opens, 0 = none"
 
 ; --- material data (material.g): density, usual spool sizes ---
 ; shared with the filament-load path (spool/confirm.g) and with macro

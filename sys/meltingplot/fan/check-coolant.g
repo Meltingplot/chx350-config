@@ -9,7 +9,11 @@
 ; refuses a new job on. A running print goes on - the machine also cools passively. One
 ; sample with the fan running takes it out again. A fan that is not driven (radiators below
 ; 40 C) tells nothing: a suspicion is dropped, a stall stays until the fan runs again.
-; State per fan in global.fan_stall_state (globals.g).
+; State per fan in global.fan_stall_state (globals.g). fan_stalled is rebuilt from it on every
+; call, not only on a change: two callers can run at once (start.g and trigger8.g's first
+; tick at the job start, on two channels), and the one that assigns last could write a list
+; built before the other's change - rebuilt every time, the next call repairs it. The same
+; holds for a list someone set in the console.
 ; Called by trigger8.g every 60 s while printing, by daemon.g every 10 s otherwise and by
 ; start.g. OM reads, set and M118 only - nothing in here may block.
 ;   M98 P"0:/sys/meltingplot/fan/check-coolant.g" [S1]
@@ -18,7 +22,7 @@
 ; from there would overwrite global.result while another channel is between a call and the
 ; line that reads it.
 
-var changed = false
+var stalled = vector(0, 0)
 var suspected = 0
 while iterations < 3
   var n = iterations + 4
@@ -26,26 +30,21 @@ while iterations < 3
     if global.fan_stall_state[var.n] != 0
       if global.fan_stall_state[var.n] == -1
         M118 P0 S{"Fan " ^ var.n ^ " (" ^ fans[var.n].name ^ ") runs again"}
-        set var.changed = true
       set global.fan_stall_state[var.n] = 0
   elif var.n == 6 || fans[var.n].actualValue > 0
     if global.fan_stall_state[var.n] == 0
       set global.fan_stall_state[var.n] = state.upTime
     elif global.fan_stall_state[var.n] > 0 && state.upTime - global.fan_stall_state[var.n] >= 5
       set global.fan_stall_state[var.n] = -1
-      set var.changed = true
       M118 P0 S{"Warning: fan " ^ var.n ^ " (" ^ fans[var.n].name ^ ") stands still although it should run - no new print job until it runs again"}
     if global.fan_stall_state[var.n] > 0
       set var.suspected = var.suspected + 1
   elif global.fan_stall_state[var.n] > 0
     set global.fan_stall_state[var.n] = 0
+  if global.fan_stall_state[var.n] == -1
+    set var.stalled = var.stalled ^ vector(1, var.n)
 
-if var.changed
-  var stalled = vector(0, 0)
-  while iterations < #global.fan_stall_state
-    if global.fan_stall_state[iterations] == -1
-      set var.stalled = var.stalled ^ vector(1, iterations)
-  set global.fan_stalled = var.stalled
+set global.fan_stalled = var.stalled
 
 if exists(param.S)
   set global.result = var.suspected

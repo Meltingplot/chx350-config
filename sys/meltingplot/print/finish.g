@@ -31,15 +31,23 @@ if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_r
 ; guard - P0 exists on every machine, P2/P3 only if the hardware is fitted. The internal
 ; fans (P4+) and the part cooling #2 enable (P1) are thermostatic and stay under firmware
 ; control so the water loop keeps cooling down after the print.
-; A run-on of the exhaust (trigger9.g: a door was opened during the job and is open at its
-; end) outlives the job: trigger10.g switches the fan off when it ends, at the value 0 set
-; here first - set before the check, so a run-on that ends in between still lands on off.
+; The exhaust's run-on starts here when a tool's material asks for one (trigger9.g; the
+; longest of all tools): full speed for that long, extended when a door opens later, and
+; it no longer ends when the doors close - the job value -1 says there is no job to give the
+; fan back to. Set before the deadline, so a door run-on that trigger10.g ends in between
+; lands on off. A running door run-on also runs on to its end when no material asks for one.
 M106 P0 S0                                                ; turn off part cooling fan
 if global.has_aux_fan
   M106 P2 S0                                              ; turn off auxiliary part cooling fan
 if global.has_exhaust_fan
-  set global.fan_exhaust_job_value = 0
-  if global.fan_exhaust_until == 0
+  set global.fan_exhaust_job_value = -1
+  var run_on = 0
+  while iterations < #global.fan_exhaust_run_on
+    set var.run_on = max(var.run_on, global.fan_exhaust_run_on[iterations])
+  if var.run_on > 0
+    set global.fan_exhaust_until = max(global.fan_exhaust_until, state.upTime + var.run_on)
+    M106 P3 S1                                            ; exhaust run-on after the job
+  elif global.fan_exhaust_until == 0
     M106 P3 S0                                            ; turn off exhaust / chamber fan
 
 ; Book the extrusion since trigger8.g's last 60 s booking onto the spool, write it

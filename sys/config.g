@@ -146,7 +146,6 @@ M106 P1 S1 H2 T10 L1.0 X1.0 C"part cooling #2"          ; keep the enable on whe
 if global.has_aux_fan
   M950 F2 C"out2" Q250                                  ; create fan 2 (aux fan) on pin out2 and set its frequency
   M106 P2 S0 H-1 C"aux"                                 ; set fan 2 value. Thermostatic control is turned off
-  set global.fan_adjustable = {0, 2}                    ; the operator may set it in the CHX 350 UI, like fan 0
 if global.has_exhaust_fan
   M950 F3 C"out1" Q250                                  ; create fan 3 (exhaust fan) on pin out1 and set its frequency
   M106 P3 S0 H-1 C"exhaust"                             ; set fan 3 value. Thermostatic control is turned off
@@ -219,11 +218,28 @@ M501                                                    ; load saved parameters 
 M98 P"0:/sys/overrides/machine-override"              ; Load Machine specific overrides
 M98 P"0:/sys/meltingplot/ce-declaration/ce-declaration.g" ; Load CE Requirements
 
+; Fans the operator may set in the CHX 350 UI: the part cooling fans of every tool and the
+; aux fan, each once. Here at the end, so a tool machine-override defines counts as well.
+var adjustable = vector(#fans, false)
+while iterations < #tools
+  if tools[iterations] != null
+    var tool = iterations
+    while iterations < #tools[var.tool].fans
+      set var.adjustable[tools[var.tool].fans[iterations]] = true
+if global.has_aux_fan
+  set var.adjustable[2] = true
+set global.fan_adjustable = vector(0, 0)
+while iterations < #var.adjustable
+  if var.adjustable[iterations]
+    set global.fan_adjustable = global.fan_adjustable ^ vector(1, iterations)
+
 ; Exhaust run-on, only with the exhaust fan. After ce-declaration.g, which creates the door
 ; inputs 2 and 3. Not CE: the door interlock is trigger3.g/trigger4.g, which run first
 ; (the lower number wins) - trigger9.g only sets the exhaust and must stay short.
 ; T9 every edge of both door switches (S0 opened, S1 closed): trigger9.g starts or extends
-; the run-on, and ends it when the doors close during a job.
+; the run-on, and ends a run-on a door started during a job when the doors close again.
+; Clean cycle: the exhaust runs fan_exhaust_boot_run_on after the boot - set before T10, so
+; T10 samples a deadline in the future as its initial value.
 ; T10 run-on end - trigger10.g gives the exhaust back to the job or switches it off. The
 ; guard only changes where no lookup order can fire it: 0 -> armed (in the future), armed ->
 ; later or -> now, and back to 0 only in trigger10.g while the expression is already true
@@ -232,4 +248,7 @@ M98 P"0:/sys/meltingplot/ce-declaration/ce-declaration.g" ; Load CE Requirements
 if global.has_exhaust_fan
   M581 T9 P2:3 S0 R0
   M581 T9 P2:3 S1 R0
+  if global.fan_exhaust_boot_run_on > 0
+    set global.fan_exhaust_until = state.upTime + global.fan_exhaust_boot_run_on
+    M106 P3 S1                                          ; clean cycle after the boot
   M581.1 T10 P"global.fan_exhaust_until > 0 && state.upTime >= global.fan_exhaust_until" R0
