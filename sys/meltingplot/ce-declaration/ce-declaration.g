@@ -5,7 +5,11 @@ M576 S25 F5 P4 B50 D0                                   ; disable SPI slowdown
 M950 J2 C"^io7.in"                                      ; create doorswitch left
 M950 J3 C"^io8.in"                                      ; create doorswitch right
 M950 J4 C"^io6.in"                                      ; create doorswitch hatch (not fitted yet, not part of the door checks)
-M581 T3 P2:3 S1 R0                                      ; configure E1 as door switch (door closed)
+; T3 heater restore (trigger3.g) once automatic mode is reached after the doors closed: fires
+; when the hardened mirror machine_mode_safe turns to the automatic pattern (globals). An
+; expression trigger, not the door-closed edge - the switch to automatic mode comes later, from
+; daemon.g, and trigger3.g no longer waits for it. Numeric compare, no string literal.
+M581.1 T3 P"global.machine_mode_safe == 1431655765" R0
 M581 T4 P2:3 S0 R0                                      ; configure E1 as door switch (door opened)
 
 M950 P3 C"out8"                                         ; Configure P3 as output for 230V Relais

@@ -70,7 +70,7 @@ M98 P"0:/sys/meltingplot/migrate.g"
 ;   permissive 0x55555555 (true):  door_left_switch_checked, door_right_switch_checked,
 ;                                  sensorless_z_homing, closed_loop_homing,
 ;                                  idle_heater_cutoff_done[], z_motor_stalled[],
-;                                  z_motor_stall_complete
+;                                  z_motor_stall_complete, machine_mode_safe
 ; Never a bare "if global.x", never "== true"/"== false", never a numeric comparison
 ; against a pattern. Strings in this tier (machine_mode, saved_*_heater_state*) are read
 ; the same way, ("" ^ global.machine_mode) != "automatic", for the same reason.
@@ -124,6 +124,14 @@ M98 P"0:/sys/meltingplot/migrate.g"
 ; Read rule: whoever GATES a permissive action tests for "automatic" (either
 ; == "automatic", or != "automatic" -> abort); whoever PERFORMS the downgrade (trigger4.g,
 ; the daemon's elif) tests != "default", so a corrupted string still downgrades.
+; machine_mode_safe mirrors it as a hardened pattern: 0x55555555 automatic (permissive),
+; 0xAAAAAAAA default. It exists for trigger T3 (trigger3.g, the heater restore), whose
+; expression may hold no string literal; the string stays for every other reader (macros,
+; CHX 350 UI, QA plugin). The two operating-mode scripts write both: default.g the mirror
+; first, automatic.g the mirror last, so T3 fires only once the switch is complete. daemon.g
+; cross-checks the pair: a mismatch re-runs the mode script the doors call for, a value that
+; is neither of its two halts. Declared at the end of this file - T3 reads it on every
+; main-loop pass.
 global machine_mode = "default"              ; boots restricted, the daemon upgrades
 
 ; --- door interlock -----------------------------------------------------------
@@ -586,6 +594,7 @@ global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer 
 global fan_exhaust_until = 0              ; fans: upTime until which the exhaust runs on (0 = no run-on, only trigger10.g writes 0) - T10 guard, only with has_exhaust_fan
 global spool_track_time = 0               ; spool: upTime of trigger8.g's last run (60 s print tick) - T8 reads it while printing
 global mfm_suppress_until = 0             ; MFM: upTime until which to suppress (0 = not active) - T7 guard, ends it while printing
+global machine_mode_safe = 0xAAAAAAAA     ; CE operating mode: hardened mirror of machine_mode, 0x55555555 automatic (permissive), 0xAAAAAAAA default - T3 guard
 global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = disarmed, only trigger5.g disarms) - T5 guard
 
 ; Per-machine overrides. Values only - anything that needs G-code (drive directions,

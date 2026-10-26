@@ -234,8 +234,8 @@ while iterations < #var.adjustable
     set global.fan_adjustable = global.fan_adjustable ^ vector(1, iterations)
 
 ; Exhaust run-on, only with the exhaust fan. After ce-declaration.g, which creates the door
-; inputs 2 and 3. Not CE: the door interlock is trigger3.g/trigger4.g, which run first
-; (the lower number wins) - trigger9.g only sets the exhaust and must stay short.
+; inputs 2 and 3. Not CE: the door interlock is trigger4.g, which runs first (the lower number
+; wins), and daemon.g - trigger9.g only sets the exhaust and must stay short.
 ; T9 every edge of both door switches (S0 opened, S1 closed): trigger9.g starts or extends
 ; the run-on, and ends a run-on a door started during a job when the doors close again.
 ; Clean cycle: the exhaust runs fan_exhaust_boot_run_on after the boot - set before T10, so
