@@ -377,6 +377,13 @@ global filament_temp_bed = 0                 ; bed temperature to preheat to (0 
 ; with M116 until the bed is at the job's setpoint, cooling down included, so a preheat
 ; above it costs time instead of saving it.
 global preheat_bed_temp = 60
+; exhaust run-on (s) after a door opens while this material is set up on a tool, 0 = none.
+; Set by the line "set global.filament_exhaust_run_on = 600" in filaments/<name>/config-override.g
+; - the name is written into profile files on the machine, it must never change. A transfer
+; channel like the temperatures: filament/on-config.g takes it over into
+; fan_exhaust_run_on[tool] and resets it, so a profile without the line never inherits the
+; previous material's value. Nothing else may read it.
+global filament_exhaust_run_on = 0
 ; per-profile material data, set by filaments/<name>/material.g (user-editable, written
 ; by filament-profile/create-material-file.g - offered at the filament-load prompt, by macros
 ; create-filament-profile and repair-filament-profile). Run by spool/confirm.g,
@@ -492,6 +499,30 @@ global timelapse_park_z = -1              ; highest machine Z the job's photos w
 global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)
 global szp_warm_threshold = 40           ; temperature (°C) above which warm calibration is used for scanning Z-probe
 
+; --- fans (sys/meltingplot/fan/) --------------------------------------------
+; fan_adjustable, fan_stalled and fan_exhaust_until (declared last, a trigger reads it) are
+; the interface to the CHX 350 UI (DWC plugin CHX350): it shows them and never writes them.
+; Renaming one breaks the UI. Not bit-flip hardened - display, not interlock: no machine
+; reaction reads them back, and the firmware takes an M106 for any fan on every channel
+; anyway.
+; fans the operator may set by hand in the UI (M106 P<n> S<0..1>): the part cooling fans.
+; config.g adds the aux fan where it creates it. Never fan 1 (it only enables fan 0), the
+; exhaust (fan 3, slicer and run-on only) or the internal fans (4 and up).
+global fan_adjustable = vector(1, 0)
+; coolant loop watchdog (fan/check-coolant.g): the water loop's fans that stand still
+; although they should run - start.g refuses a new job while the list is not empty, a
+; running print goes on (the machine also cools passively). fan_stall_state is indexed by
+; fan number: 0 runs (or nothing seen), > 0 upTime of the first sample it stood (suspected),
+; -1 stalled (listed in fan_stalled). Sized explicitly because globals load before fans exist.
+global fan_stalled = vector(0, 0)
+global fan_stall_state = vector(7, 0)
+; exhaust run-on (trigger9.g / trigger10.g, only with has_exhaust_fan): the run-on of the
+; material set up on each tool (from filament_exhaust_run_on, taken over by
+; filament/on-config.g; sized 2 like the other tool-indexed arrays), and the exhaust value
+; the job had set before a run-on took the fan over - trigger10.g gives it back.
+global fan_exhaust_run_on = vector(2, 0)
+global fan_exhaust_job_value = 0
+
 
 ; ==============================================================================
 ; TIER 3 - COSMETIC AND DIAGNOSTIC
@@ -540,6 +571,7 @@ global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer 
 ; first: 0.05 ms at the head against 0.34 ms at the tail of 88 globals (measured
 ; 2026-09-24, CLAUDE.md "Expression triggers"). The global a trigger guard reads on every
 ; pass comes last. They belong to the groups named in their comments.
+global fan_exhaust_until = 0              ; fans: upTime until which the exhaust runs on (0 = no run-on, only trigger10.g writes 0) - T10 guard, only with has_exhaust_fan
 global spool_track_time = 0               ; spool: upTime of trigger8.g's last run (60 s print tick) - T8 reads it while printing
 global mfm_suppress_until = 0             ; MFM: upTime until which to suppress (0 = not active) - T7 guard, ends it while printing
 global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = disarmed, only trigger5.g disarms) - T5 guard

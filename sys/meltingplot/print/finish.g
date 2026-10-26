@@ -31,11 +31,16 @@ if ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_r
 ; guard - P0 exists on every machine, P2/P3 only if the hardware is fitted. The internal
 ; fans (P4+) and the part cooling #2 enable (P1) are thermostatic and stay under firmware
 ; control so the water loop keeps cooling down after the print.
+; A run-on of the exhaust (trigger9.g: a door was opened during the job and is open at its
+; end) outlives the job: trigger10.g switches the fan off when it ends, at the value 0 set
+; here first - set before the check, so a run-on that ends in between still lands on off.
 M106 P0 S0                                                ; turn off part cooling fan
 if global.has_aux_fan
   M106 P2 S0                                              ; turn off auxiliary part cooling fan
 if global.has_exhaust_fan
-  M106 P3 S0                                              ; turn off exhaust / chamber fan
+  set global.fan_exhaust_job_value = 0
+  if global.fan_exhaust_until == 0
+    M106 P3 S0                                            ; turn off exhaust / chamber fan
 
 ; Book the extrusion since trigger8.g's last 60 s booking onto the spool, write it
 ; (spool<tool>.g) and report what is left - once per job: this file runs twice at a

@@ -71,7 +71,22 @@ if var.write_temps
 ; filament-profile/create-material-file.g returns at once when the profile already has one
 M98 P"0:/sys/meltingplot/filament-profile/create-material-file.g" S{var.name}
 
+; exhaust run-on after a door opens (trigger9.g, global.filament_exhaust_run_on in
+; config-override.g). RRF cannot read the file back, so the operator keeps what it sets or
+; sets it now: the line is appended after regenerate.g below has made sure the file exists,
+; and the last such line in the file wins. -1 = keep.
+var run_on = -1
+M291 R"Repair filament profile" P"Exhaust run-on after a door opens: keep what config-override.g sets (none without a line), or set it now?" S4 K{"Keep","Set"} F0
+if input == 1
+  M291 R"Repair filament profile" P"Exhaust run-on after a door opens, in seconds (0 = none, e.g. 600 for ABS/ASA; only with an exhaust fan):" S5 L0 H3600 F0 J2
+  if result == 0
+    set var.run_on = input
+
 M98 P"0:/sys/meltingplot/filament-profile/regenerate.g" S{var.name}
+if var.run_on >= 0
+  ; the empty line ends a last line that a hand edit left without a line break
+  echo >>{var.dir ^ "config-override.g"} ""
+  echo >>{var.dir ^ "config-override.g"} "set global.filament_exhaust_run_on = " ^ var.run_on ^ "     ; exhaust run-on (s) after a door opens, 0 = none"
 M98 P"0:/sys/meltingplot/filament-profile/store-index.g" S{var.name}
 
 set global.filament_broken_profile = ""

@@ -134,6 +134,8 @@ M570 H1 P10 T15 S10                                     ; Enable heater fault de
 ; cooling, P3 = exhaust / chamber fan. Machine internal fans start at P4 so that a
 ; slicer can never address them. P2 and P3 are optional hardware and only exist if
 ; enabled by has_aux_fan / has_exhaust_fan in global-override.g.
+; The CHX 350 UI names each fan by its C"..." name - do not rename one (CLAUDE.md, "Fans
+; and the CHX 350 UI").
 M950 F0 C"!20.out1+out1.tach" Q250                      ; create fan 0 (part cooling fan) on pin 20.out1 and set its frequency
 M106 P0 S0 H-1 C"part cooling"                          ; set fan 0 value. Thermostatic control is turned off
 ; Part cooling fan #2 has no PWM channel of its own - it is driven by the PWM of fan 0
@@ -144,6 +146,7 @@ M106 P1 S1 H2 T10 L1.0 X1.0 C"part cooling #2"          ; keep the enable on whe
 if global.has_aux_fan
   M950 F2 C"out2" Q250                                  ; create fan 2 (aux fan) on pin out2 and set its frequency
   M106 P2 S0 H-1 C"aux"                                 ; set fan 2 value. Thermostatic control is turned off
+  set global.fan_adjustable = {0, 2}                    ; the operator may set it in the CHX 350 UI, like fan 0
 if global.has_exhaust_fan
   M950 F3 C"out1" Q250                                  ; create fan 3 (exhaust fan) on pin out1 and set its frequency
   M106 P3 S0 H-1 C"exhaust"                             ; set fan 3 value. Thermostatic control is turned off
@@ -215,3 +218,18 @@ M581.1 T8 P"job.file.fileName != null && state.upTime - global.spool_track_time 
 M501                                                    ; load saved parameters from non-volatile memory
 M98 P"0:/sys/overrides/machine-override"              ; Load Machine specific overrides
 M98 P"0:/sys/meltingplot/ce-declaration/ce-declaration.g" ; Load CE Requirements
+
+; Exhaust run-on, only with the exhaust fan. After ce-declaration.g, which creates the door
+; inputs 2 and 3. Not CE: the door interlock is trigger3.g/trigger4.g, which run first
+; (the lower number wins) - trigger9.g only sets the exhaust and must stay short.
+; T9 every edge of both door switches (S0 opened, S1 closed): trigger9.g starts or extends
+; the run-on, and ends it when the doors close during a job.
+; T10 run-on end - trigger10.g gives the exhaust back to the job or switches it off. The
+; guard only changes where no lookup order can fire it: 0 -> armed (in the future), armed ->
+; later or -> now, and back to 0 only in trigger10.g while the expression is already true
+; (CLAUDE.md, "Expression triggers"). It fires once per run-on; the busy status of its macro
+; restarts daemon.g's idle timer once.
+if global.has_exhaust_fan
+  M581 T9 P2:3 S0 R0
+  M581 T9 P2:3 S1 R0
+  M581.1 T10 P"global.fan_exhaust_until > 0 && state.upTime >= global.fan_exhaust_until" R0
