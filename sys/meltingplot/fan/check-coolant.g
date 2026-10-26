@@ -10,11 +10,12 @@
 ; sample with the fan running takes it out again. A fan that is not driven (radiators below
 ; 40 C) tells nothing: a suspicion is dropped, a stall stays until the fan runs again.
 ; State per fan in global.fan_stall_state (globals.g), fan_stalled built from it on every call.
-; Single producer: only daemon.g calls this, every 10 s whatever the state, so the state and
-; the list have one writer on one channel. Two callers on two channels (start.g and
-; trigger8.g's first tick at the job start did) could interleave, and the one that assigned
-; last left a list built from stale state. start.g and the CHX 350 UI only read. A list
-; someone set in the console is replaced at the next call.
+; Single producer: only the machine tick (trigger8.g, every 10 s) calls this, so the state and
+; the list have one writer on one channel. Two callers on two channels (start.g and the
+; former print tick at the job start did) could interleave, and the one that assigned last
+; left a list built from stale state. start.g and the CHX 350 UI only read. A list someone set
+; in the console is replaced at the next call. On firmware whose trigger macros count as busy
+; the tick runs only while a job is loaded (config.g): no sample outside a print there.
 ; OM reads, set and M118 only - nothing in here may block.
 
 var stalled = vector(0, 0)

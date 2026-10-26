@@ -338,7 +338,7 @@ global spool_catalog = {"Pappe",500,"PC",350,"PE",450}
 ; print/finish.g runs twice at a normal job end (end G-code, stop.g), the remaining
 ; weight is reported once. A spool with density 0 is not tracked. spool_track_baseline
 ; is the last booked position per tool, spool_track_time the upTime of trigger8.g's last
-; booking while printing - session state, not persisted.
+; booking while printing (every 6th tick) - session state, not persisted.
 global spool_net_weight = vector(2, 0)
 global spool_remaining = vector(2, 0.0)
 global spool_tare = vector(2, 0)
@@ -348,7 +348,7 @@ if fileexists("0:/sys/generated/spool0.g")
 if fileexists("0:/sys/generated/spool1.g")
   M98 P"0:/sys/generated/spool1.g"
 global spool_track_baseline = vector(2, 0.0)
-; spool_track_time is declared at the end of this file (trigger T8 reads it)
+global spool_track_time = 0
 global spool_report_pending = false      ; armed by start.g, cleared by the first print/finish.g flush of the job - reports what is left once
 
 ; --- build plate --------------------------------------------------------------
@@ -518,18 +518,22 @@ global szp_warm_threshold = 40           ; temperature (°C) above which warm ca
 ; exist. Never fan 1 (it only enables fan 0), the exhaust (fan 3, slicer and run-on only) or
 ; the internal fans (4 and up).
 global fan_adjustable = vector(1, 0)
-; daemon.g switches the fans of fan_adjustable off when their values have not changed for
-; this long (s) while the machine is idle or paused - a forgotten fan. Assignable in
-; global-override.g; daemon.g caps it at 7200 s like the idle heater timeout.
+; fan/check-idle.g (machine tick, trigger8.g) switches the fans of fan_adjustable off when
+; their values have not changed for this long (s) while the machine is idle or paused - a
+; forgotten fan. Assignable in global-override.g; capped at 7200 s like the idle heater timeout.
 global fan_idle_timeout = 1800
 ; coolant loop watchdog (fan/check-coolant.g): the water loop's fans that stand still
 ; although they should run - start.g refuses a new job while the list is not empty, a
-; running print goes on (the machine also cools passively). Single producer: only daemon.g
-; writes both (every 10 s), everything else reads. fan_stall_state is indexed by
+; running print goes on (the machine also cools passively). Single producer: only the machine
+; tick (trigger8.g, every 10 s) writes both, everything else reads. fan_stall_state is indexed by
 ; fan number: 0 runs (or nothing seen), > 0 upTime of the first sample it stood (suspected),
 ; -1 stalled (listed in fan_stalled). Sized explicitly because globals load before fans exist.
 global fan_stalled = vector(0, 0)
 global fan_stall_state = vector(7, 0)
+; fan/check-idle.g's state: the sum of the operator fans' values at the last idle tick (-1 =
+; the machine was not idle then) and the upTime at which they go off
+global fan_idle_sum = -1
+global fan_idle_off_at = 0
 ; exhaust run-on (trigger9.g / trigger10.g, only with has_exhaust_fan): the run-on of the
 ; material set up on each tool (from filament_exhaust_run_on, taken over by
 ; filament/on-config.g; sized 2 like the other tool-indexed arrays), and the exhaust value
@@ -592,7 +596,7 @@ global has_exhaust_fan = false          ; exhaust / chamber fan on out1, slicer 
 ; 2026-09-24, CLAUDE.md "Expression triggers"). The global a trigger guard reads on every
 ; pass comes last. They belong to the groups named in their comments.
 global fan_exhaust_until = 0              ; fans: upTime until which the exhaust runs on (0 = no run-on, only trigger10.g writes 0) - T10 guard, only with has_exhaust_fan
-global spool_track_time = 0               ; spool: upTime of trigger8.g's last run (60 s print tick) - T8 reads it while printing
+global tick_time = 0                      ; machine tick: upTime of trigger8.g's last run (every 10 s) - T8 guard
 global mfm_suppress_until = 0             ; MFM: upTime until which to suppress (0 = not active) - T7 guard, ends it while printing
 global machine_mode_safe = 0xAAAAAAAA     ; CE operating mode: hardened mirror of machine_mode, 0x55555555 automatic (permissive), 0xAAAAAAAA default - T3 guard
 global z_motor_stall_deadline = 0         ; Z stall watchdog: state.upTime deadline (0 = disarmed, only trigger5.g disarms) - T5 guard

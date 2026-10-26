@@ -15,9 +15,9 @@ if state.status == "simulating"
 ; job. A print that already runs goes on - the machine also cools passively - but no new one
 ; starts until the fan runs again. A radiator only runs with the hotend above 40 C, so a
 ; stall seen on it stays until the hotend is hot again.
-; Read only: daemon.g is the single producer of the stall state and samples every 10 s. A fan
-; it suspects (stood at one sample) gets its verdict at the next one - wait up to 20 s for it,
-; so a pump that stopped just before the start still refuses this job.
+; Read only: the machine tick (trigger8.g) is the single producer of the stall state and
+; samples every 10 s. A fan it suspects (stood at one sample) gets its verdict at the next one -
+; wait up to 20 s for it, so a pump that stopped just before the start still refuses this job.
 var suspected = true
 while var.suspected && iterations < 20
   set var.suspected = false
