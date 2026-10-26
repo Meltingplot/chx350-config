@@ -14,7 +14,7 @@
 ; that follow (idle cutoff, filament, MFM) can, and then only they are lost.
 ; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5, T7, T8,
 ; T10): the Z stall watchdog, the MFM suppression expiry, the 60 s print tick (spool booking,
-; MFM flow-bias sample, coolant loop) and the end of the exhaust run-on.
+; MFM flow-bias sample) and the end of the exhaust run-on.
 var now = 0
 ; the tracker's verdict for this iteration, published to global.potential_unsafe_state
 ; once, after both loops. trigger4.g reads the global concurrently: resetting the global
@@ -40,8 +40,8 @@ var fil_watch_until = 0
 ; at the end of the loop
 var spool_next = 0
 var spool_saved_at = 0
-; fan tick outside a print (block at the end of the loop): when it runs next, when the
-; operator's fans go off, and the sum of their values at the last tick
+; fan tick (block at the end of the loop): when it runs next, when the operator's fans go
+; off, and the sum of their values at the last idle tick (-1 = not idle then)
 var fan_next = 0
 var fan_off_at = 0
 var fan_sum = 0
@@ -409,26 +409,31 @@ while state.status != "halted" && global.daemon_reload == false
       else
         M98 P"0:/sys/meltingplot/spool/track.g"
         set var.spool_next = var.spool_saved_at + 60
-  elif var.now >= var.fan_next
-    ; --- fans outside a print (idle, paused, macros), every 10 s. One more access per ---
-    ; iteration while not printing; the tick itself is OM reads, set, M118 and M106.
-    ; Coolant loop: a stalled pump or radiator refuses the next job (start.g), and a fan that
-    ; runs again leaves the UI's banner within 10 s (while printing trigger8.g samples).
+
+  ; --- fans, every 10 s whatever the state. One more access per iteration; the tick itself ---
+  ; is OM reads, set, M118 and M106.
+  if var.now >= var.fan_next
+    ; Coolant loop (fan/check-coolant.g). This loop is the only producer of the stall state
+    ; and of global.fan_stalled - start.g and the CHX 350 UI only read them. A stalled pump
+    ; or radiator refuses the next job, and a fan that runs again leaves the banner within 10 s.
     M98 P"0:/sys/meltingplot/fan/check-coolant.g"
     ; The operator's fans (fan_adjustable, set by hand in the CHX 350 UI) go off when their
     ; values have not changed for fan_idle_timeout while the machine is idle or paused - a
-    ; forgotten fan. Every change restarts the time, so does any other state: a macro
-    ; ("busy") owns the fans meanwhile, and a print switches them off at its end.
-    var sum = 0
-    while iterations < #global.fan_adjustable
-      set var.sum = var.sum + fans[global.fan_adjustable[iterations]].requestedValue
-    if var.sum == 0 || var.sum != var.fan_sum || (state.status != "idle" && state.status != "paused")
-      set var.fan_off_at = var.now + min(global.fan_idle_timeout, 7200)
-    elif var.now >= var.fan_off_at
-      echo "Idle cutoff: operator fans off after " ^ {floor(min(global.fan_idle_timeout, 7200) / 60)} ^ " min without a change"
+    ; forgotten fan. Every change restarts the time, so does any other state: a print or a
+    ; macro ("busy") owns the fans meanwhile, and a print switches them off at its end.
+    if state.status == "idle" || state.status == "paused"
+      var sum = 0
       while iterations < #global.fan_adjustable
-        M106 P{global.fan_adjustable[iterations]} S0
-    set var.fan_sum = var.sum
+        set var.sum = var.sum + fans[global.fan_adjustable[iterations]].requestedValue
+      if var.sum == 0 || var.sum != var.fan_sum
+        set var.fan_off_at = var.now + min(global.fan_idle_timeout, 7200)
+      elif var.now >= var.fan_off_at
+        echo "Idle cutoff: operator fans off after " ^ {floor(min(global.fan_idle_timeout, 7200) / 60)} ^ " min without a change"
+        while iterations < #global.fan_adjustable
+          M106 P{global.fan_adjustable[iterations]} S0
+      set var.fan_sum = var.sum
+    else
+      set var.fan_sum = -1                                ; restarts the time at the next idle tick
     set var.fan_next = var.now + 10
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now

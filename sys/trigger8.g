@@ -5,8 +5,6 @@
 ;   file write; print/finish.g writes at the job end)
 ; - take the MFM flow-bias sample (filament/mfm-flow-bias.g - OM reads, set and a
 ;   non-blocking M118)
-; - sample the coolant loop's fans (fan/check-coolant.g - OM reads, set and M118; outside a
-;   print daemon.g samples them)
 ; The expression holds no "processing" (a string literal is garbage on every main-loop
 ; pass, see config.g), so this macro checks it - after re-arming the tick: the trigger fires
 ; only on false -> true, and a tick skipped in a pause that left spool_track_time behind
@@ -21,4 +19,3 @@ if state.status != "processing"
   M99
 M98 P"0:/sys/meltingplot/spool/track.g"
 M98 P"0:/sys/meltingplot/filament/mfm-flow-bias.g"
-M98 P"0:/sys/meltingplot/fan/check-coolant.g"

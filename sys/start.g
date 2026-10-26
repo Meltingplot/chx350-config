@@ -13,13 +13,19 @@ if state.status == "simulating"
 
 ; Coolant loop (fan/check-coolant.g): a fan of the water loop that stands still refuses the
 ; job. A print that already runs goes on - the machine also cools passively - but no new one
-; starts until the fan runs again. A fan suspected just now is sampled once more 5 s later,
-; so a radiator that started a moment ago is not taken for stalled. A radiator only runs
-; with the hotend above 40 C, so a stall seen on it stays until the hotend is hot again.
-M98 P"0:/sys/meltingplot/fan/check-coolant.g" S1
-if global.result > 0
-  G4 S5
-  M98 P"0:/sys/meltingplot/fan/check-coolant.g"
+; starts until the fan runs again. A radiator only runs with the hotend above 40 C, so a
+; stall seen on it stays until the hotend is hot again.
+; Read only: daemon.g is the single producer of the stall state and samples every 10 s. A fan
+; it suspects (stood at one sample) gets its verdict at the next one - wait up to 20 s for it,
+; so a pump that stopped just before the start still refuses this job.
+var suspected = true
+while var.suspected && iterations < 20
+  set var.suspected = false
+  while iterations < #global.fan_stall_state
+    if global.fan_stall_state[iterations] > 0
+      set var.suspected = true
+  if var.suspected
+    G4 S1
 if #global.fan_stalled > 0
   var names = ""
   while iterations < #global.fan_stalled

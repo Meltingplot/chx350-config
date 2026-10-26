@@ -516,7 +516,8 @@ global fan_adjustable = vector(1, 0)
 global fan_idle_timeout = 1800
 ; coolant loop watchdog (fan/check-coolant.g): the water loop's fans that stand still
 ; although they should run - start.g refuses a new job while the list is not empty, a
-; running print goes on (the machine also cools passively). fan_stall_state is indexed by
+; running print goes on (the machine also cools passively). Single producer: only daemon.g
+; writes both (every 10 s), everything else reads. fan_stall_state is indexed by
 ; fan number: 0 runs (or nothing seen), > 0 upTime of the first sample it stood (suspected),
 ; -1 stalled (listed in fan_stalled). Sized explicitly because globals load before fans exist.
 global fan_stalled = vector(0, 0)
