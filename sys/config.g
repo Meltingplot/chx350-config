@@ -219,14 +219,25 @@ M581.1 T7 P"global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress
 ; N = 4, a later base has it; mp.N starts at 1 again on every base, and stock firmware has no
 ; "mp." and never has it. An unknown format falls to the job gate - the safe side. The fork
 ; number is read digit by digit: its place in "0123456789", a second digit makes it 10 or more.
+; Both find() run on lines of their own: a find() that && or || skips still throws
+; "incompatible operand types" (RRF SetFindResult ignores the skip, and the skipped variable reads
+; as null). On 2026-10-28 that left tick_idle false on mp.5, and DSF, which reports the error
+; late, aborted config.g after ce-declaration.g - without the fan list and T9/T10 below.
+; An empty second argument finds at 0, so d2 counts only with a second character.
 var fw = boards[0].firmwareVersion
 var tick_idle = false
 if find(var.fw, "mp.") >= 0
   if find(var.fw, "3.7.0+1.mp.") == 0
     var n = drop(var.fw, 11)
-    set var.tick_idle = find("0123456789", take(var.n, 1)) >= 4 || (#var.n > 1 && find("0123456789", take(drop(var.n, 1), 1)) >= 0)
+    var d1 = find("0123456789", take(var.n, 1))
+    var d2 = find("0123456789", take(drop(var.n, 1), 1))
+    set var.tick_idle = var.d1 >= 4 || (#var.n > 1 && var.d2 >= 0)
   else
     set var.tick_idle = find(var.fw, "3.7.0") != 0 && find(var.fw, "3.6") != 0 && find(var.fw, "3.5") != 0
+; M581.1 takes the expression's value now as its initial state, and the trigger fires only on
+; false -> true. config.g reaches this line more than 10 s after the start, so with tick_time
+; still 0 the expression is true from the outset and never fires: start the clock here.
+set global.tick_time = state.upTime
 if var.tick_idle
   M581.1 T8 P"state.upTime - global.tick_time >= 10" R0
 else
