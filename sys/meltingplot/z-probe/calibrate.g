@@ -20,6 +20,8 @@
 ;   M558.3 H parameter" (wiki, scanning_z_probe_calibration) - averaged over five touches.
 ;   homez.g sets Z = H where its touch stops, so this H puts Z0 on the contact.
 ;   sensors.probes[0].lastStopHeight is the raw stop Z (GCodes4.cpp), whatever H is set now.
+; A reading is invalid at 999999 (the SZP board's error value) and at 0 (the board could not
+; read the LDC1612) - RRF takes both as errors (RemoteZProbe.cpp).
 ; Returns global.result 0, or 1 when a step failed (reason echoed, bed at Z5).
 
 set global.result = 1                            ; every exit before the end is a failure
@@ -41,7 +43,8 @@ while true
   M558.2 K0 S{var.current} R0
   M400
   G4 S1                                          ; let the sensor settle on the new current
-  if sensors.probes[0].value[0] < 999999
+  var r = sensors.probes[0].value[0]
+  if var.r < 999999 && var.r > 0
     break
   set var.current = var.current + 1
   if var.current > 31
@@ -53,10 +56,11 @@ if var.error == ""
   G1 Z{sensors.probes[0].triggerHeight} F600
   M400
   G4 S1
-  if sensors.probes[0].value[0] >= 999999
+  var r = sensors.probes[0].value[0]
+  if var.r >= 999999 || var.r <= 0
     set var.error = "SZP reading invalid at the standard trigger height Z" ^ sensors.probes[0].triggerHeight
   else
-    set var.offset = sensors.probes[0].value[0] - 9000
+    set var.offset = var.r - 9000
     M558.2 K0 S{var.current} R{var.offset}
     echo >{"0:/sys/generated/szp-standard-mode-" ^ param.S ^ ".g"} "M558.2 K0 S" ^ var.current ^ " R" ^ var.offset
 
@@ -68,11 +72,13 @@ if var.error == ""
     M400
     M558.2 K0 S{var.current} R0
     G4 S1
-    if sensors.probes[0].value[0] < 999999
+    var r = sensors.probes[0].value[0]
+    if var.r < 999999 && var.r > 0
       G1 Z0 F300                                 ; nozzle on the bed
       M400
       G4 S1
-      if sensors.probes[0].value[0] < 999999
+      set var.r = sensors.probes[0].value[0]
+      if var.r < 999999 && var.r > 0
         break
     set var.current = var.current + 1
     if var.current > 31
