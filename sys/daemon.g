@@ -14,7 +14,7 @@
 ; that follow (idle cutoff, filament, MFM) can, and then only they are lost.
 ; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5, T7, T8,
 ; T10): the Z stall watchdog, the MFM suppression expiry, the 60 s print tick (spool booking,
-; MFM flow-bias sample, coolant loop) and the end of the exhaust run-on.
+; MFM flow-bias sample) and the end of the exhaust run-on.
 var now = 0
 ; the tracker's verdict for this iteration, published to global.potential_unsafe_state
 ; once, after both loops. trigger4.g reads the global concurrently: resetting the global
@@ -40,9 +40,11 @@ var fil_watch_until = 0
 ; at the end of the loop
 var spool_next = 0
 var spool_saved_at = 0
-; coolant loop watchdog outside a print: when to sample the water loop's fans next (while
-; printing, trigger8.g samples them every 60 s)
-var coolant_next = 0
+; fan tick (block at the end of the loop): when it runs next, when the operator's fans go
+; off, and the sum of their values at the last idle tick (-1 = not idle then)
+var fan_next = 0
+var fan_off_at = 0
+var fan_sum = 0
 ; net-feed watchdog (MFM block at the end of the loop): when it last sampled, this sample's
 ; wheel angle and extruder position (cached - each is used twice), the angle and extruder
 ; position of the previous sample and of the window start, the counts the wheel turned
@@ -238,13 +240,9 @@ while state.status != "halted" && global.daemon_reload == false
   ; Hardened flags: a corrupted cutoff_done falls into the elif and re-issues the off
   ; command only if the heater is on; a corrupted pause_hold cuts off also while paused.
   ; The timeout is capped at 7200 s so a flipped high bit cannot disable the cutoff.
-  ; The part cooling fans the operator may set by hand (fan 0, fan 2 with has_aux_fan - the
-  ; fans of global.fan_adjustable) go off with the hotend (heater 1). Switched on after that,
-  ; they re-arm its cutoff like the heater itself, so a forgotten fan goes off one timeout
-  ; later. Only the hotend's done branch reads them - one more lookup in an existing line.
   while iterations < #global.idle_heater_timeout
     if ("" ^ global.idle_heater_cutoff_done[iterations]) == "1431655765"
-      if heat.heaters[iterations].state != "off" || (iterations == 1 && (fans[0].requestedValue > 0 || (global.has_aux_fan && fans[2].requestedValue > 0)))
+      if heat.heaters[iterations].state != "off"
         set global.idle_since = state.upTime
         set global.idle_heater_cutoff_done[iterations] = 0xAAAAAAAA
     elif (state.upTime - global.idle_since) >= min(global.idle_heater_timeout[iterations], 7200) && (("" ^ global.idle_heater_pause_hold[iterations]) != "1431655765" || state.status == "idle")
@@ -256,11 +254,6 @@ while state.status != "halted" && global.daemon_reload == false
           M140 P0 S-273.15
         else
           M568 P{iterations - 1} A0
-      if iterations == 1 && (fans[0].requestedValue > 0 || (global.has_aux_fan && fans[2].requestedValue > 0))
-        echo "Idle cutoff: part cooling fans off after " ^ {floor((state.upTime - global.idle_since)/60)} ^ " min idle"
-        M106 P0 S0
-        if global.has_aux_fan
-          M106 P2 S0
       set global.idle_heater_cutoff_done[iterations] = 0x55555555
 
   if global.filament_load_failed == true && move.extruders[0].filament != ""
@@ -416,13 +409,32 @@ while state.status != "halted" && global.daemon_reload == false
       else
         M98 P"0:/sys/meltingplot/spool/track.g"
         set var.spool_next = var.spool_saved_at + 60
-  elif var.now >= var.coolant_next
-    ; --- coolant loop outside a print: idle, paused, macros. A stalled pump or radiator ---
-    ; refuses the next job (start.g), and a fan that runs again leaves the UI's banner
-    ; within 10 s. One more access per iteration while not printing; the sample itself is
-    ; OM reads, set and M118 (fan/check-coolant.g).
+
+  ; --- fans, every 10 s whatever the state. One more access per iteration; the tick itself ---
+  ; is OM reads, set, M118 and M106.
+  if var.now >= var.fan_next
+    ; Coolant loop (fan/check-coolant.g). This loop is the only producer of the stall state
+    ; and of global.fan_stalled - start.g and the CHX 350 UI only read them. A stalled pump
+    ; or radiator refuses the next job, and a fan that runs again leaves the banner within 10 s.
     M98 P"0:/sys/meltingplot/fan/check-coolant.g"
-    set var.coolant_next = var.now + 10
+    ; The operator's fans (fan_adjustable, set by hand in the CHX 350 UI) go off when their
+    ; values have not changed for fan_idle_timeout while the machine is idle or paused - a
+    ; forgotten fan. Every change restarts the time, so does any other state: a print or a
+    ; macro ("busy") owns the fans meanwhile, and a print switches them off at its end.
+    if state.status == "idle" || state.status == "paused"
+      var sum = 0
+      while iterations < #global.fan_adjustable
+        set var.sum = var.sum + fans[global.fan_adjustable[iterations]].requestedValue
+      if var.sum == 0 || var.sum != var.fan_sum
+        set var.fan_off_at = var.now + min(global.fan_idle_timeout, 7200)
+      elif var.now >= var.fan_off_at
+        echo "Idle cutoff: operator fans off after " ^ {floor(min(global.fan_idle_timeout, 7200) / 60)} ^ " min without a change"
+        while iterations < #global.fan_adjustable
+          M106 P{global.fan_adjustable[iterations]} S0
+      set var.fan_sum = var.sum
+    else
+      set var.fan_sum = -1                                ; restarts the time at the next idle tick
+    set var.fan_next = var.now + 10
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100

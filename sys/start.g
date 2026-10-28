@@ -13,13 +13,19 @@ if state.status == "simulating"
 
 ; Coolant loop (fan/check-coolant.g): a fan of the water loop that stands still refuses the
 ; job. A print that already runs goes on - the machine also cools passively - but no new one
-; starts until the fan runs again. A fan suspected just now is sampled once more 5 s later,
-; so a radiator that started a moment ago is not taken for stalled. A radiator only runs
-; with the hotend above 40 C, so a stall seen on it stays until the hotend is hot again.
-M98 P"0:/sys/meltingplot/fan/check-coolant.g" S1
-if global.result > 0
-  G4 S5
-  M98 P"0:/sys/meltingplot/fan/check-coolant.g"
+; starts until the fan runs again. A radiator only runs with the hotend above 40 C, so a
+; stall seen on it stays until the hotend is hot again.
+; Read only: daemon.g is the single producer of the stall state and samples every 10 s. A fan
+; it suspects (stood at one sample) gets its verdict at the next one - wait up to 20 s for it,
+; so a pump that stopped just before the start still refuses this job.
+var suspected = true
+while var.suspected && iterations < 20
+  set var.suspected = false
+  while iterations < #global.fan_stall_state
+    if global.fan_stall_state[iterations] > 0
+      set var.suspected = true
+  if var.suspected
+    G4 S1
 if #global.fan_stalled > 0
   var names = ""
   while iterations < #global.fan_stalled
@@ -40,11 +46,12 @@ set global.spool_report_pending = true
 set global.timelapse_park_x = -1
 set global.timelapse_park_z = -1
 
-; Exhaust run-on (trigger9.g): in a job the slicer sets the exhaust (P3), so a run-on left
-; from before the job ends here - trigger10.g switches the fan off, only it writes 0. Opening
-; the doors for the check below starts a run-on of its own, which ends when they close.
+; Exhaust run-on (trigger9.g): in a job the slicer sets the exhaust (P3), starting from off. A
+; run-on left from before the job ends here - trigger10.g switches the fan off, only it writes
+; 0. Opening the doors for the check below starts a run-on of its own, which ends when they
+; close.
+set global.fan_exhaust_job_value = 0
 if global.fan_exhaust_until > 0
-  set global.fan_exhaust_job_value = 0
   set global.fan_exhaust_until = state.upTime
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"

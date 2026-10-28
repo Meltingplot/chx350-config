@@ -505,13 +505,19 @@ global szp_warm_threshold = 40           ; temperature (°C) above which warm ca
 ; Renaming one breaks the UI. Not bit-flip hardened - display, not interlock: no machine
 ; reaction reads them back, and the firmware takes an M106 for any fan on every channel
 ; anyway.
-; fans the operator may set by hand in the UI (M106 P<n> S<0..1>): the part cooling fans.
-; config.g adds the aux fan where it creates it. Never fan 1 (it only enables fan 0), the
-; exhaust (fan 3, slicer and run-on only) or the internal fans (4 and up).
+; fans the operator may set by hand in the UI (M106 P<n> S<0..1>): the part cooling fans of
+; every tool (tools[].fans) and the aux fan, built at the end of config.g once the tools
+; exist. Never fan 1 (it only enables fan 0), the exhaust (fan 3, slicer and run-on only) or
+; the internal fans (4 and up).
 global fan_adjustable = vector(1, 0)
+; daemon.g switches the fans of fan_adjustable off when their values have not changed for
+; this long (s) while the machine is idle or paused - a forgotten fan. Assignable in
+; global-override.g; daemon.g caps it at 7200 s like the idle heater timeout.
+global fan_idle_timeout = 1800
 ; coolant loop watchdog (fan/check-coolant.g): the water loop's fans that stand still
 ; although they should run - start.g refuses a new job while the list is not empty, a
-; running print goes on (the machine also cools passively). fan_stall_state is indexed by
+; running print goes on (the machine also cools passively). Single producer: only daemon.g
+; writes both (every 10 s), everything else reads. fan_stall_state is indexed by
 ; fan number: 0 runs (or nothing seen), > 0 upTime of the first sample it stood (suspected),
 ; -1 stalled (listed in fan_stalled). Sized explicitly because globals load before fans exist.
 global fan_stalled = vector(0, 0)
@@ -519,9 +525,15 @@ global fan_stall_state = vector(7, 0)
 ; exhaust run-on (trigger9.g / trigger10.g, only with has_exhaust_fan): the run-on of the
 ; material set up on each tool (from filament_exhaust_run_on, taken over by
 ; filament/on-config.g; sized 2 like the other tool-indexed arrays), and the exhaust value
-; the job had set before a run-on took the fan over - trigger10.g gives it back.
+; the job had set before a door run-on took the fan over - trigger10.g gives it back.
+; -1 = no job to give it back to: the run-on started at the job's end (print/finish.g) or at
+; boot, or a door opened outside a job - it runs to its end, closing the doors does not end it.
 global fan_exhaust_run_on = vector(2, 0)
-global fan_exhaust_job_value = 0
+global fan_exhaust_job_value = -1
+; clean cycle after a boot (s): config.g runs the exhaust this long, so whatever a print
+; left in the chamber is drawn off although no profile has said its run-on yet (that takes
+; a tool selection). 0 = none. Assignable in global-override.g.
+global fan_exhaust_boot_run_on = 600
 
 
 ; ==============================================================================
