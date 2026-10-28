@@ -24,4 +24,7 @@ if state.currentTool != -1
   M703
 
 set global.machine_mode = "automatic"
+; the hardened mirror last (globals, machine_mode_safe): trigger T3 restores the heaters when
+; it turns, so everything above has to be done by then
+set global.machine_mode_safe = 0x55555555
 echo "Automatic Mode"

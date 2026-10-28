@@ -13,8 +13,9 @@
 ; mode -> LED) contains only coerced comparisons and cannot abort; the numeric blocks
 ; that follow (idle cutoff, filament, MFM) can, and then only they are lost.
 ; Deadlines on a global run as expression triggers instead (config.g, M581.1 T5, T7, T8,
-; T10): the Z stall watchdog, the MFM suppression expiry, the 60 s print tick (spool booking,
-; MFM flow-bias sample) and the end of the exhaust run-on.
+; T10): the Z stall watchdog, the MFM suppression expiry, the 10 s machine tick (coolant loop,
+; idle fan shut-off; while printing the spool booking and the MFM flow-bias sample) and the end
+; of the exhaust run-on.
 var now = 0
 ; the tracker's verdict for this iteration, published to global.potential_unsafe_state
 ; once, after both loops. trigger4.g reads the global concurrently: resetting the global
@@ -40,11 +41,6 @@ var fil_watch_until = 0
 ; at the end of the loop
 var spool_next = 0
 var spool_saved_at = 0
-; fan tick (block at the end of the loop): when it runs next, when the operator's fans go
-; off, and the sum of their values at the last idle tick (-1 = not idle then)
-var fan_next = 0
-var fan_off_at = 0
-var fan_sum = 0
 ; net-feed watchdog (MFM block at the end of the loop): when it last sampled, this sample's
 ; wheel angle and extruder position (cached - each is used twice), the angle and extruder
 ; position of the previous sample and of the window start, the counts the wheel turned
@@ -169,10 +165,16 @@ while state.status != "halted" && global.daemon_reload == false
   ; physical configuration is unknown, halt. Checked inside the transition branches, so
   ; it costs nothing in the steady state. Without the check a corrupted string would
   ; silently re-run automatic.g - including its M400 and M703 - from this loop.
+  ; Cross-check with the hardened mirror machine_mode_safe (globals): the mode counts as
+  ; automatic only when both say so, and the mirror holding neither pattern halts like the
+  ; string. A mismatch of two valid values is no corruption - the mode scripts write them one
+  ; after the other, on whatever channel runs them - so it simply takes the branch the doors
+  ; call for, and its mode script writes both again. In the steady state the mirror costs one
+  ; more read in the two lines that already test the string.
   if ("" ^ global.door_left_open) == "2863311530" && ("" ^ global.door_right_open) == "2863311530" && ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765"
-    if ("" ^ global.machine_mode) != "automatic"
-      if ("" ^ global.machine_mode) != "default"
-        echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"
+    if ("" ^ global.machine_mode) != "automatic" || ("" ^ global.machine_mode_safe) != "1431655765"
+      if (("" ^ global.machine_mode) != "default" && ("" ^ global.machine_mode) != "automatic") || (("" ^ global.machine_mode_safe) != "2863311530" && ("" ^ global.machine_mode_safe) != "1431655765")
+        echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ", " ^ global.machine_mode_safe ^ ") - machine halt!"
         M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow" E1
         M112
       ; Confirm all four interlock flags with the inverse comparison before releasing full
@@ -186,9 +188,9 @@ while state.status != "halted" && global.daemon_reload == false
         M118 P0 S"Warning: door interlock not confirmed on re-read - automatic mode not entered"
       else
         M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/automatic.g"
-  elif ("" ^ global.machine_mode) != "default"
-    if ("" ^ global.machine_mode) != "automatic"
-      echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ") - machine halt!"
+  elif ("" ^ global.machine_mode) != "default" || ("" ^ global.machine_mode_safe) != "2863311530"
+    if (("" ^ global.machine_mode) != "default" && ("" ^ global.machine_mode) != "automatic") || (("" ^ global.machine_mode_safe) != "2863311530" && ("" ^ global.machine_mode_safe) != "1431655765")
+      echo "Error: operating mode corrupted (" ^ global.machine_mode ^ ", " ^ global.machine_mode_safe ^ ") - machine halt!"
       M98 P"0:/sys/meltingplot/lib/set-led-color.g" C"yellow" E1
       M112
     if ("" ^ global.potential_unsafe_state) != "2863311530"
@@ -409,32 +411,6 @@ while state.status != "halted" && global.daemon_reload == false
       else
         M98 P"0:/sys/meltingplot/spool/track.g"
         set var.spool_next = var.spool_saved_at + 60
-
-  ; --- fans, every 10 s whatever the state. One more access per iteration; the tick itself ---
-  ; is OM reads, set, M118 and M106.
-  if var.now >= var.fan_next
-    ; Coolant loop (fan/check-coolant.g). This loop is the only producer of the stall state
-    ; and of global.fan_stalled - start.g and the CHX 350 UI only read them. A stalled pump
-    ; or radiator refuses the next job, and a fan that runs again leaves the banner within 10 s.
-    M98 P"0:/sys/meltingplot/fan/check-coolant.g"
-    ; The operator's fans (fan_adjustable, set by hand in the CHX 350 UI) go off when their
-    ; values have not changed for fan_idle_timeout while the machine is idle or paused - a
-    ; forgotten fan. Every change restarts the time, so does any other state: a print or a
-    ; macro ("busy") owns the fans meanwhile, and a print switches them off at its end.
-    if state.status == "idle" || state.status == "paused"
-      var sum = 0
-      while iterations < #global.fan_adjustable
-        set var.sum = var.sum + fans[global.fan_adjustable[iterations]].requestedValue
-      if var.sum == 0 || var.sum != var.fan_sum
-        set var.fan_off_at = var.now + min(global.fan_idle_timeout, 7200)
-      elif var.now >= var.fan_off_at
-        echo "Idle cutoff: operator fans off after " ^ {floor(min(global.fan_idle_timeout, 7200) / 60)} ^ " min without a change"
-        while iterations < #global.fan_adjustable
-          M106 P{global.fan_adjustable[iterations]} S0
-      set var.fan_sum = var.sum
-    else
-      set var.fan_sum = -1                                ; restarts the time at the next idle tick
-    set var.fan_next = var.now + 10
 
   set global.daemon_cycle_time = state.upTime + state.msUpTime/1000 - var.now
   G4 P100

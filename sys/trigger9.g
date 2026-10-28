@@ -1,5 +1,5 @@
 ; Door edge - pin trigger T9 (config.g, only with has_exhaust_fan): exhaust run-on. Fires on
-; every edge of both door switches, behind trigger3.g and trigger4.g (the lower number runs
+; every edge of both door switches, behind trigger4.g (door opened - the lower number runs
 ; first). The run-on starts at the end of a job (print/finish.g), at the latest when a door
 ; opens: a door opened while a tool has a material set up that asks for one
 ; (fan_exhaust_run_on[], from filament_exhaust_run_on in the profile's config-override.g,

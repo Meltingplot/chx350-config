@@ -209,10 +209,29 @@ M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor
 ; T7 MFM suppression expiry while a job is loaded - trigger7.g ends the window only while
 ; "processing" (a window survives a pause). The guard is 0 outside a job (print/finish.g).
 M581.1 T7 P"global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until" R1
-; T8 print tick every 60 s while a job is loaded: spool booking, MFM flow-bias sample (only
-; while "processing"). The job is part of the expression, not only R1: the time part is true
-; all through idle, so only the job term turns the expression true at the job start.
-M581.1 T8 P"job.file.fileName != null && state.upTime - global.spool_track_time >= 60" R1
+; T8 machine tick every 10 s (trigger8.g): coolant loop, idle shut-off of the operator's fans,
+; every 60 s while printing the spool booking and the MFM flow-bias sample. A trigger macro made
+; the machine "busy" until Meltingplot RRF 3.7.0+1.mp.4 (GCodes::DoingFileMacro exempts the
+; Trigger channel since, like the daemon's), and busy restarts daemon.g's idle heater timer: a
+; tick in idle would keep the heater cutoff - fire prevention - from ever firing. So the tick
+; runs in idle only on that firmware or later; on older firmware it is gated on the job, as T8
+; was before. Fork versions: 3.7.0-rc.X+Y-mp.N and 3.7.0-mp.N lack it, 3.7.0+1.mp.N has it from
+; N = 4, a later base has it; mp.N starts at 1 again on every base, and stock firmware has no
+; "mp." and never has it. An unknown format falls to the job gate - the safe side. The fork
+; number is read digit by digit: its place in "0123456789", a second digit makes it 10 or more.
+var fw = boards[0].firmwareVersion
+var tick_idle = false
+if find(var.fw, "mp.") >= 0
+  if find(var.fw, "3.7.0+1.mp.") == 0
+    var n = drop(var.fw, 11)
+    set var.tick_idle = find("0123456789", take(var.n, 1)) >= 4 || (#var.n > 1 && find("0123456789", take(drop(var.n, 1), 1)) >= 0)
+  else
+    set var.tick_idle = find(var.fw, "3.7.0") != 0 && find(var.fw, "3.6") != 0 && find(var.fw, "3.5") != 0
+if var.tick_idle
+  M581.1 T8 P"state.upTime - global.tick_time >= 10" R0
+else
+  M118 P0 S{"Warning: firmware " ^ var.fw ^ " counts trigger macros as busy - coolant watchdog and idle fan shut-off only while a job is loaded"}
+  M581.1 T8 P"job.file.fileName != null && state.upTime - global.tick_time >= 10" R1
 
 M501                                                    ; load saved parameters from non-volatile memory
 M98 P"0:/sys/overrides/machine-override"              ; Load Machine specific overrides
@@ -234,8 +253,8 @@ while iterations < #var.adjustable
     set global.fan_adjustable = global.fan_adjustable ^ vector(1, iterations)
 
 ; Exhaust run-on, only with the exhaust fan. After ce-declaration.g, which creates the door
-; inputs 2 and 3. Not CE: the door interlock is trigger3.g/trigger4.g, which run first
-; (the lower number wins) - trigger9.g only sets the exhaust and must stay short.
+; inputs 2 and 3. Not CE: the door interlock is trigger4.g, which runs first (the lower number
+; wins), and daemon.g - trigger9.g only sets the exhaust and must stay short.
 ; T9 every edge of both door switches (S0 opened, S1 closed): trigger9.g starts or extends
 ; the run-on, and ends a run-on a door started during a job when the doors close again.
 ; Clean cycle: the exhaust runs fan_exhaust_boot_run_on after the boot - set before T10, so

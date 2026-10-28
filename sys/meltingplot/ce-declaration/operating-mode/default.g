@@ -24,5 +24,7 @@ while iterations < #heat.heaters
 
 M400 ; DSF specific
 
+; the hardened mirror first (globals, machine_mode_safe): restrictive before the string
+set global.machine_mode_safe = 0xAAAAAAAA
 set global.machine_mode = "default"
 echo "Default Mode"

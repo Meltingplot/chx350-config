@@ -3,25 +3,30 @@ if global.debug
   echo "trigger3.g executed"
   echo "global.machine_mode: " ^ global.machine_mode
 
+; Heater restore after the doors were closed again - expression trigger T3 (ce-declaration.g,
+; M581.1): RRF fires it when machine_mode_safe turns to the automatic pattern, i.e. once the
+; switch to automatic mode is complete (automatic.g writes the mirror last, after lifting
+; default.g's 50 C caps). Nothing to wait for here: as a pin trigger on the door-closed edge
+; this macro polled up to 3 s (M400 + G4 P500) for the daemon to finish that switch, holding
+; the Trigger channel meanwhile and leaving the heaters off when the switch took longer.
+; The expression compares numerically - a string literal in it would be copied into the
+; string heap on every main-loop pass. A value that is no number would disable the trigger:
+; restrictive, the heaters stay off, and daemon.g halts on such a value anyway. The decision is
+; made here, with the hardened reads below.
 ; Tier-1 flags are bit-flip hardened and read through the "" ^ coercion (see globals):
 ; switch_checked is "checked" only by exact match with "1431655765" (0x55555555)
 if(sensors.gpIn[2].value == 1 && sensors.gpIn[3].value == 1 && ("" ^ global.door_left_switch_checked) == "1431655765" && ("" ^ global.door_right_switch_checked) == "1431655765")
-  ; Confirm the gate with the inverse comparison before waiting for automatic mode and
-  ; restoring the heaters (globals, "CONFIRMING"). The sensors are re-read as well - this
-  ; trigger fires on the door-closed edge, exactly where an EMI blip is plausible, though
-  ; only the flag re-reads are guaranteed fresh values.
+  ; Confirm the gate with the inverse comparison before restoring the heaters (globals,
+  ; "CONFIRMING"). The sensors are re-read as well, though only the flag re-reads are
+  ; guaranteed fresh values.
   ; Returning is restrictive - the daemon re-evaluates the interlock every iteration.
   if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1 || ("" ^ global.door_left_switch_checked) != "1431655765" || ("" ^ global.door_right_switch_checked) != "1431655765"
     M118 P0 S"Warning: doors not confirmed closed on re-read - heater restore skipped"
     M99
-  M400
-  G4 P500 ; wait for the switch to automatic mode
-  while ("" ^ global.machine_mode) != "automatic" && iterations < 5
-    M400
-    G4 P500
-  if ("" ^ global.machine_mode) == "automatic"
+  ; automatic only when the string and its hardened mirror agree (globals, machine_mode_safe)
+  if ("" ^ global.machine_mode) == "automatic" && ("" ^ global.machine_mode_safe) == "1431655765"
     ; confirm before re-enabling the heaters, see above
-    if ("" ^ global.machine_mode) != "automatic"
+    if ("" ^ global.machine_mode) != "automatic" || ("" ^ global.machine_mode_safe) != "1431655765"
       M118 P0 S"Warning: automatic mode not confirmed on re-read - heater restore skipped"
       M99
     ; restore bed heater to saved state. Only "active"/"standby" are restorable; any other
