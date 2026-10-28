@@ -22,10 +22,24 @@
 ; (TouchMode::ProcessReading), so a G30 needs a drive current that stays valid down to the
 ; bed - which is what the calibration is still looking for - and where a touch stops is what
 ; z-probe/calibrate.g measures against this contact.
-; The approach starts with the lowest drive current that reads at S (a higher one fails at a
-; distance, M558.2) and raises it whenever the reading turns invalid (999999), repeating the
-; last 0.5 mm with the new current - the steepest rise must come from one and the same
-; current. The back-off keeps the current; an invalid reading there fails the scan.
+; Invalid means 999999 (the SZP board's error value, an LDC1612 error bit set) or 0 (the
+; board could not read the LDC1612) - RRF takes both as errors (RemoteZProbe.cpp). A drive
+; current too low reads 999999 close to the bed, one too high far from it (M558.2), and
+; M122 B<board> shows both as "amplitude error", never "ok" - like a broken probe. Measured on
+; the lab machine (2026-10-28, bed centre, R0, Z600 down to Z1 cold and to Z1.5 with the coil
+; at 70-74 C): S15 and S16 read at every height, cold and warm. The window of the others moves
+; with the coil temperature - warm, S14 fails from Z5 down, S17 at Z600, S18 reads only from
+; Z2 down; cold, S17 and up read nowhere; S13 and S20 and up read nowhere.
+; So the approach starts with the first of S15, S16, S14, S17 that reads at S (S14 and S17 for
+; a probe whose window lies a step off) - none of them reading there is a broken probe (cable,
+; coil): too far is out of the question at S, a few millimetres above the contact. It raises
+; the current whenever the reading turns invalid, repeating the last 0.5 mm with the new
+; current - the steepest rise must come from one and the same current. Before it raises the
+; current, the bed goes back to where this current read valid: a probe that is only too close
+; reads again there, a broken one stays on its error value although the distance changed, and
+; that fails the scan - raising the current would only work through every current up to 31,
+; the bed 0.5 mm further away each time.
+; The back-off keeps the current; an invalid reading there fails the scan.
 ; With global.debug every reading is echoed - the curve to look at when a scan fails.
 ; The drive current and reading offset it leaves set are scan values: the caller
 ; calibrates both modes afterwards (z-probe/calibrate.g).
@@ -57,17 +71,19 @@ M564 S0                                          ; soft limits off: the contact 
 G1 Z{param.S} F600
 M400
 
-; lowest drive current that reads at the start height
-var current = 15
-while true
-  M558.2 K0 S{var.current} R0
+; first drive current of the window that reads at the start height (header: S15 and S16 read
+; at every height, cold and warm)
+var currents = {15, 16, 14, 17}
+var current = -1
+while iterations < #var.currents
+  M558.2 K0 S{var.currents[iterations]} R0
   G4 S1                                          ; let the sensor settle on the new current
-  if sensors.probes[0].value[0] < 999999
+  var r = sensors.probes[0].value[0]
+  if var.r < 999999 && var.r > 0
+    set var.current = var.currents[iterations]
     break
-  set var.current = var.current + 1
-  if var.current > 31
-    set var.error = "no SZP drive current reads at the scan start Z" ^ param.S
-    break
+if var.current < 0
+  set var.error = "SZP reads nothing at the scan start Z" ^ param.S ^ " with drive current 14 to 17 - probe cable or coil broken?"
 
 ; noise of the reading at rest - the thresholds below are multiples of it. The SZP board
 ; reports its reading every 250 ms (board status, HeatSampleIntervalMillis), so samples
@@ -115,6 +131,24 @@ if var.error == ""
       set var.sum = var.sum + var.r
       G4 P250
     if !var.valid
+      ; Too close for this drive current, or a broken probe. This current read valid from z_ref
+      ; down to the step before: back there - at most the 0.5 mm the repeat below goes back
+      ; anyway - a probe that is only too close reads again within three board reports. Not
+      ; too far either: the same current has just read valid there.
+      if var.have_prev
+        G1 Z{min(var.z + 0.5, var.z_ref)} F600
+        M400
+        G4 S1
+        var dead = true
+        while iterations < 3
+          var r = sensors.probes[0].value[0]
+          if var.r < 999999 && var.r > 0
+            set var.dead = false
+            break
+          G4 P250
+        if var.dead
+          set var.error = "the SZP reading stays invalid at Z" ^ min(var.z + 0.5, var.z_ref) ^ " although it read valid there with drive current " ^ var.current ^ " - probe cable or coil broken?"
+          break
       ; too close for this drive current: raise it and repeat the last 0.5 mm with it
       set var.current = var.current + 1
       if var.current > 31
@@ -198,7 +232,8 @@ if var.error == ""
       set var.sum = var.sum + var.r
       G4 P250
     if !var.valid
-      set var.error = "SZP reading invalid at Z" ^ var.z ^ " while backing off"
+      ; this current read valid down to the contact, and the bed moves away from it
+      set var.error = "SZP reading invalid at Z" ^ var.z ^ " while backing off - probe cable or coil broken?"
       break
     var v = var.sum / 3
     if global.debug

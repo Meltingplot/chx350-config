@@ -1,6 +1,7 @@
-; the drive current (S) is important to get a stable reading
-; S16 is suitable for distance measurement from 0mm to 20mm
-; S17 is suitable for distance measurement from 0mm to 3mm
+; the drive current (S) is important to get a stable reading. Measured on the lab machine
+; (2026-10-28, bed centre, R0, Z600 down to Z1 cold and to Z1.5 with the coil at 70-74 C):
+; S15 and S16 read at every height, cold and warm; warm, S14 fails from Z5 down, S17 at Z600,
+; S18 reads only from Z2 down; cold, S17 and up read nowhere; S13 and S20 and up read nowhere
 
 if global.debug
   echo "z-probe/standard-mode.g"
