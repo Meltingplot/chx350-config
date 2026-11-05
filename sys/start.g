@@ -35,6 +35,24 @@ if #global.fan_stalled > 0
   M0
   M99
 
+; An emergency stop the operator found dead refuses every job until trigger2.g records it firing
+; in a monthly check (macro maintenance/monthly-check). Read here directly, so neither self_test_block_jobs nor
+; a switched-off tier nor a job in the first minute after a boot gets past it.
+if global.self_test_estop_state == 2 || global.self_test_estop_state == 3
+  M118 P0 S"Error: the emergency stop did not halt the machine in the monthly check - print job not started"
+  M291 R"NOT-HALT" P"Der NOT-HALT hat bei der Monatsprüfung nicht ausgelöst. Kein neuer Druck, bis die Prüfung bestanden ist." S1 T0
+  M0
+  M99
+
+; Self-test (self-test/check-quick.g, check-weekly.g): a failed check refuses the job, a running
+; print goes on. The tier runs again every 30 min while it fails, and macro maintenance/self-test
+; runs it at once after a repair. It reads what the last run found, it does not wait for one.
+if global.self_test_block_jobs && (global.self_test_failed[0] != "" || global.self_test_failed[1] != "")
+  M118 P0 S{"Error: self-test failed (" ^ global.self_test_failed[0] ^ global.self_test_failed[1] ^ ") - print job not started"}
+  M291 R"Selbsttest" P{"Kein neuer Druck, bis der Selbsttest wieder besteht (Makro maintenance/self-test). " ^ global.self_test_failed[0] ^ global.self_test_failed[1]} S1 T0
+  M0
+  M99
+
 ; Spool tracker (spool/track.g): RRF zeroed every extruder position right before this
 ; file (GCodes.cpp StartPrinting) - re-base on that zero before anything extrudes, the
 ; door prompt below lets the operator extrude from DWC. Arms the report of what is left,

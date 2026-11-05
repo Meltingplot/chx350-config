@@ -7,6 +7,9 @@
 ;   (spool/track.g - OM reads and set only, no file write; print/finish.g writes at the job
 ;   end) and take the MFM flow-bias sample (filament/mfm-flow-bias.g - OM reads, set and a
 ;   non-blocking M118). A booking skipped in a pause comes at the first tick after the resume.
+; - every 15 min write the hours of operation (one echo into a file, it never waits for motion)
+; - the self-test (self-test/tick.g - at most one step per tick; while it runs M140, M568, M106,
+;   M118 and M291 S1, otherwise reads)
 ; The tick re-arms first: the trigger fires only on false -> true, so tick_time has to move on
 ; whatever this macro does after.
 ; Outside a job the tick runs only on firmware whose trigger macros do not make the machine
@@ -24,3 +27,8 @@ if state.status == "processing" && state.upTime - global.spool_track_time >= 60
   set global.spool_track_time = state.upTime
   M98 P"0:/sys/meltingplot/spool/track.g"
   M98 P"0:/sys/meltingplot/filament/mfm-flow-bias.g"
+if state.upTime - global.operating_time_saved >= 900
+  set global.operating_time_saved = state.upTime
+  echo >"0:/sys/generated/operating-time.g" "set global.operating_time_base = " ^ (global.operating_time_base + state.upTime)
+if state.upTime >= global.self_test_wake
+  M98 P"0:/sys/meltingplot/self-test/tick.g"

@@ -40,6 +40,13 @@
 ; monitor's own check (M591 in machine-override) stays active either way.
 ;set global.mfm_feed_min_ratio = 0.4
 
+; Self-test: hours of operation between the runs of its three tiers - quick (also after every
+; boot), weekly (heaters and fans), monthly (with the operator). 0 switches a tier off.
+;set global.self_test_interval = {8, 40, 170}
+
+; Self-test: a failed quick or weekly tier refuses new print jobs. false only reports it.
+;set global.self_test_block_jobs = true
+
 ; Z of the bed at its lower stop, measured from the nozzle touching the bed (CAD nominal
 ; 950.3 mm). Only for a machine whose travel exceeds it by more than ~2 mm: homez.g's touch
 ; probe reaches no deeper than 2.1 mm below this frame's Z0 after aligning.

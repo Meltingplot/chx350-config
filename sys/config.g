@@ -210,7 +210,8 @@ M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor
 ; "processing" (a window survives a pause). The guard is 0 outside a job (print/finish.g).
 M581.1 T7 P"global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until" R1
 ; T8 machine tick every 10 s (trigger8.g): coolant loop, idle shut-off of the operator's fans,
-; every 60 s while printing the spool booking and the MFM flow-bias sample. A trigger macro made
+; hours of operation and self-test, every 60 s while printing the spool booking and the MFM
+; flow-bias sample. A trigger macro made
 ; the machine "busy" until Meltingplot RRF 3.7.0+1.mp.4 (GCodes::DoingFileMacro exempts the
 ; Trigger channel since, like the daemon's), and busy restarts daemon.g's idle heater timer: a
 ; tick in idle would keep the heater cutoff - fire prevention - from ever firing. So the tick
@@ -241,7 +242,7 @@ set global.tick_time = state.upTime
 if var.tick_idle
   M581.1 T8 P"state.upTime - global.tick_time >= 10" R0
 else
-  M118 P0 S{"Warning: firmware " ^ var.fw ^ " counts trigger macros as busy - coolant watchdog and idle fan shut-off only while a job is loaded"}
+  M118 P0 S{"Warning: firmware " ^ var.fw ^ " counts trigger macros as busy - coolant watchdog and idle fan shut-off only while a job is loaded, no automatic self-test"}
   M581.1 T8 P"job.file.fileName != null && state.upTime - global.tick_time >= 10" R1
 
 M501                                                    ; load saved parameters from non-volatile memory

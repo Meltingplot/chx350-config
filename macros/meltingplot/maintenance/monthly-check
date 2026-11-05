@@ -1,0 +1,220 @@
+; ---
+; title: Monatsprüfung
+; description: Türen, Referenzfahrt, Sichtprüfung und NOT-HALT · etwa 15 min
+; icon: mdi-clipboard-check-outline
+; page: start
+; order: 45
+; visible: "{{ global.self_test_interval[2] > 0 and (global.self_test_done[2] < 0 or (global.operating_time_base + state.upTime - global.self_test_done[2]) / 3600 >= global.self_test_interval[2]) }}"
+; enabled: "{{ state.status == 'idle' and global.machine_is_hot == 2863311530 }}"
+; hint: Erst abkühlen lassen, unter 50 °C
+; ---
+; maintenance/monthly-check
+; Monthly tier of the self-test (CLAUDE.md, "Power-on self-test"), due every
+; self_test_interval[2] hours of operation; the tile shows on the start page once it is due.
+; It needs the operator, so it is a flow and nothing starts it automatically: door switches and
+; interlock, homing (which also runs the nozzle cleaner, homez.g), accelerometers, fans without a
+; tacho, a look at what the machine cannot measure, and last the emergency stop.
+; Only on a cold machine with the heaters off, because the visual checks send the operator to the
+; extruder, the probe and the cleaner. A defect the operator reports does not refuse jobs, the
+; tier stays due until it passes. Every failure ends with "Error: ...".
+; The emergency stop halts the machine, so this flow cannot see it work, and a reboot alone proves
+; nothing: a power failure, an M999 or switching off after a dead button all look the same. So the
+; flow arms self_test_estop_state in sys/generated/self-test.g, trigger2.g records right before its
+; M112 that it fired, and self-test/tick.g counts the tier as passed at the next boot. The pass
+; does not come back here, so this flow has no ";; Completed" line.
+; States: 0 nothing pending, 1 armed, 2 defect, 3 armed with a defect from before, 4 fired. A defect
+; stays through a cancel and a reboot, and only a recorded firing clears it.
+; Started by maintenance/self-test too (C0).
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+; a run the tick had started ends now: this macro makes the machine busy (self-test/tick.g)
+while global.self_test_run >= 0 && iterations < 15
+  G4 S1
+
+set global.self_test_found = ""
+set global.self_test_failed[2] = ""
+
+if ("" ^ global.machine_is_hot) != "2863311530"   ; hardened read, see globals
+  echo "Error: machine is hot - let it cool down below 50 C first"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_is_hot) != "2863311530"
+  echo "Error: cold machine not confirmed on re-read - monthly check aborted"
+  M99
+
+;; Die Maschine prüft mit Ihnen, was sie allein nicht messen kann. Sie brauchen etwa 15 Minuten
+;; und bleiben dabei an der Maschine. Die Heizungen gehen aus, die Achsen fahren einmal an ihre
+;; Endlagen.
+;;
+;; Am Ende lösen Sie den NOT-HALT aus. Die Maschine hält dann an und muss neu gestartet werden.
+M291 R"Monatsprüfung" P"Prüfung mit dem Bediener, etwa 15 Minuten: Türen, Referenzfahrt, Sichtprüfung. Die Heizungen gehen aus. Am Ende lösen Sie den NOT-HALT aus, die Maschine muss danach neu starten." S3 J2
+if result != 0
+  echo "Error: monthly check cancelled"
+  M99
+
+; off for the whole check. "off" first: the door steps must not bring a heater back (trigger3.g)
+while iterations < #tools
+  if tools[iterations] != null
+    if #tools[iterations].heaters > 0
+      set global.saved_tool_heater_states[iterations] = "off"
+      M568 P{iterations} A0
+set global.saved_bed_heater_state = "off"
+M140 P0 S-273.15
+
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+if global.result != 0
+  echo "Error: automatic mode not reached - monthly check aborted"
+  M99
+
+M98 P"0:/sys/meltingplot/self-test/check-door.g" I2 S"linke"
+M98 P"0:/sys/meltingplot/self-test/check-door.g" I3 S"rechte"
+
+;; Vor der Referenzfahrt muss der Bauraum frei sein. Entfernen Sie Bauteile, Werkzeuge und
+;; Filamentreste vom Bett.
+M291 R"Bauraum prüfen" P"Der Bauraum muss frei sein: Bauteile, Werkzeuge und Filamentreste vom Bett entfernen." S3 J2
+if result != 0
+  echo "Error: monthly check cancelled"
+  M99
+
+; The prompt may have sent the operator into the chamber, so the mode is checked after it, not
+; before. Waits for the upgrade to finish as well: homing during automatic.g would run with its
+; speed limits already lifted and with no door reaction (trigger4.g still reads "default").
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+if global.result != 0
+  set global.self_test_failed[2] = global.self_test_found ^ "Keine Betriebsart Automatik; "
+  echo "Error: automatic mode not reached - monthly check aborted"
+  M99
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - monthly check aborted"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - monthly check aborted"
+  M99
+
+;; > Nicht in den Bauraum greifen.
+;;
+;; Die Maschine fährt die Achsen an ihre Endlagen und setzt dabei den Düsenreiniger ein. Sehen Sie
+;; zu: Gleich fragt die Maschine, ob der Reiniger aus- und wieder eingefahren ist.
+M291 R"Referenzfahrt läuft" P"Die Maschine fährt die Achsen an ihre Endlagen und setzt den Düsenreiniger ein. Nicht in den Bauraum greifen." S1 T3600
+set global.result = 0
+G28
+var homing_failed = result != 0 || global.result != 0
+while iterations < #move.axes
+  if move.axes[iterations].visible && !move.axes[iterations].homed
+    set var.homing_failed = true
+M400
+if state.messageBox != null
+  M292
+if var.homing_failed
+  set global.self_test_found = global.self_test_found ^ "Referenzfahrt fehlgeschlagen; "
+else
+  ;; Ist der Düsenreiniger während der Referenzfahrt ausgefahren, hat er die Düse abgestreift und
+  ;; ist er wieder eingefahren?
+  M291 R"Düsenreiniger" P"Ist der Düsenreiniger ausgefahren, hat er die Düse abgestreift und ist er wieder eingefahren?" S4 K{"Ja","Nein"}
+  if input != 0
+    set global.self_test_found = global.self_test_found ^ "Düsenreiniger; "
+
+; Every accelerometer takes 100 samples. The run counts once the board has sent them (runs,
+; points: Accelerometers.cpp) and overwrites its file in 0:/sys/accelerometer/ the next time.
+while iterations < #sensors.accelerometers
+  if sensors.accelerometers[iterations] != null
+    var sensor = iterations
+    var runs = sensors.accelerometers[var.sensor].runs
+    M956 P{var.sensor} S100 A0 F{"self-test-" ^ var.sensor ^ ".csv"}
+    while sensors.accelerometers[var.sensor].runs == var.runs && iterations < 25
+      G4 P200
+    if sensors.accelerometers[var.sensor].runs == var.runs || sensors.accelerometers[var.sensor].points == 0
+      set global.self_test_found = global.self_test_found ^ "Beschleunigungssensor " ^ sensors.accelerometers[var.sensor].port ^ "; "
+
+; No tacho on these two, only the operator can tell. The exhaust stays on when a run-on holds it
+; (trigger9.g), the weekly tier has checked every fan with a tacho.
+if global.has_aux_fan
+  M106 P2 S1
+  ;; Der Aux-Lüfter läuft jetzt mit voller Drehzahl. Ist der Luftstrom zu spüren?
+  M291 R"Aux-Lüfter" P"Der Aux-Lüfter läuft mit voller Drehzahl. Ist der Luftstrom zu spüren?" S4 K{"Ja","Nein"}
+  var aux_seen = input
+  M106 P2 S0
+  if var.aux_seen != 0
+    set global.self_test_found = global.self_test_found ^ "Aux-Lüfter; "
+if global.has_exhaust_fan
+  M106 P3 S1
+  ;; Der Abluftlüfter läuft jetzt mit voller Drehzahl. Ist der Luftstrom zu spüren?
+  M291 R"Abluftlüfter" P"Der Abluftlüfter läuft mit voller Drehzahl. Ist der Luftstrom zu spüren?" S4 K{"Ja","Nein"}
+  var exhaust_seen = input
+  if global.fan_exhaust_until == 0
+    M106 P3 S0
+  if var.exhaust_seen != 0
+    set global.self_test_found = global.self_test_found ^ "Abluftlüfter; "
+
+;; Ab hier schauen Sie nur noch hin: Die Maschine steht, und die Heizungen sind aus. Sie dürfen die
+;; Türen öffnen.
+;;
+;; **Kühlkreislauf:** Der Füllstand stimmt, Schläuche und Anschlüsse sind trocken, die Radiatoren
+;; sind nicht zugesetzt.
+M291 R"Sichtprüfung Kühlkreislauf" P"Die Maschine steht, Türen dürfen offen sein. Kühlkreislauf: Füllstand in Ordnung, Schläuche und Anschlüsse trocken, Radiatoren nicht zugesetzt?" S4 K{"In Ordnung","Mangel"}
+if input != 0
+  set global.self_test_found = global.self_test_found ^ "Kühlkreislauf; "
+
+;; **Riemen und Führungen:** Die Riemen von X, Y und U sind gespannt und ohne Abrieb, die
+;; Führungen laufen sauber.
+M291 R"Sichtprüfung Riemen" P"Riemen von X, Y und U gespannt und ohne Abrieb, Führungen sauber?" S4 K{"In Ordnung","Mangel"}
+if input != 0
+  set global.self_test_found = global.self_test_found ^ "Riemen und Führungen; "
+
+;; **Extruder und Filamentweg:** Antriebsrad sauber, Andruckrolle ohne Verschleiß, das Rad des
+;; Filamentmonitors dreht frei. Eine abgenutzte Andruckrolle zeigt sich sonst erst als
+;; Filamentfehler im Druck.
+M291 R"Sichtprüfung Extruder" P"Antriebsrad sauber, Andruckrolle ohne Verschleiß, Rad des Filamentmonitors dreht frei?" S4 K{"In Ordnung","Mangel"}
+if input != 0
+  set global.self_test_found = global.self_test_found ^ "Extruder und Filamentweg; "
+
+;; **Z-Achse:** Die Spindeln sind sauber und geschmiert, im Bereich unter dem Bett liegt nichts.
+M291 R"Sichtprüfung Z-Achse" P"Spindeln sauber und geschmiert, unter dem Bett liegt nichts?" S4 K{"In Ordnung","Mangel"}
+if input != 0
+  set global.self_test_found = global.self_test_found ^ "Z-Achse; "
+
+;; **Bauraum:** Türdichtungen in Ordnung, Spule der Z-Sonde und Bürste des Düsenreinigers sauber,
+;; die LEDs leuchten.
+M291 R"Sichtprüfung Bauraum" P"Türdichtungen in Ordnung, Z-Sonde und Bürste des Düsenreinigers sauber, LEDs leuchten?" S4 K{"In Ordnung","Mangel"}
+if input != 0
+  set global.self_test_found = global.self_test_found ^ "Bauraum; "
+
+if global.self_test_found != ""
+  set global.self_test_failed[2] = global.self_test_found
+  set global.self_test_found = ""
+  M118 P0 L1 S{"Error: self-test: monthly check failed: " ^ global.self_test_failed[2]}
+  ;; Die Prüfung ist nicht bestanden und bleibt fällig. Beheben Sie die Mängel und wiederholen Sie
+  ;; sie, der NOT-HALT kommt dann am Ende an die Reihe:
+  ;;
+  ;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
+  M291 R"Prüfung nicht bestanden" P{"Nach der Behebung die Prüfung wiederholen. Mängel: " ^ global.self_test_failed[2]} S2
+  echo "Error: monthly check not passed"
+  M99
+
+; Armed and stored before the prompt: if the emergency stop works, nothing after the prompt runs,
+; and trigger2.g appends to this file. A defect from before stays until it fires.
+var estop_before = (global.self_test_estop_state == 2 || global.self_test_estop_state == 3) ? 2 : 0
+set global.self_test_estop_state = (var.estop_before == 2) ? 3 : 1
+M98 P"0:/sys/meltingplot/self-test/store.g"
+
+;; > Lösen Sie jetzt den NOT-HALT aus.
+;;
+;; Die Maschine muss sofort anhalten. Entriegeln Sie den NOT-HALT danach und starten Sie die
+;; Maschine neu. Die Prüfung ist dann bestanden, die Maschine meldet es nach dem Start.
+;;
+;; **Nur wenn der NOT-HALT nichts bewirkt, bestätigen Sie hier.** Abbrechen verschiebt die Prüfung.
+M291 R"NOT-HALT prüfen" P"Lösen Sie jetzt den NOT-HALT aus. Die Maschine muss sofort anhalten: danach entriegeln und neu starten. Nur wenn er nichts bewirkt, hier bestätigen. Abbrechen verschiebt die Prüfung." S3 J2
+var estop_answer = result
+
+if var.estop_answer != 0
+  set global.self_test_estop_state = var.estop_before
+  M98 P"0:/sys/meltingplot/self-test/store.g"
+  echo "Error: emergency stop test postponed - the monthly check stays due"
+  M99
+
+; the machine still runs although the emergency stop was pressed
+M98 P"0:/sys/meltingplot/self-test/estop-defect.g"

@@ -547,6 +547,51 @@ global fan_exhaust_job_value = -1
 ; a tool selection). 0 = none. Assignable in global-override.g.
 global fan_exhaust_boot_run_on = 600
 
+; --- operating hours and self-test (sys/meltingplot/self-test/) ---------------
+; Hours of operation: the seconds the machine was switched on before this boot. The total is
+; always operating_time_base + state.upTime. The machine tick (trigger8.g) writes it to
+; sys/generated/operating-time.g every 15 min, so a power cycle loses at most that. A second file
+; on purpose: one short line, written far more often than the self-test's state.
+global operating_time_base = 0
+if fileexists("0:/sys/generated/operating-time.g")
+  M98 P"0:/sys/generated/operating-time.g"
+global operating_time_saved = 0                ; upTime of the last write
+; Self-test, three tiers (CLAUDE.md, "Power-on self-test"): 0 quick, after every boot as well;
+; 1 weekly, heaters and fans; 2 monthly, with the operator. Intervals in hours of operation, 0
+; switches a tier off. Assignable in global-override.g.
+global self_test_interval = {8, 40, 170}
+; start.g refuses a job while the quick or the weekly tier has a failure. Assignable in
+; global-override.g: false only reports.
+global self_test_block_jobs = true
+; hours of operation (in seconds) at the last pass of each tier, -1 = never: a tier that never ran
+; is due. Tiers 1 and 2 and the emergency stop test come from sys/generated/self-test.g
+; (self-test/store.g), the quick tier runs after every boot anyway.
+; self_test_estop_state, the emergency stop test of the monthly check: 0 nothing pending; 1 armed,
+; waiting for trigger2.g; 2 the operator found it dead, start.g refuses every job; 3 armed with
+; such a defect from before, still refusing; 4 trigger2.g recorded that it fired, which
+; self-test/tick.g counts as passed at the next boot. Only that clears a defect.
+global self_test_done = vector(3, -1)
+global self_test_estop_state = 0
+if fileexists("0:/sys/generated/self-test.g")
+  M98 P"0:/sys/generated/self-test.g"
+; What each tier found at its last run, as text, "" = nothing. The CHX 350 UI can show it.
+global self_test_failed = vector(3, "")
+; session state of the run in progress, one writer: the machine tick (self-test/tick.g), or the
+; monthly flow, during which the machine is busy and the tick starts nothing
+global self_test_wake = 60                     ; upTime at which the tick looks again. 60 lets the boards report after a boot
+global self_test_run = -1                      ; tier being run, -1 = none
+global self_test_step = 0                      ; its step (self-test/check-*.g)
+global self_test_since = 0                     ; upTime the tier started at
+global self_test_found = ""                    ; findings of the run so far
+global self_test_retry = vector(3, 0)          ; upTime before which a tier does not start again after a failure or an abort
+global self_test_manual = -1                   ; tier a flow asked for and waits on (macro self-test), -1 = none
+global self_test_notified = false              ; the monthly check was announced since the boot
+; weekly tier per heater (0 = bed, h = tool h-1, sized 3 like the idle cutoff's arrays): 0
+; heating, 1 at target, 2 finished; its setpoint; the tool's active setpoint to give back
+global self_test_heater_state = vector(3, 0)
+global self_test_heater_target = vector(3, 0)
+global self_test_saved_active = vector(3, 0)
+
 
 ; ==============================================================================
 ; TIER 3 - COSMETIC AND DIAGNOSTIC
@@ -570,7 +615,7 @@ global led_color = 0
 global led_colors = {"white", "blue", "green", "yellow", "red", "pulse_white", "pulse_white"}
 
 ; daemon bookkeeping
-global daemon_cycle_time = 0            ; duration (s) of the last daemon iteration
+global daemon_cycle_time = 0            ; duration (s) of the last daemon iteration; self-test/check-quick.g sets -1 to see whether the daemon still overwrites it
 global daemon_reload = false            ; set to true to make daemon.g leave its loop and be reopened
 
 

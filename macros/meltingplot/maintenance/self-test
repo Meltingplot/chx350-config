@@ -1,0 +1,68 @@
+; ---
+; title: Selbsttest
+; description: "{{ ((global.operating_time_base + state.upTime) / 3600) | round }} Betriebsstunden{% if global.self_test_failed[0] or global.self_test_failed[1] %} · Fehler: {{ global.self_test_failed[0] }}{{ global.self_test_failed[1] }}{% endif %}"
+; icon: mdi-clipboard-pulse-outline
+; page: service
+; order: 5
+; ---
+; maintenance/self-test
+; Runs a tier of the self-test now, whether it is due or not (CLAUDE.md, "Power-on self-test"),
+; for instance after a repair: a failed tier otherwise waits 30 min for its next run. The test
+; itself stays in the machine tick, so there is one code path and one writer. This macro only
+; asks for it (self_test_manual) and waits. The monthly check is a flow of its own.
+
+if job.file.fileName != null
+  echo "Error: a print job is running - abort!"
+  M99
+
+;; **Kurztest:** liest Platinen, Spannungen, Sensoren und Kühlkreis, einige Sekunden.
+;;
+;; **Wochentest:** heizt Bett und Hotend kurz an und lässt die Lüfter laufen, unter 50 °C und ohne
+;; Bewegung, bis zu 4 Minuten. Dafür müssen die Türen zu, die Heizungen aus und die Maschine kalt sein.
+;;
+;; **Monatsprüfung:** mit Ihnen an der Maschine, etwa 15 Minuten, am Ende mit dem NOT-HALT.
+M291 R"Selbsttest" P"Welche Stufe jetzt ausführen?" S4 K{"Kurztest","Wochentest","Monatsprüfung"} F0 J2
+if result != 0             ; J2 leaves input undefined - result must be tested right here
+  echo "Error: self-test cancelled"
+  M99
+var tier = input
+
+; reports errors itself, and a pass ends with the machine halted
+if var.tier == 2
+  M98 P"0:/macros/meltingplot/maintenance/monthly-check" C0
+  M99
+
+; a run the tick had started ends now: this macro makes the machine busy (self-test/tick.g)
+while global.self_test_run >= 0 && iterations < 15
+  G4 S1
+
+var done_before = global.self_test_done[var.tier]
+set global.self_test_manual = var.tier
+set global.self_test_wake = 0
+
+;; Der Test läuft. Am Ende zeigt die Maschine das Ergebnis.
+M291 R"Selbsttest läuft" P"Der Test läuft, am Ende erscheint das Ergebnis." S1 T3600
+while global.self_test_manual >= 0 && iterations < 360
+  G4 S1
+set global.self_test_manual = -1
+
+if state.messageBox != null
+  M292
+
+var passed = global.self_test_done[var.tier] != var.done_before
+var message = "Bestanden."
+if !var.passed
+  if global.self_test_failed[var.tier] != ""
+    set var.message = "Fehler: " ^ global.self_test_failed[var.tier]
+  else
+    set var.message = "Nicht durchgeführt: Türen schließen, Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus. Liegt der Sollwert des Werkzeugs über 50 °C, erst die Türen prüfen."
+
+;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
+M291 R"Ergebnis Selbsttest" P{var.message} S2
+
+if !var.passed
+  echo "Error: self-test not passed: " ^ var.message
+  M99
+
+; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")
+echo ";; Completed"
