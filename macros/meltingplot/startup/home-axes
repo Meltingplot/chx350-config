@@ -16,7 +16,8 @@
 ;   offered on their own);
 ; - Z: G28 Z -> homez.g, which homes X, Y and U first when they are not homed.
 ; Every homing file runs the door check itself; it runs here once before the progress
-; step, so that its prompts come before the moves and not in the middle of the step.
+; step (through wait-automatic.g), so that its prompts come before the moves and not in the
+; middle of the step.
 ; Needs automatic mode: default mode limits the speed to 60 mm/min.
 ; A flow of the CHX 350 UI (CLAUDE.md, "Flows in the CHX 350 UI").
 
@@ -43,7 +44,21 @@ if result != 0             ; J2 leaves input undefined - result must be tested r
   M99
 var choice = input
 
-M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
+; The prompt sends the operator into the chamber, which drops the machine to default mode, so the
+; mode is checked again here. wait-automatic.g, not the door check alone: that one returns as soon
+; as the doors read closed, while daemon.g is still running automatic.g. G28 would then start
+; with the limits half lifted, and with machine_mode still "default" trigger4.g ignores a door.
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+if global.result != 0
+  echo "Error: automatic mode not reached - homing aborted"
+  M99
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  echo "Error: machine not in automatic mode - homing aborted"
+  M99
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  echo "Error: automatic mode not confirmed on re-read - homing aborted"
+  M99
 
 ;; > Nicht in den Bauraum greifen.
 ;;

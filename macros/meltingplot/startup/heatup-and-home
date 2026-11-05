@@ -42,5 +42,25 @@ if var.wait_for_heatsoak
   M291 P"Waiting for heat soak. This takes 5 minutes." S1 ; notify user about heat soak
   G4 S{5 * 60} ; wait for 5 minutes to allow heat soak
 
+; A door may have opened during the minutes above, which dropped the machine to default mode, so
+; the mode is checked again here. wait-automatic.g, not G28's door check alone: that one returns as
+; soon as the doors read closed, while daemon.g is still running automatic.g. G28 would then start
+; with the limits half lifted, and with machine_mode still "default" trigger4.g ignores a door.
+; On failure the heaters this macro switched on go off, and trigger3.g must not bring them back.
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+var automatic = global.result == 0
+if ("" ^ global.machine_mode) != "automatic"   ; hardened read, see globals
+  set var.automatic = false
+; confirm the guard (globals, "CONFIRMING") - a guard that is skipped protects nothing
+if ("" ^ global.machine_mode) != "automatic"
+  set var.automatic = false
+if !var.automatic
+  set global.saved_bed_heater_state = "off"
+  set global.saved_tool_heater_states[0] = "off"
+  M140 P0 S-273.15
+  M568 P0 A0
+  echo "Error: automatic mode not reached - heaters off, homing aborted"
+  M99
+
 G28
 M291 P"Heatup and homing completed. The printer is now ready for the next steps." S2 ; notify user
