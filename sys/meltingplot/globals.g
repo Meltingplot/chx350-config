@@ -569,28 +569,23 @@ global self_test_block_jobs = true
 ; self_test_estop_state, the emergency stop test of the monthly check: 0 nothing pending; 1 armed,
 ; waiting for trigger2.g; 2 the operator found it dead, start.g refuses every job; 3 armed with
 ; such a defect from before, still refusing; 4 trigger2.g recorded that it fired, which
-; self-test/tick.g counts as passed at the next boot. Only that clears a defect.
+; self-test/check-estop.g counts as passed at the next boot, from config.g. Only that clears a defect.
 global self_test_done = vector(3, -1)
 global self_test_estop_state = 0
 if fileexists("0:/sys/generated/self-test.g")
   M98 P"0:/sys/generated/self-test.g"
-; What each tier found at its last run, as text, "" = nothing. The CHX 350 UI can show it.
+; What each tier found at its last run, as text, "" = nothing.
 global self_test_failed = vector(3, "")
-; session state of the run in progress, one writer: the machine tick (self-test/tick.g), or the
-; monthly flow, during which the machine is busy and the tick starts nothing
+; What self-test/tick.g works out for the flow maintenance/self-test: which tier is due, and whether
+; one can run now.
+global self_test_due = vector(3, false)
+global self_test_wanted = false
+global self_test_can_start = false             ; DSF knows M98.3, tick.g may start the flow (self-test/check-dsf.g, from config.g)
 global self_test_wake = 60                     ; upTime at which the tick looks again. 60 lets the boards report after a boot
-global self_test_run = -1                      ; tier being run, -1 = none
-global self_test_step = 0                      ; its step (self-test/check-*.g)
-global self_test_since = 0                     ; upTime the tier started at
+global self_test_weekly_ready = false          ; answer of self-test/check-weekly-ready.g
+global self_test_retry = vector(3, 0)          ; upTime before which a tier is not due again after a failure or an abort
 global self_test_found = ""                    ; findings of the run so far
-global self_test_retry = vector(3, 0)          ; upTime before which a tier does not start again after a failure or an abort
-global self_test_manual = -1                   ; tier a flow asked for and waits on (macro self-test), -1 = none
 global self_test_notified = false              ; the monthly check was announced since the boot
-; weekly tier per heater (0 = bed, h = tool h-1, sized 3 like the idle cutoff's arrays): 0
-; heating, 1 at target, 2 finished; its setpoint; the tool's active setpoint to give back
-global self_test_heater_state = vector(3, 0)
-global self_test_heater_target = vector(3, 0)
-global self_test_saved_active = vector(3, 0)
 
 
 ; ==============================================================================

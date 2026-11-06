@@ -20,8 +20,9 @@
 ; The emergency stop halts the machine, so this flow cannot see it work, and a reboot alone proves
 ; nothing: a power failure, an M999 or switching off after a dead button all look the same. So the
 ; flow arms self_test_estop_state in sys/generated/self-test.g, trigger2.g records right before its
-; M112 that it fired, and self-test/tick.g counts the tier as passed at the next boot. The pass
-; does not come back here, so this flow has no ";; Completed" line.
+; M112 that it fired, and self-test/check-estop.g counts the tier as passed at the next boot, from
+; config.g. That pass does not come back here: the machine has halted, so self-test/estop-fired.g
+; sends the completion. This flow's own line is for a firing config.g did not get to.
 ; States: 0 nothing pending, 1 armed, 2 defect, 3 armed with a defect from before, 4 fired. A defect
 ; stays through a cancel and a reboot, and only a recorded firing clears it.
 ; Started by maintenance/self-test too (C0).
@@ -30,9 +31,16 @@ if job.file.fileName != null
   echo "Error: a print job is running - abort!"
   M99
 
-; a run the tick had started ends now: this macro makes the machine busy (self-test/tick.g)
-while global.self_test_run >= 0 && iterations < 15
-  G4 S1
+; A firing on record although config.g decides it at every boot: config.g ended before it got there.
+; The check has passed. Going on would arm the test again and overwrite the record of the firing.
+if global.self_test_estop_state == 4
+  M98 P"0:/sys/meltingplot/self-test/estop-passed.g"
+  M291 R"Monatsprüfung bestanden" P"Die Monatsprüfung ist bestanden: Der NOT-HALT hat ausgelöst." S2
+  ; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion").
+  ; Not when maintenance/self-test runs it (C0): that macro writes the line.
+  if !exists(param.C) || param.C != 0
+    echo ";; Completed"
+  M99
 
 set global.self_test_found = ""
 set global.self_test_failed[2] = ""
@@ -74,7 +82,7 @@ M98 P"0:/sys/meltingplot/self-test/check-door.g" I3 S"rechte"
 
 ;; Vor der Referenzfahrt muss der Bauraum frei sein. Entfernen Sie Bauteile, Werkzeuge und
 ;; Filamentreste vom Bett.
-M291 R"Bauraum prüfen" P"Der Bauraum muss frei sein: Bauteile, Werkzeuge und Filamentreste vom Bett entfernen." S3 J2
+M291 R"Bauraum freiräumen" P"Der Bauraum muss frei sein: Bauteile, Werkzeuge und Filamentreste vom Bett entfernen." S3 J2
 if result != 0
   echo "Error: monthly check cancelled"
   M99
@@ -134,7 +142,6 @@ while iterations < #sensors.accelerometers
 ; (trigger9.g), the weekly tier has checked every fan with a tacho.
 if global.has_aux_fan
   M106 P2 S1
-  ;; Der Aux-Lüfter läuft jetzt mit voller Drehzahl. Ist der Luftstrom zu spüren?
   M291 R"Aux-Lüfter" P"Der Aux-Lüfter läuft mit voller Drehzahl. Ist der Luftstrom zu spüren?" S4 K{"Ja","Nein"}
   var aux_seen = input
   M106 P2 S0
@@ -142,7 +149,6 @@ if global.has_aux_fan
     set global.self_test_found = global.self_test_found ^ "Aux-Lüfter; "
 if global.has_exhaust_fan
   M106 P3 S1
-  ;; Der Abluftlüfter läuft jetzt mit voller Drehzahl. Ist der Luftstrom zu spüren?
   M291 R"Abluftlüfter" P"Der Abluftlüfter läuft mit voller Drehzahl. Ist der Luftstrom zu spüren?" S4 K{"Ja","Nein"}
   var exhaust_seen = input
   if global.fan_exhaust_until == 0
@@ -187,10 +193,6 @@ if global.self_test_found != ""
   set global.self_test_failed[2] = global.self_test_found
   set global.self_test_found = ""
   M118 P0 L1 S{"Error: self-test: monthly check failed: " ^ global.self_test_failed[2]}
-  ;; Die Prüfung ist nicht bestanden und bleibt fällig. Beheben Sie die Mängel und wiederholen Sie
-  ;; sie, der NOT-HALT kommt dann am Ende an die Reihe:
-  ;;
-  ;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
   M291 R"Prüfung nicht bestanden" P{"Nach der Behebung die Prüfung wiederholen. Mängel: " ^ global.self_test_failed[2]} S2
   echo "Error: monthly check not passed"
   M99

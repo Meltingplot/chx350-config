@@ -189,6 +189,12 @@ M280 P6 S100  ; set 104deg servo position on GPIO port 1
 
 M929 P"0:/sys/eventlog.log" S2                              ; Enable Event Logging
 
+; Result of the emergency stop test of a monthly check, here so that it stands as soon as the
+; machine is back. After the event log, which keeps the result, and after e-stop.g: the button is
+; released by now, its M582 T2 would have halted the machine again otherwise.
+M98 P"0:/sys/meltingplot/self-test/check-estop.g"
+M98 P"0:/sys/meltingplot/self-test/check-dsf.g"             ; can the self-test start by itself?
+
 ; Process watchdogs as expression triggers (RRF 3.7, M581.1): RRF evaluates each expression
 ; itself on every main-loop pass and runs sys/trigger<N>.g when it turns true - see
 ; CLAUDE.md, "Expression triggers". Not CE: the e-stop and door triggers 2-4 are set up in
@@ -210,7 +216,7 @@ M581.1 T5 P"global.z_motor_stall_deadline != 0 && (state.upTime > global.z_motor
 ; "processing" (a window survives a pause). The guard is 0 outside a job (print/finish.g).
 M581.1 T7 P"global.mfm_suppress_until > 0 && state.upTime >= global.mfm_suppress_until" R1
 ; T8 machine tick every 10 s (trigger8.g): coolant loop, idle shut-off of the operator's fans,
-; hours of operation and self-test, every 60 s while printing the spool booking and the MFM
+; hours of operation and the self-test's schedule, every 60 s while printing the spool booking and the MFM
 ; flow-bias sample. A trigger macro made
 ; the machine "busy" until Meltingplot RRF 3.7.0+1.mp.4 (GCodes::DoingFileMacro exempts the
 ; Trigger channel since, like the daemon's), and busy restarts daemon.g's idle heater timer: a
@@ -242,7 +248,7 @@ set global.tick_time = state.upTime
 if var.tick_idle
   M581.1 T8 P"state.upTime - global.tick_time >= 10" R0
 else
-  M118 P0 S{"Warning: firmware " ^ var.fw ^ " counts trigger macros as busy - coolant watchdog and idle fan shut-off only while a job is loaded, no automatic self-test"}
+  M118 P0 S{"Warning: firmware " ^ var.fw ^ " counts trigger macros as busy - coolant watchdog and idle fan shut-off only while a job is loaded, self-test not scheduled"}
   M581.1 T8 P"job.file.fileName != null && state.upTime - global.tick_time >= 10" R1
 
 M501                                                    ; load saved parameters from non-volatile memory

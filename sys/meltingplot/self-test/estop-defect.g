@@ -8,9 +8,5 @@ M98 P"0:/sys/meltingplot/self-test/store.g"
 set global.self_test_failed[2] = "NOT-HALT hat nicht ausgelöst; "
 M118 P0 L1 S"Error: self-test: the emergency stop did not halt the machine"
 
-;; > Der NOT-HALT hat nicht ausgelöst.
-;;
-;; Die Maschine darf so nicht betrieben werden. Sie startet keinen Druck mehr, bis diese Prüfung
-;; bestanden ist. Lassen Sie den NOT-HALT instandsetzen.
 M291 R"NOT-HALT defekt" P"Der NOT-HALT hat nicht ausgelöst. Die Maschine darf so nicht betrieben werden und startet keinen Druck mehr, bis diese Prüfung bestanden ist." S2
 echo "Error: the emergency stop did not halt the machine"

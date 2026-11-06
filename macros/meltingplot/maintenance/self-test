@@ -1,67 +1,97 @@
 ; ---
 ; title: Selbsttest
-; description: "{{ ((global.operating_time_base + state.upTime) / 3600) | round }} Betriebsstunden{% if global.self_test_failed[0] or global.self_test_failed[1] %} · Fehler: {{ global.self_test_failed[0] }}{{ global.self_test_failed[1] }}{% endif %}"
+; description: "Betriebsstunden: {{ ((global.operating_time_base + state.upTime) / 3600) | round }}{% if global.self_test_failed[0] or global.self_test_failed[1] %} · Fehler: {{ global.self_test_failed[0] }}{{ global.self_test_failed[1] }}{% endif %}"
 ; icon: mdi-clipboard-pulse-outline
 ; page: service
 ; order: 5
 ; ---
 ; maintenance/self-test
-; Runs a tier of the self-test now, whether it is due or not (CLAUDE.md, "Power-on self-test"),
-; for instance after a repair: a failed tier otherwise waits 30 min for its next run. The test
-; itself stays in the machine tick, so there is one code path and one writer. This macro only
-; asks for it (self_test_manual) and waits. The monthly check is a flow of its own.
+; The self-test (CLAUDE.md, "Power-on self-test"), an ordinary flow. It runs what is due
+; (self-test/tick.g), without a prompt: nobody has to be at the machine. Started with nothing due, it
+; asks which tier to run, for instance after a repair: a failed tier is otherwise not due for 30 min.
+; self-test/tick.g starts it by itself with A1, on the HTTP channel (M98.3): after every boot and every
+; self_test_interval hours of operation. The UI then follows it as after a browser reload: the panel
+; comes with the first documented box and goes after the last, with no result and no close button.
+; So with A1 it shows the outcome itself. Never as a blocking prompt: that would hold the HTTP channel,
+; console and jog included, until someone answers. A failed tier runs again every 30 min on an idle
+; machine, which shows the box again. In between, the tile's description names the findings and
+; start.g refuses a job with them. With A1 it writes neither the completion line nor Error: nobody
+; waits for them, and the UI reads the messages of every channel, so they would land in the run of a
+; flow started on the panel meanwhile. report.g has put the findings in the event log.
+; The monthly check is a flow of its own, which needs the operator.
 
 if job.file.fileName != null
   echo "Error: a print job is running - abort!"
   M99
 
-;; **Kurztest:** liest Platinen, Spannungen, Sensoren und Kühlkreis, einige Sekunden.
-;;
-;; **Wochentest:** heizt Bett und Hotend kurz an und lässt die Lüfter laufen, unter 50 °C und ohne
-;; Bewegung, bis zu 4 Minuten. Dafür müssen die Türen zu, die Heizungen aus und die Maschine kalt sein.
-;;
-;; **Monatsprüfung:** mit Ihnen an der Maschine, etwa 15 Minuten, am Ende mit dem NOT-HALT.
-M291 R"Selbsttest" P"Welche Stufe jetzt ausführen?" S4 K{"Kurztest","Wochentest","Monatsprüfung"} F0 J2
-if result != 0             ; J2 leaves input undefined - result must be tested right here
-  echo "Error: self-test cancelled"
-  M99
-var tier = input
+set global.self_test_wanted = false
+var quick = global.self_test_due[0]
+var weekly = global.self_test_due[1]
+var asked = false
+var auto = exists(param.A)
+var problem = ""
+var problem_seconds = 60
 
-; reports errors itself, and a pass ends with the machine halted
-if var.tier == 2
-  M98 P"0:/macros/meltingplot/maintenance/monthly-check" C0
+; nobody at the machine, and a run by hand came first
+if var.auto && !var.quick && !var.weekly
   M99
 
-; a run the tick had started ends now: this macro makes the machine busy (self-test/tick.g)
-while global.self_test_run >= 0 && iterations < 15
-  G4 S1
+if !var.quick && !var.weekly
+  M291 R"Selbsttest" P"Welche Stufe? Kurztest: einige Sekunden. Wochentest: heizt und prüft Lüfter, bis 4 min. Monatsprüfung: mit Ihnen, etwa 15 min." S4 K{"Kurztest","Wochentest","Monatsprüfung"} F0 J2
+  if result != 0             ; J2 leaves input undefined - result must be tested right here
+    echo "Error: self-test cancelled"
+    M99
+  var tier = input
+  ; It reports errors itself. A pass ends with the machine halted and its completion sent by
+  ; self-test/estop-fired.g. It only comes back passed for a firing it found already recorded.
+  if var.tier == 2
+    var monthly_before = global.self_test_done[2]
+    M98 P"0:/macros/meltingplot/maintenance/monthly-check" C0
+    if global.self_test_done[2] != var.monthly_before
+      echo ";; Completed"
+    M99
+  set var.quick = var.tier == 0
+  set var.weekly = var.tier == 1
+  set var.asked = true
 
-var done_before = global.self_test_done[var.tier]
-set global.self_test_manual = var.tier
-set global.self_test_wake = 0
+if var.quick
+  M98 P"0:/sys/meltingplot/self-test/check-quick.g"
 
-;; Der Test läuft. Am Ende zeigt die Maschine das Ergebnis.
-M291 R"Selbsttest läuft" P"Der Test läuft, am Ende erscheint das Ergebnis." S1 T3600
-while global.self_test_manual >= 0 && iterations < 360
-  G4 S1
-set global.self_test_manual = -1
+; A machine that is not fit is not heated up on top, unless the operator asked for exactly that
+if (var.quick || !var.asked) && global.self_test_failed[0] != ""
+  set var.problem = global.self_test_failed[0]
 
-if state.messageBox != null
-  M292
+if var.weekly && var.problem == ""
+  M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
+  if global.self_test_weekly_ready
+    M98 P"0:/sys/meltingplot/self-test/check-weekly.g"
+    if global.result != 0
+      ; short: a door or a job came first, nothing is wrong
+      set var.problem = "Wochentest abgebrochen: Tür, Heizung oder Druckauftrag haben übernommen. Er läuft später erneut."
+      set var.problem_seconds = 10
+    elif global.self_test_failed[1] != ""
+      set var.problem = global.self_test_failed[1]
+  elif !var.quick
+    ; Nothing ran, so nothing passed. Started by the tick, the machine just stopped fitting between
+    ; its look and this one (a door, a heater): the next look tries again.
+    if var.auto
+      M99
+    set var.problem = "Wochentest nicht durchgeführt: Türen schließen, Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus."
 
-var passed = global.self_test_done[var.tier] != var.done_before
-var message = "Bestanden."
-if !var.passed
-  if global.self_test_failed[var.tier] != ""
-    set var.message = "Fehler: " ^ global.self_test_failed[var.tier]
+; A weekly finding of an earlier run still stands and start.g refuses jobs with it: this run has not
+; cleared it. Only an operator who asked for one tier gets that tier's result alone.
+if var.problem == "" && !var.asked && global.self_test_failed[1] != ""
+  set var.problem = global.self_test_failed[1]
+
+if var.problem != ""
+  if var.auto
+    M291 R"Ergebnis Selbsttest" P{var.problem} S1 T{var.problem_seconds}
   else
-    set var.message = "Nicht durchgeführt: Türen schließen, Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus. Liegt der Sollwert des Werkzeugs über 50 °C, erst die Türen prüfen."
+    echo "Error: " ^ var.problem
+  M99
 
-;; {% if state.messageBox %}{{ state.messageBox.message }}{% endif %}
-M291 R"Ergebnis Selbsttest" P{var.message} S2
-
-if !var.passed
-  echo "Error: self-test not passed: " ^ var.message
+if var.auto
+  M291 R"Selbsttest bestanden" P"Der Selbsttest ist bestanden." S1 T5
   M99
 
 ; the flow reached its goal - the CHX 350 UI reports it completed (CLAUDE.md, "Completion")

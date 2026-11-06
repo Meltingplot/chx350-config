@@ -8,8 +8,9 @@
 ;   end) and take the MFM flow-bias sample (filament/mfm-flow-bias.g - OM reads, set and a
 ;   non-blocking M118). A booking skipped in a pause comes at the first tick after the resume.
 ; - every 15 min write the hours of operation (one echo into a file, it never waits for motion)
-; - the self-test (self-test/tick.g - at most one step per tick; while it runs M140, M568, M106,
-;   M118 and M291 S1, otherwise reads)
+; - once a minute work out which self-test tier is due and start the flow on the HTTP channel
+;   (self-test/tick.g - reads, set, M118, M291 S1 and M98.3, which returns once the macro is queued).
+;   The tests do not run here: they are an ordinary flow, a wait here would hold up trigger2.g
 ; The tick re-arms first: the trigger fires only on false -> true, so tick_time has to move on
 ; whatever this macro does after.
 ; Outside a job the tick runs only on firmware whose trigger macros do not make the machine

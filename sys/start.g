@@ -40,16 +40,19 @@ if #global.fan_stalled > 0
 ; a switched-off tier nor a job in the first minute after a boot gets past it.
 if global.self_test_estop_state == 2 || global.self_test_estop_state == 3
   M118 P0 S"Error: the emergency stop did not halt the machine in the monthly check - print job not started"
-  M291 R"NOT-HALT" P"Der NOT-HALT hat bei der Monatsprüfung nicht ausgelöst. Kein neuer Druck, bis die Prüfung bestanden ist." S1 T0
+  M291 R"NOT-HALT" P"Der NOT-HALT hat bei der Monatsprüfung nicht ausgelöst. Kein neuer Druck, bis die Prüfung bestanden ist." S1 T60
   M0
   M99
 
 ; Self-test (self-test/check-quick.g, check-weekly.g): a failed check refuses the job, a running
-; print goes on. The tier runs again every 30 min while it fails, and macro maintenance/self-test
-; runs it at once after a repair. It reads what the last run found, it does not wait for one.
+; print goes on. No quick tier yet since the boot: it runs here, the flow starts a minute after the
+; boot at the earliest and needs DSF 3.7.0+mp.11. The interval 0 switches that off too. Macro maintenance/self-test runs a failed tier again at once
+; after a repair.
+if global.self_test_done[0] < 0 && global.self_test_interval[0] > 0
+  M98 P"0:/sys/meltingplot/self-test/check-quick.g"
 if global.self_test_block_jobs && (global.self_test_failed[0] != "" || global.self_test_failed[1] != "")
   M118 P0 S{"Error: self-test failed (" ^ global.self_test_failed[0] ^ global.self_test_failed[1] ^ ") - print job not started"}
-  M291 R"Selbsttest" P{"Kein neuer Druck, bis der Selbsttest wieder besteht (Makro maintenance/self-test). " ^ global.self_test_failed[0] ^ global.self_test_failed[1]} S1 T0
+  M291 R"Selbsttest nicht bestanden" P{"Kein neuer Druck, bis der Selbsttest wieder besteht (Makro maintenance/self-test). " ^ global.self_test_failed[0] ^ global.self_test_failed[1]} S1 T60
   M0
   M99
 
