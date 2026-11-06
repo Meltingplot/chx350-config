@@ -18,6 +18,8 @@ if state.messageBox != null
     M292
 
 set global.self_test_due[var.tier] = false
+if var.tier == 0
+  set global.self_test_quick_outcome = (global.self_test_found == "") ? 1 : 2
 if global.self_test_found == ""
   set global.self_test_done[var.tier] = global.operating_time_base + state.upTime
   if var.tier > 0

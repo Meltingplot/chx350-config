@@ -5,8 +5,8 @@
 ; page: start
 ; order: 45
 ; visible: "{{ global.self_test_interval[2] > 0 and (global.self_test_done[2] < 0 or (global.operating_time_base + state.upTime - global.self_test_done[2]) / 3600 >= global.self_test_interval[2]) }}"
-; enabled: "{{ state.status == 'idle' and global.machine_is_hot == 2863311530 }}"
-; hint: Erst abkühlen lassen, unter 50 °C
+; enabled: "{{ state.status == 'idle' and global.machine_is_hot == 2863311530 and state.upTime >= global.ota_pending_until }}"
+; hint: Erst abkühlen lassen, unter 50 °C. Nicht während eines Updates
 ; ---
 ; maintenance/monthly-check
 ; Monthly tier of the self-test (CLAUDE.md, "Power-on self-test"), due every
@@ -29,6 +29,13 @@
 
 if job.file.fileName != null
   echo "Error: a print job is running - abort!"
+  M99
+
+; An update comes first (self-test/check-update.g): this flow would hold it up for 15 min, and a
+; flash or reset of the mainboard would end the flow.
+M98 P"0:/sys/meltingplot/self-test/check-update.g"
+if global.self_test_update_running
+  echo "Error: an update is running - try again when its message has gone"
   M99
 
 ; A firing on record although config.g decides it at every boot: config.g ended before it got there.

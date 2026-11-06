@@ -50,7 +50,10 @@ if global.self_test_estop_state == 2 || global.self_test_estop_state == 3
 ; after a repair.
 if global.self_test_done[0] < 0 && global.self_test_interval[0] > 0
   M98 P"0:/sys/meltingplot/self-test/check-quick.g"
-if global.self_test_block_jobs && (global.self_test_failed[0] != "" || global.self_test_failed[1] != "")
+; A weekly finding only refuses here while the tier is not due again: after 30 min this job runs it
+; once more at the end of this file, which also notices a repair.
+M98 P"0:/sys/meltingplot/self-test/check-due.g"
+if global.self_test_block_jobs && (global.self_test_failed[0] != "" || (global.self_test_failed[1] != "" && !global.self_test_due[1]))
   M118 P0 S{"Error: self-test failed (" ^ global.self_test_failed[0] ^ global.self_test_failed[1] ^ ") - print job not started"}
   M291 R"Selbsttest nicht bestanden" P{"Kein neuer Druck, bis der Selbsttest wieder besteht (Makro maintenance/self-test). " ^ global.self_test_failed[0] ^ global.self_test_failed[1]} S1 T60
   M0
@@ -76,3 +79,11 @@ if global.fan_exhaust_until > 0
   set global.fan_exhaust_until = state.upTime
 
 M98 P"0:/sys/meltingplot/ce-declaration/doors/ensure-checked-closed.g"
+
+; A due weekly tier goes in front of the job, also on a warm machine, which it lets cool first. It
+; heats, so it never starts by itself, but a job may wait for it. After the door check: it needs both
+; doors closed.
+M98 P"0:/sys/meltingplot/self-test/weekly-before-job.g"
+if global.result != 0
+  M0
+  M99

@@ -583,7 +583,16 @@ global self_test_wanted = false
 global self_test_can_start = false             ; DSF knows M98.3, tick.g may start the flow (self-test/check-dsf.g, from config.g)
 global self_test_wake = 60                     ; upTime at which the tick looks again. 60 lets the boards report after a boot
 global self_test_weekly_ready = false          ; answer of self-test/check-weekly-ready.g
+global self_test_update_running = false        ; answer of self-test/check-update.g
 global self_test_retry = vector(3, 0)          ; upTime before which a tier is not due again after a failure or an abort
+; Shared with the image (rpi-image-gen), which reads and writes them through the control server. A
+; reset clears both, so neither survives into the next boot.
+; ota_pending_until: upTime until which the image has the machine for an update, 0 = none. Written by
+; mp-dsf-firmware and mp-ota-gate, read by self-test/check-update.g and the flows' tiles.
+; self_test_quick_outcome: the quick tier since the boot or the last update, read by mp-dsf-firmware
+; for its closing message: 0 open, 1 passed, 2 findings, 3 cannot come now (self-test/tick.g).
+global ota_pending_until = 0
+global self_test_quick_outcome = 0
 global self_test_found = ""                    ; findings of the run so far
 global self_test_notified = false              ; the monthly check was announced since the boot
 

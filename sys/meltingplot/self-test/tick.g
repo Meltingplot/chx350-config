@@ -12,20 +12,24 @@ var now = global.operating_time_base + state.upTime
 var wanted_before = global.self_test_wanted
 set global.self_test_wake = state.upTime + 60
 
-; 0 in the interval switches a tier off; a tier that never ran is due at once. A pass in the future
-; means the hour meter lost its file: due as well, it does not wait for the hours to catch up.
-while iterations < 3
-  var age = var.now - global.self_test_done[iterations]
-  var hours = global.self_test_interval[iterations]
-  set global.self_test_due[iterations] = var.hours > 0 && state.upTime >= global.self_test_retry[iterations] && (global.self_test_done[iterations] < 0 || var.age < 0 || var.age / 3600 >= var.hours)
+; An update comes first: nothing is planned, started or announced while it runs. The flow would stand
+; in its way, and any new box cuts the update's notice to 1 s. What is due stays due. The machine has
+; to be tested after an update, so the quick tier comes right after it, whatever its last result was,
+; and mp-dsf-firmware waits for that outcome before its closing message.
+M98 P"0:/sys/meltingplot/self-test/check-update.g"
+if global.self_test_update_running
+  set global.self_test_wanted = false
+  set global.self_test_done[0] = -1
+  set global.self_test_retry[0] = 0
+  set global.self_test_quick_outcome = 0
+  M99
 
-; only on an idle machine: a job or a macro always comes first, and a warm machine simply waits. A
-; machine the quick tier found unfit is not heated up on top.
-var weekly = false
-if state.status == "idle" && global.self_test_due[1] && global.self_test_failed[0] == ""
-  M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
-  set var.weekly = global.self_test_weekly_ready
-set global.self_test_wanted = state.status == "idle" && (global.self_test_due[0] || var.weekly)
+M98 P"0:/sys/meltingplot/self-test/check-due.g"
+
+; Only the quick tier starts by itself, and only on an idle machine: it reads and neither heats nor
+; moves. The weekly tier heats, so it comes with the next job (start.g) or by hand, and the monthly
+; check only by hand (Tim, 2026-11-06).
+set global.self_test_wanted = state.status == "idle" && global.self_test_due[0]
 
 ; Result 1: HTTP is busy, nothing was queued, the next look tries again. Anything worse (the channel
 ; disabled, the file missing) would repeat its error every minute, so it stops until the next boot.
@@ -36,11 +40,19 @@ if global.self_test_wanted && global.self_test_can_start
   var notice = false
   if state.messageBox != null
     set var.notice = state.messageBox.timeout == 0
-  if !var.notice
+  if var.notice
+    if global.self_test_quick_outcome == 0
+      set global.self_test_quick_outcome = 3
+  else
     M98.3 P"0:/macros/meltingplot/maintenance/self-test" A1
     if result > 1
       set global.self_test_can_start = false
       M118 P0 L1 S"Warning: self-test: the flow could not be started - it does not start by itself until the next boot"
+
+; So that mp-dsf-firmware does not wait for a quick tier that cannot come. It is not final: a tier
+; that runs later still writes its outcome (self-test/report.g).
+if global.self_test_quick_outcome == 0 && (global.self_test_interval[0] <= 0 || !global.self_test_can_start)
+  set global.self_test_quick_outcome = 3
 
 ; Needs an operator: only tell, once per boot. Not in the minute the flow is about to start, whose
 ; first step would replace the box at once. Still wanted a minute later, nothing is starting it.

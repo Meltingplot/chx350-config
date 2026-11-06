@@ -2,16 +2,19 @@
 ; Weekly tier of the self-test (CLAUDE.md, "Power-on self-test"), every self_test_interval[1]
 ; hours of operation: does every heater heat, does every fan with a tacho turn? No motion and no
 ; operator, and the temperatures stay below the 50 C that default mode allows (operating-mode/
-; default.g), so it may run before anyone checked the doors. Part of the flow maintenance/self-test,
-; which has checked self-test/check-weekly-ready.g first. Up to 4 min.
-; A door opening, a job or someone else taking a heater over ends the run without a verdict, and it
-; stays due: hands back 1 in global.result then, 0 otherwise, valid on the caller's next line only.
+; default.g), so it may run before anyone checked the doors. Never started by the machine: part of the
+; flow maintenance/self-test by hand, and of start.g with J1. Both have checked
+; self-test/check-weekly-ready.g first. Up to 4 min.
+; A door opening, a job (with J1: the end of the job it runs for) or someone else taking a heater over
+; ends the run without a verdict, and it stays due: hands back 1 in global.result then, 0 otherwise,
+; valid on the caller's next line only.
 ; Heater 0 = bed, heater h = tool h-1, as the idle cutoff in daemon.g. Only the tool's active setpoint
 ; changes and goes back afterwards (self-test/stop-heater.g), the standby one stays.
 
 var count = #tools + 1
 var start = state.upTime
 var aborted = false
+var for_job = exists(param.J)
 var target = vector(var.count, 0)
 var saved = vector(var.count, 0)
 var finished = vector(var.count, false)
@@ -66,7 +69,7 @@ M291 R"Wochentest: Heizungen" P"Wochentest: Hotend und Bett heizen zur Probe, bi
 var running = true
 while var.running && !var.aborted && iterations < 400
   G4 S1
-  if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1 || job.file.fileName != null
+  if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1 || (job.file.fileName != null) != var.for_job
     set var.aborted = true
   set var.running = false
   while iterations < var.count
@@ -111,7 +114,9 @@ if var.aborted
         set global.saved_tool_heater_states[iterations - 1] = "off"
       M98 P"0:/sys/meltingplot/self-test/stop-heater.g" H{iterations} S{var.saved[iterations]}
   M118 P0 L2 S"Self-test: weekly check ended early - door, heater or job took over, it stays due"
-  set global.self_test_retry[1] = state.upTime + 300
+  ; for a job it stays due at once: a job does not start until the tier has run
+  if !var.for_job
+    set global.self_test_retry[1] = state.upTime + 300
   set global.self_test_due[1] = false
   set global.self_test_found = ""
   ; this run's step only, see report.g

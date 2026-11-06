@@ -4,6 +4,8 @@
 ; icon: mdi-clipboard-pulse-outline
 ; page: service
 ; order: 5
+; enabled: "{{ state.status == 'idle' and state.upTime >= global.ota_pending_until }}"
+; hint: Nur im Leerlauf, nicht während eines Updates
 ; ---
 ; maintenance/self-test
 ; The self-test (CLAUDE.md, "Power-on self-test"), an ordinary flow. It runs what is due
@@ -18,22 +20,31 @@
 ; start.g refuses a job with them. With A1 it writes neither the completion line nor Error: nobody
 ; waits for them, and the UI reads the messages of every channel, so they would land in the run of a
 ; flow started on the panel meanwhile. report.g has put the findings in the event log.
-; The monthly check is a flow of its own, which needs the operator.
+; With A1 it runs the quick tier only, which neither heats nor moves. A test that does never starts by
+; itself: the weekly tier comes with the next job (start.g) or by hand, and the monthly check, a flow
+; of its own that needs the operator, only by hand.
 
 if job.file.fileName != null
   echo "Error: a print job is running - abort!"
   M99
 
 set global.self_test_wanted = false
-var quick = global.self_test_due[0]
-var weekly = global.self_test_due[1]
-var asked = false
 var auto = exists(param.A)
+var quick = global.self_test_due[0]
+var weekly = global.self_test_due[1] && !var.auto
+var asked = false
 var problem = ""
-var problem_seconds = 60
+
+; An update comes first, also over a run by hand (self-test/check-update.g). The tick has looked
+; already, this covers the moment since.
+M98 P"0:/sys/meltingplot/self-test/check-update.g"
+if global.self_test_update_running
+  if !var.auto
+    echo "Error: an update is running - try again when its message has gone"
+  M99
 
 ; nobody at the machine, and a run by hand came first
-if var.auto && !var.quick && !var.weekly
+if var.auto && !var.quick
   M99
 
 if !var.quick && !var.weekly
@@ -66,16 +77,11 @@ if var.weekly && var.problem == ""
   if global.self_test_weekly_ready
     M98 P"0:/sys/meltingplot/self-test/check-weekly.g"
     if global.result != 0
-      ; short: a door or a job came first, nothing is wrong
       set var.problem = "Wochentest abgebrochen: Tür, Heizung oder Druckauftrag haben übernommen. Er läuft später erneut."
-      set var.problem_seconds = 10
     elif global.self_test_failed[1] != ""
       set var.problem = global.self_test_failed[1]
   elif !var.quick
-    ; Nothing ran, so nothing passed. Started by the tick, the machine just stopped fitting between
-    ; its look and this one (a door, a heater): the next look tries again.
-    if var.auto
-      M99
+    ; nothing ran, so nothing passed
     set var.problem = "Wochentest nicht durchgeführt: Türen schließen, Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus."
 
 ; A weekly finding of an earlier run still stands and start.g refuses jobs with it: this run has not
@@ -85,7 +91,7 @@ if var.problem == "" && !var.asked && global.self_test_failed[1] != ""
 
 if var.problem != ""
   if var.auto
-    M291 R"Ergebnis Selbsttest" P{var.problem} S1 T{var.problem_seconds}
+    M291 R"Ergebnis Selbsttest" P{var.problem} S1 T60
   else
     echo "Error: " ^ var.problem
   M99
