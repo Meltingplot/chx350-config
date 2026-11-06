@@ -1,5 +1,42 @@
 # tools/
 
+## flow_collisions.py — flow macro collisions
+
+Finds what makes the CHX 350 UI show the wrong text, without a machine. A
+message box carries no file or line, so the UI finds its step by title and S
+mode alone, over every indexed file (see "Flows in the CHX 350 UI" in CLAUDE.md).
+
+```bash
+python3 tools/flow_collisions.py            # check this repository, from any directory
+python3 tools/flow_collisions.py build      # check another tree, numbered or with CRCs too
+python3 tools/flow_collisions.py --strict   # fail on notes as well
+```
+
+| Finding | Level |
+|---|---|
+| The same documented title twice in one file (the UI drops the second `;;` block, whatever the modes) | error |
+| The same documented title in two files, modes overlap | error |
+| A plain M291 with the title of a documented step, modes overlap | error |
+| Two flows with the same front matter `title` | error |
+| The same title as above, but only the S mode tells them apart | note |
+| Two flows with the same `order` on one page (the UI sorts them by title) | note |
+
+Modes overlap when they are equal or when one is an expression (`S{…}`); no `S`
+counts as `S1`, as in RRF. Two plain M291 with the same title are fine: neither
+has a step to be mistaken for. Exit code: 0 clean, 1 findings, 2 no `macros/` and
+`sys/` in the given tree.
+
+**Not checked:** a computed title (`R{…}`) is only known at run time, so the
+summary line counts those instead. Boxes from outside the indexed files (a job
+file, the firmware) cannot be seen either.
+
+It reads what the UI reads: `macros/`, `sys/meltingplot/` and
+`sys/overrides/flows/` down to the UI's depth, plus the files directly in `sys/`.
+The parser follows `parse.ts` and the file selection follows `scan()` in
+`store.ts` (DWC plugin CHX350, `src/plugins/CHX350/flows/`), so a change there
+has to be made here too. Run against the real `parseFlowFile`, it read all 146
+files and 177 prompts of the repo identically (2026-11-06, DWC 01d7501e).
+
 ## gcode_crc.py — RRF line CRCs
 
 Adds and verifies RepRapFirmware line numbers, optionally with a line CRC:
