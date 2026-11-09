@@ -25,9 +25,13 @@ M291 R"Kurztest läuft" P"Die Maschine prüft sich selbst: Platinen, Spannungen,
 ; --- machine not fit for a job: goes into the list ---
 
 ; daemon.g overwrites its cycle time at the end of every iteration (about 100 ms). Comparing two
-; values would not do: two iterations can take the same number of milliseconds.
+; values would not do: two iterations can take the same number of milliseconds. A daemon that left
+; its loop (daemon_reload, macro service-mode) is reopened by the firmware only after 10 s
+; (GCodes.cpp), so a single look after a second reported that gap as a dead daemon (2026-11-09).
+; The wait ends with the first write: a running daemon costs half a second.
 set global.daemon_cycle_time = -1
-G4 S1
+while global.daemon_cycle_time == -1 && iterations < 30
+  G4 P500
 if global.daemon_cycle_time == -1
   set global.self_test_found = global.self_test_found ^ "daemon.g steht; "
 

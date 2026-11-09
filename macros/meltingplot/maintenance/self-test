@@ -30,7 +30,9 @@ if job.file.fileName != null
 
 set global.self_test_wanted = false
 var auto = exists(param.A)
-var quick = global.self_test_due[0]
+; By hand a quick tier with a finding runs again at once. It is not due for 30 min after a failure, and
+; a due weekly tier skips the question below, so the flow could only repeat the old finding (2026-11-09).
+var quick = global.self_test_due[0] || (!var.auto && global.self_test_failed[0] != "")
 var weekly = global.self_test_due[1] && !var.auto
 var asked = false
 var problem = ""
