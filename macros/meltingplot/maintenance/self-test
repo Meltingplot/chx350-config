@@ -76,6 +76,11 @@ if (var.quick || !var.asked) && global.self_test_failed[0] != ""
 
 if var.weekly && var.problem == ""
   M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
+  ; A warm machine runs the test in automatic mode only (check-weekly-ready.g), and by hand the
+  ; operator is here for the door check that brings it. Never with A1: weekly is never set then.
+  if !global.self_test_weekly_ready && ("" ^ global.machine_mode) != "automatic"
+    M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+    M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
   if global.self_test_weekly_ready
     M98 P"0:/sys/meltingplot/self-test/check-weekly.g"
     if global.result != 0
@@ -84,7 +89,7 @@ if var.weekly && var.problem == ""
       set var.problem = global.self_test_failed[1]
   elif !var.quick
     ; nothing ran, so nothing passed
-    set var.problem = "Wochentest nicht durchgeführt: Türen schließen, Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus."
+    set var.problem = "Wochentest nicht durchgeführt: Türen zu, Heizungen und Bauteillüfter aus, Bett höchstens " ^ (heat.heaters[0].max - 9) ^ " °C, Hotend höchstens " ^ (heat.heaters[1].max - 15) ^ " °C."
 
 ; A weekly finding of an earlier run still stands and start.g refuses jobs with it: this run has not
 ; cleared it. Only an operator who asked for one tier gets that tier's result alone.

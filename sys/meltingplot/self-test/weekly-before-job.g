@@ -17,7 +17,7 @@ if global.self_test_update_running
 
 ; Everything off that check-weekly-ready.g asks for. "off" first, as in the monthly check: trigger3.g
 ; must not bring a heater back when automatic mode returns. A setpoint the test could not give back
-; under default mode's 50 C cap goes to 0, the job sets its own temperature anyway.
+; under the heater's limit goes to 0, the job sets its own temperature anyway.
 while iterations < #tools
   if tools[iterations] != null
     if #tools[iterations].heaters > 0
@@ -30,29 +30,45 @@ M140 P0 S-273.15
 while iterations < #global.fan_adjustable
   M106 P{global.fan_adjustable[iterations]} S0
 
+; The test heats a few degrees above wherever the machine stands. Warm, that needs automatic mode,
+; which lifts default mode's 50 C cap (check-weekly-ready.g): in a production hall at 40-45 C the
+; machine never cools below it (2026-11-12). start.g's door check has run, this waits for daemon.g's
+; upgrade. Without automatic mode the job could not start anyway (print/prepare.g).
 var refuse = ""
-M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
-if !global.self_test_weekly_ready
-  ;; Der Wochentest ist fällig und läuft vor diesem Druck. Dafür kühlt die Maschine ab, Heizungen und
-  ;; Bauteillüfter sind aus. Danach läuft der Test, und der Druck startet von selbst.
-  ;;
-  ;; Öffnen Sie eine Tür, bricht das den Druckauftrag ab.
-  ;;
-  ;; {% for h in heat.heaters %}{% if h %}
-  ;; - {{ "Bett" if loop.index0 == 0 else "Hotend" }}: **{{ h.current | round(1) }} °C**, Ziel unter {{ 40 if loop.index0 == 0 else 35 }} °C
-  ;; {% endif %}{% endfor %}
-  M291 R"Wochentest: Abkühlen" P"Der Wochentest läuft vor dem Druck. Die Maschine kühlt ab, danach startet alles von selbst. Tür öffnen bricht den Druckauftrag ab." S1 T7200
+M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/wait-automatic.g"
+if global.result != 0
+  set var.refuse = "Automatikbetrieb nicht erreicht: Wochentest und Druckauftrag abgebrochen. Der Test läuft beim nächsten Start."
+else
+  ; Cooling is left only for a heater too close to its limit for the test's target, e.g. a bed
+  ; preheated above 111 C. The fans may speed it up (2026-11-12), the test and the job start them
+  ; from off again.
+  M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g" F1
+  if !global.self_test_weekly_ready
+    ;; Der Wochentest ist fällig und läuft vor diesem Druck. Hotend oder Bett sind dafür zu heiß:
+    ;; die Maschine kühlt erst ab, die Heizungen sind aus, die Bauteillüfter laufen mit voller
+    ;; Drehzahl. Danach läuft der Test, und der Druck startet von selbst.
+    ;;
+    ;; Öffnen Sie eine Tür, bricht das den Druckauftrag ab.
+    ;;
+    ;; {% for h in heat.heaters %}{% if h %}
+    ;; - {{ "Bett" if loop.index0 == 0 else "Hotend" }}: **{{ h.current | round(1) }} °C**, Ziel höchstens {{ h.max - (9 if loop.index0 == 0 else 15) }} °C
+    ;; {% endif %}{% endfor %}
+    M291 R"Wochentest: Abkühlen" P"Der Wochentest läuft vor dem Druck. Die Maschine kühlt ab, danach startet alles von selbst. Tür öffnen bricht den Druckauftrag ab." S1 T7200
+    while iterations < #global.fan_adjustable
+      M106 P{global.fan_adjustable[iterations]} S1
 
-var start = state.upTime
-while !global.self_test_weekly_ready
-  if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1
-    set var.refuse = "Tür geöffnet: Wochentest und Druckauftrag abgebrochen. Der Test läuft beim nächsten Start."
-    break
-  if state.upTime - var.start > 7200
-    set var.refuse = "Nach 2 Stunden nicht bereit für den Wochentest: Heizungen aus, Bett unter 40 °C, Hotend unter 35 °C, Bauteillüfter aus."
-    break
-  G4 S5
-  M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g"
+  var start = state.upTime
+  while !global.self_test_weekly_ready
+    if sensors.gpIn[2].value != 1 || sensors.gpIn[3].value != 1
+      set var.refuse = "Tür geöffnet: Wochentest und Druckauftrag abgebrochen. Der Test läuft beim nächsten Start."
+      break
+    if state.upTime - var.start > 7200
+      set var.refuse = "Nach 2 Stunden nicht bereit für den Wochentest: Heizungen aus, Bett höchstens " ^ (heat.heaters[0].max - 9) ^ " °C, Hotend höchstens " ^ (heat.heaters[1].max - 15) ^ " °C."
+      break
+    G4 S5
+    M98 P"0:/sys/meltingplot/self-test/check-weekly-ready.g" F1
+  while iterations < #global.fan_adjustable
+    M106 P{global.fan_adjustable[iterations]} S0
 
 if var.refuse == ""
   M98 P"0:/sys/meltingplot/self-test/check-weekly.g" J1

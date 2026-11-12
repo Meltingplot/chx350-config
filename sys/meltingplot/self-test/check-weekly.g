@@ -1,10 +1,11 @@
 ; self-test/check-weekly.g
 ; Weekly tier of the self-test (CLAUDE.md, "Power-on self-test"), every self_test_interval[1]
 ; hours of operation: does every heater heat, does every fan with a tacho turn? No motion and no
-; operator, and the temperatures stay below the 50 C that default mode allows (operating-mode/
-; default.g), so it may run before anyone checked the doors. Never started by the machine: part of the
-; flow maintenance/self-test by hand, and of start.g with J1. Both have checked
-; self-test/check-weekly-ready.g first. Up to 4 min.
+; operator. Each heater heats a few degrees above where it stands, so the test needs no cold machine:
+; cold, the targets stay below the 50 C that default mode allows (operating-mode/default.g) and it may
+; run before anyone checked the doors, warm, it needs automatic mode (self-test/check-weekly-ready.g).
+; Never started by the machine: part of the flow maintenance/self-test by hand, and of start.g with J1.
+; Both have checked self-test/check-weekly-ready.g first. Up to 4 min.
 ; A door opening, a job (with J1: the end of the job it runs for) or someone else taking a heater over
 ; ends the run without a verdict, and it stays due: hands back 1 in global.result then, 0 otherwise,
 ; valid on the caller's next line only.
@@ -28,14 +29,15 @@ while iterations < var.count
     set var.target[0] = ceil(heat.heaters[0].current) + 4
     M140 P0 S{var.target[0]}
   else
+    ; at least 45 C: above 40 C the thermostat starts the radiators (config.g)
     set var.saved[iterations] = tools[iterations - 1].active[0]
-    set var.target[iterations] = 45
-    M568 P{iterations - 1} S45 A2
+    set var.target[iterations] = max(45, ceil(heat.heaters[iterations].current) + 10)
+    M568 P{iterations - 1} S{var.target[iterations]} A2
 while iterations < #global.fan_adjustable
   M106 P{global.fan_adjustable[iterations]} S1
 
-;; Die Bauteillüfter laufen kurz mit voller Drehzahl. Nichts bewegt sich, die Maschine bleibt
-;; unter 50 °C. Öffnen Sie eine Tür, bricht sie den Test ab.
+;; Die Bauteillüfter laufen kurz mit voller Drehzahl. Nichts bewegt sich. Öffnen Sie eine Tür,
+;; bricht sie den Test ab.
 ;;
 ;; {% for f in fans %}{% if f and loop.index0 < 4 and f.rpm >= 0 %}
 ;; - {{ f.name }}: **{{ f.rpm }} U/min**
@@ -53,8 +55,8 @@ while iterations < min(#fans, 4)
 while iterations < #global.fan_adjustable
   M106 P{global.fan_adjustable[iterations]} S0
 
-;; Hotend und Bett heizen zur Probe, bis zu 4 Minuten. Nichts bewegt sich, die Maschine bleibt
-;; unter 50 °C. Öffnen Sie eine Tür, bricht sie den Test ab.
+;; Hotend und Bett heizen zur Probe einige Grad über ihre jetzige Temperatur, bis zu 4 Minuten.
+;; Nichts bewegt sich. Öffnen Sie eine Tür, bricht sie den Test ab.
 ;;
 ;; {% for h in heat.heaters %}{% if h %}
 ;; - {{ "Bett" if loop.index0 == 0 else "Hotend" }}: **{{ h.current | round(1) }} °C** von {{ h.active }} °C
@@ -62,10 +64,10 @@ while iterations < #global.fan_adjustable
 ;; {% for f in fans %}{% if f and loop.index0 >= 4 %}
 ;; - {{ f.name }}: **{{ f.rpm }} U/min**
 ;; {% endif %}{% endfor %}
-M291 R"Wochentest: Heizungen" P"Wochentest: Hotend und Bett heizen zur Probe, bis zu 4 Minuten. Nichts bewegt sich, unter 50 °C." S1 T3600
+M291 R"Wochentest: Heizungen" P"Wochentest: Hotend und Bett heizen zur Probe um einige Grad, bis zu 4 Minuten. Nichts bewegt sich." S1 T3600
 
-; Bed: 3 C rise in 240 s. Hotend: 44 C in 90 s, then 5 s longer, because above 40 C the thermostat
-; has to start the radiators (config.g).
+; Bed: 3 C rise in 240 s. Hotend: within 1 C of its target in 90 s, then 5 s longer, because above
+; 40 C the thermostat has to start the radiators (config.g).
 var running = true
 while var.running && !var.aborted && iterations < 400
   G4 S1
