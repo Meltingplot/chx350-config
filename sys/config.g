@@ -1,4 +1,4 @@
-; Configuration file for Duet 3 (firmware version 3.6.1)
+; Configuration file for Duet 3 (RepRapFirmware 3.6.3, DuetSoftwareFramework 3.6.4)
 ; executed by the firmware on start-up
 
 M98 P"0:/sys/meltingplot/globals"                       ; Load Global Variables
