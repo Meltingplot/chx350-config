@@ -40,6 +40,9 @@
 ; that fails the scan - raising the current would only work through every current up to 31,
 ; the bed 0.5 mm further away each time.
 ; The back-off keeps the current; an invalid reading there fails the scan.
+; Each step takes the median of three board reports at rest. Reports that spread wider than
+; 10 x noise (close to the bed: half the steepest rise) fail the scan - the reading itself
+; jumps, a coil, cable or connector fault, and no Z0 found with it could be trusted.
 ; With global.debug every reading is echoed - the curve to look at when a scan fails.
 ; The drive current and reading offset it leaves set are scan values: the caller
 ; calibrates both modes afterwards (z-probe/calibrate.g).
@@ -80,6 +83,7 @@ var v = 0                                        ; their median
 var d = 0                                        ; rise against the step before
 var collapsed = false
 var dead = true
+var dmax = 0                                     ; steepest rise of the approach since the last drive current change
 M400
 M564 S0                                          ; soft limits off: the contact can lie below Z0 of the frame
 G1 Z{param.S} F600
@@ -113,6 +117,10 @@ if var.error == ""
     G4 P250
   if var.hi >= 999999 || var.lo <= 0
     set var.error = "SZP reading unstable at the scan start"
+  elif var.hi - var.lo > 20
+    ; a quiet probe spreads 2-10 counts over five reports (2026-11-17); a jump here would set
+    ; every threshold below so high that the approach could no longer see the contact
+    set var.error = "SZP reading jumps at rest by " ^ (var.hi - var.lo) ^ " counts at the scan start Z" ^ param.S ^ " - check coil, cable and connector"
   else
     set var.noise = max(var.hi - var.lo, 3)
 
@@ -123,7 +131,6 @@ var z_knee = 1000                                ; contact found by the approach
 if var.error == ""
   var have_prev = false                          ; is there a reading at the step before, with this current?
   var prev = 0                                   ; reading at the step before
-  var dmax = 0                                   ; steepest rise since the last drive current change
   var flat_z = 1000                              ; start of a step whose rise collapsed, 1000 = none
   var flat_d = 0                                 ; rise of that step
   var alive = false                              ; has the reading proven that it responds?
@@ -176,6 +183,15 @@ if var.error == ""
       set var.dmax = 0
       set var.flat_z = 1000
       continue
+    ; At rest the three reports agree within the noise, close to the bed within what the bed
+    ; still settles after the step - a fraction of the steepest rise (up to 54 counts at a
+    ; rise of 119, 2026-11-17). A wider spread is the reading itself jumping: the 3.6 machine
+    ; of 2026-11-17 fell by 62 counts within 0.5 s at rest, 0.8 mm at that distance, and an
+    ; amplitude error came at a reading the same drive current read valid on the next run.
+    ; Whatever the scan made of such a step, Z0 could not be trusted.
+    if max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3) > {max(10 * var.noise, 0.5 * var.dmax)}
+      set var.error = "SZP reading jumps at rest by " ^ (max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)) ^ " counts at Z" ^ var.z ^ " - check coil, cable and connector"
+      break
     set var.v = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
     if global.debug
       echo "scan-contact: Z " ^ var.z ^ " reading " ^ var.v ^ " (" ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ ") current " ^ var.current
@@ -244,7 +260,11 @@ if var.error == ""
       ; this current read valid down to the contact, and the bed moves away from it
       set var.error = "SZP reading invalid at Z" ^ var.z ^ " while backing off - probe cable or coil broken?"
       break
-    set var.v = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
+    if max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3) > {max(10 * var.noise, 0.5 * var.dmax)}
+      ; as in the approach: a jump at rest, not the nozzle lifting off
+      set var.error = "SZP reading jumps at rest by " ^ (max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)) ^ " counts at Z" ^ var.z ^ " while backing off - check coil, cable and connector"
+      break
+    set var.v =var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
     if global.debug
       echo "scan-contact: back-off Z " ^ var.z ^ " reading " ^ var.v ^ " (" ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ ")"
     if var.v > var.vmax
