@@ -102,7 +102,7 @@ M593 P"zvd" F34 S0.07                                   ; cancel ringing at 34Hz
 
 ; Axis Limits
 M208 X0 Y0 Z0 U0 S1                                     ; set axis minima
-M208 X880 Y422 Z945 U422 S0                             ; set axis maxima
+M208 X880 Y422 Z945 U422 S0                             ; set axis maxima - this machine's measured Z max follows after M501
 
 ; Endstops
 M574 X2 S3                                              ; configure sensorless endstop on high end on X
@@ -188,5 +188,9 @@ M280 P6 S100  ; set 104deg servo position on GPIO port 1
 M929 P"0:/eventlog.log" S2                              ; Enable Event Logging
 
 M501                                                    ; load saved parameters from non-volatile memory
+; this machine's Z max, measured by calibrate_z_height_automatic - after M501, whose
+; config-override.g may still hold an M208 Z from the old set_new_z_height (G1 H3 + M500)
+if fileexists("0:/sys/meltingplot/z_axis_max.g")
+  M98 P"0:/sys/meltingplot/z_axis_max.g"
 M98 P"0:/sys/meltingplot/machine-override"              ; Load Machine specific overrides
 M98 P"0:/sys/meltingplot/ce-declaration/ce-declaration.g" ; Load CE Requirements

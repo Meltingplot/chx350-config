@@ -10,10 +10,13 @@
 ; The contact comes from z-probe/scan-contact.g: the bed approaches the nozzle until the
 ; probe reading stops rising, then backs off until it falls again - there the nozzle lifts
 ; off, Z0. It replaces the Z height gauge. The first cold scan runs in the frame align_z_axis
-; leaves (bed at its lower stop = M208's Z max), where the contact lies within reach of
-; homez.g's touch probe on every machine that homes: no deeper than Z-2.1 (Z min - dive
-; height + touch H), higher by what a longer nozzle or a thicker plate takes off the travel.
-; It gives bed.g the frame its touch probes need.
+; leaves (bed at its lower stop = M208's Z max). There the contact lies near Z0: higher by
+; what a longer nozzle or a thicker plate takes off the travel, lower by what a worn nozzle
+; or a thin print surface adds - a 3.6 machine with both had its contact at Z-3.53
+; (2026-11-17). It gives bed.g the frame its touch probes need, and it measures this
+; machine's Z max - the old one less where the contact lay - which the macro stores
+; (sys/meltingplot/z_axis_max.g, loaded by config.g after M501): homez.g aligns to it,
+; so its touch probe (dive from Z1.9, end at Z-2.1) finds the contact near Z0 again.
 ; Levelling moves the bed at the centre (G32 also corrects the mean), so a second cold scan
 ; sets the Z0 the cold calibration uses. The warm scan runs in the frame of the cold contact;
 ; no levelling follows it.
@@ -61,12 +64,17 @@ M291 R"Düse heizt auf · kalt" P"Die Düse heizt auf 250 °C." S1 T3600
 M116 ; wait for heaters
 
 M291 R"Kontakt suchen · kalt" P"Die Düse wird gereinigt, dann fährt das Bett an die Düse, bis die Sonde den Kontakt erkennt." S1 T3600
-; the contact lies near Z0 of the aligned frame - up to +5 for a thick plate (glass), down to
-; Z-2.1 where homez.g's touch probe ends: start 3 mm above the highest, never below Z-2.5
-M98 P"0:/sys/meltingplot/z-probe/scan-contact.g" S8 L-2.5
+; the contact lies near Z0 of the aligned frame - up to +5 for a thick plate (glass), at
+; Z-3.53 with a worn nozzle on a thin print surface (2026-11-17): start 3 mm above the
+; highest, never below Z-4.5 - the knee needs two more steps, a drive current change 0.5 mm,
+; and the nozzle keeps wearing
+M98 P"0:/sys/meltingplot/z-probe/scan-contact.g" S8 L-4.5
 if global.result != 0
   M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g"
   M99
+; align_z_axis put M208's Z max one millimetre above the lower stop, the scan put Z0 on the
+; contact: this machine's Z max is the old one less where the contact lay in that frame
+var z_max = move.axes[2].max - global.szp_scan_contact_z
 
 M291 R"Bett ausrichten · kalt" P"Das Druckbett wird an vier Punkten angetastet und ausgerichtet." S1 T3600
 ; level the bed in the frame of the contact just found: bed.g's touch probes dive to Z1.9 and
@@ -85,6 +93,13 @@ if global.result != 0
   echo "Error: abort - unable to align bed"
   M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g"
   M99
+
+; bed.g's touch probes found the bed in the frame of the first contact, so that contact holds:
+; store the Z max and set it now - from the next homing on homez.g aligns to it
+echo "Z axis max " ^ move.axes[2].max ^ " -> " ^ var.z_max
+M208 Z{var.z_max} S0
+echo >"0:/sys/meltingplot/z_axis_max.g" "; Z axis max of this machine, measured by calibrate_z_height_automatic - machine-local"
+echo >>"0:/sys/meltingplot/z_axis_max.g" "M208 Z" ^ var.z_max ^ " S0"
 
 M291 R"Kontakt nachmessen · kalt" P"Die Düse wird gereinigt, dann sucht das Bett den Kontakt im ausgerichteten Bett erneut." S1 T3600
 ; the levelling moved the centre by the mean of the touch heights, tenths of a millimetre, and
@@ -139,4 +154,4 @@ if global.result != 0
 ; close the last progress box (M291 S1 T3600 above) - it would stay open for its hour otherwise
 if state.messageBox != null
   M292
-echo "Finished successful - szp_touch_z_offset " ^ global.szp_touch_z_offset
+echo "Finished successful - szp_touch_z_offset " ^ global.szp_touch_z_offset ^ ", Z axis max " ^ move.axes[2].max

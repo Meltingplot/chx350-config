@@ -116,6 +116,7 @@ global z_motor_stall_time = 0
 global z_motor_stall_time_max = 5
 global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)
 global szp_warm_threshold = 40           ; temperature (°C) above which warm calibration is used for scanning Z-probe
+global szp_scan_contact_z = 0            ; z-probe/scan-contact.g: the contact in the Z frame it scanned in (before its G92), valid right after a successful scan
 
 ; machine state
 global machine_mode = "default"

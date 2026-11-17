@@ -44,7 +44,8 @@
 ; The drive current and reading offset it leaves set are scan values: the caller
 ; calibrates both modes afterwards (z-probe/calibrate.g).
 ; Returns global.result 0 with Z = 0 at the contact, 1 on failure (bed 5 mm lower, Z frame
-; unchanged). Expects X, Y, U and Z homed and the nozzle hot.
+; unchanged). On success global.szp_scan_contact_z holds where the contact lay in the frame
+; before - read it right after the call. Expects X, Y, U and Z homed and the nozzle hot.
 
 set global.result = 1                            ; every exit before the datum is set is a failure
 if !exists(param.S) || !exists(param.L) || param.L >= param.S
@@ -280,4 +281,5 @@ G1 Z{var.z_contact + 1} F600
 M400
 G92 Z{move.axes[2].userPosition - var.z_contact} ; Z = 0 where the nozzle lifts off the bed
 M564 S1                                          ; soft limits on again
+set global.szp_scan_contact_z = var.z_contact    ; the contact in the frame before the G92
 set global.result = 0
