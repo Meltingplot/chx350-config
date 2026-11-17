@@ -59,9 +59,9 @@ global filament_broken_profile = ""          ; profile name captured by the watc
 global filament_temp_active = 0              ; extrusion/load temperature
 global filament_temp_standby = 0             ; standby temperature
 global filament_temp_unload = 0              ; unload temperature (0 = same as active)
-global mfmbackoff = 3
 global ignoreMFMevents = false
-global lastMFMBackoffCheck = 0
+global mfm_error_count = 0                ; tolerated P=4/P=5 errors of the current sequence (0..3)
+global mfm_error_time = 0                 ; upTime of the last P=4/P=5 error
 
 ; MFM false positive detection
 global mfm_last_pct = null                ; previous lastPercentage reading
@@ -83,11 +83,6 @@ global mfm_esteps_drift_since = 0         ; upTime when the current settle windo
 global mfm_esteps_drift_avg = 0           ; avgPercentage at the start of the settle window (flatness reference)
 global mfm_esteps_suggested = 0           ; bounded (±5%) target steps/mm computed by the detector (0 = none pending)
 global mfm_esteps_baseline = 0.0          ; e-steps captured before the correction was applied (0 = not applied; for print_end restore)
-; heater PWM tracking for extrusion verification
-global mfm_pwm_min = 0.0                  ; min avgPwm in current window
-global mfm_pwm_max = 0.0                  ; max avgPwm in current window
-global mfm_pwm_range = 0.0                ; computed range from last complete window
-global mfm_pwm_window_start = 0           ; PWM window start time
 
 ; pause/resume re-prime bookkeeping: pause_extruder is the extruder drive of the tool
 ; active at pause (-1 = paused without tool), pause_extruder_pos its position counter

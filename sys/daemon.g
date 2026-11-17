@@ -188,9 +188,10 @@ while state.status != "halted" && global.daemon_reload == false
       set global.mfm_esteps_check_time = var.now
       ; cache avg for atomicity — used in the gate, the math, and the message
       var avg = sensors.filamentMonitors[0].avgPercentage
-      ; mfmbackoff != 3 ⇒ speed is reduced, which itself depresses the reading — that avg is not a
-      ; valid flow-bias sample, so clear the drift window and only accumulate drift at full speed.
-      if var.avg == null || global.mfmbackoff != 3 || (var.avg >= 97 && var.avg <= 103)
+      ; speedFactor < 1 ⇒ the operator lowered the speed (M220), which itself depresses the reading -
+      ; that avg is not a valid flow-bias sample, so clear the drift window and only accumulate drift
+      ; at full speed.
+      if var.avg == null || move.speedFactor < 1 || (var.avg >= 97 && var.avg <= 103)
         set global.mfm_esteps_drift_since = 0
       elif global.mfm_esteps_drift_since == 0 || abs(var.avg - global.mfm_esteps_drift_avg) > 3
         ; (re)start the settle window: drift just began, or avg is still moving (not settled)
@@ -208,27 +209,11 @@ while state.status != "halted" && global.daemon_reload == false
         set global.mfm_esteps_suggested = max(var.lo, min(var.hi, var.ideal))
         set global.mfm_esteps_done = true
         M118 P3 S{"MFM flow bias " ^ var.avg ^ "% - recalibrate e-steps to ~" ^ global.mfm_esteps_suggested}
-    if (var.now - global.mfm_pwm_window_start) > 10
-      set global.mfm_pwm_range = global.mfm_pwm_max - global.mfm_pwm_min
-      set global.mfm_pwm_min = heat.heaters[1].avgPwm
-      set global.mfm_pwm_max = heat.heaters[1].avgPwm
-      set global.mfm_pwm_window_start = var.now
-    else
-      set global.mfm_pwm_min = min(global.mfm_pwm_min, heat.heaters[1].avgPwm)
-      set global.mfm_pwm_max = max(global.mfm_pwm_max, heat.heaters[1].avgPwm)
     if (var.now - global.mfm_last_check_time) >= 0.5 && global.mfm_suppress_until == 0
       set global.mfm_last_check_time = var.now
       ; var.pct cached for atomicity — branches/writeback all need same value
       var pct = sensors.filamentMonitors[0].lastPercentage
       if var.pct != null && var.pct != global.mfm_last_pct
-        if global.mfmbackoff < 3 && var.pct > 80 && var.pct < 150
-          ; reading recovered on its own → restore full speed early (the unconditional
-          ; time-based restore below is the fallback that breaks the reduced-speed deadlock)
-          if global.debug
-            echo "MFM: reading normal (" ^ {var.pct} ^ "%) — fast-track speed restore"
-          M220 S100
-          set global.mfmbackoff = 3
-          set global.lastMFMBackoffCheck = var.now
         if global.mfm_error_extruder_ref != null
           if var.pct > 80 && var.pct < 150
             if global.mfm_normal_since == 0
@@ -252,30 +237,13 @@ while state.status != "halted" && global.daemon_reload == false
             if global.mfm_swing_count == 1
               set global.mfm_suppress_until = var.now + 15
               set global.ignoreMFMevents = true
-              M220 S100
-              set global.mfmbackoff = 3
             elif global.mfm_swing_count >= 2
               if global.debug
                 echo "MFM: oscillation detected — suppressing for 60s"
               set global.mfm_suppress_until = var.now + 60
               set global.ignoreMFMevents = true
               set global.mfm_swing_count = 0
-              M220 S100
-              set global.mfmbackoff = 3
         set global.mfm_last_pct = var.pct
-    ; Unconditional time-based speed restore (replaces the reading-gated stepped ramp). Reduced
-    ; speed itself depresses the MFM reading, so waiting for the reading to recover deadlocks the
-    ; restore — jump straight back to 100% a fixed time after the last backoff, regardless of the
-    ; (depressed) reading. Runs every cycle, independent of the 0.5s sampling gate.
-    if global.mfmbackoff < 3 && (var.now - global.lastMFMBackoffCheck) >= 30
-      M220 S100
-      set global.mfmbackoff = 3
-      set global.lastMFMBackoffCheck = var.now
-  elif global.mfmbackoff < 3
-    ; not printing — restore full speed immediately, ready for the next job
-    M220 S100
-    set global.mfmbackoff = 3
-    set global.lastMFMBackoffCheck = var.now
 
   if global.door_left_open == false && global.door_right_open == false && global.door_left_switch_checked == true && global.door_right_switch_checked == true
     if global.machine_mode != "automatic"
