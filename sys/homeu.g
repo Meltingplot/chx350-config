@@ -12,6 +12,10 @@
 ; So we set H to 185 to be sure of hitting the endstop
 ; 1 rev is 40mm so 185 steps/sec is 185/200 * 40 = 37 mm/sec * 60 = 2220 mm/min
 
+; no homing while config.g runs - see CLAUDE.md, "Homing only after the start"
+if state.status == "starting"
+  abort "Error: homing refused - the machine is still starting (config.g)"
+
 set global.result = 0
 
 M98 P"0:/sys/meltingplot/ensure_safety"

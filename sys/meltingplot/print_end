@@ -30,9 +30,10 @@ if global.has_exhaust_fan
 ; Restore e-steps if filament-error.g applied a flow-bias correction this print — no silent
 ; cross-print leak; each print re-detects and re-applies the bounded correction from scratch.
 ; MUST run BEFORE the M400/G4 S1 settle below: M92 rewrites the extruder motor position from
-; the rescaled step endpoint (AdjustEndpoint: lrintf(steps * ratio), float-rounded), so the
-; reported move.extruders[].position shifts by an epsilon the daemon's exact-compare motion
-; tracker reads as extruder movement. Placed after the settle, that "movement" lands inside
+; the movement state's endpoint (AdjustEndpoint -> Move::ChangeSingleEndpointAfterHoming), so
+; the reported move.extruders[].position jumps - to 0 in every M92 E the QA journals recorded
+; (2026-09-30, 10-02, 3.7 branch) - and the daemon's exact-compare motion tracker reads that as
+; extruder movement. Placed after the settle, that "movement" lands inside
 ; the daemon's 0.25s motion window right as the switch_checked flags are cleared at the end
 ; of this file → unsafe-state M112 at print end (happened 2026-08-22). Before the settle,
 ; the G4 S1 lets the window expire while the flags are still true (automatic branch, harmless).
@@ -48,11 +49,7 @@ set global.mfm_suppress_until = 0
 set global.mfm_swing_count = 0
 set global.mfm_last_pct = null
 set global.mfm_window_start = 0
-set global.mfm_pwm_min = 0.0
-set global.mfm_pwm_max = 0.0
-set global.mfm_pwm_range = 0.0
-set global.mfm_pwm_window_start = 0
-set global.mfmbackoff = 3
+set global.mfm_error_count = 0
 set global.ignoreMFMevents = false
 set global.mfm_error_extruder_ref = null
 set global.mfm_normal_since = 0

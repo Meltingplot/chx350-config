@@ -2,6 +2,10 @@
 ; called to home the Y axis
 ;
 
+; no homing while config.g runs - see CLAUDE.md, "Homing only after the start"
+if state.status == "starting"
+  abort "Error: homing refused - the machine is still starting (config.g)"
+
 set global.result = 0
 
 M98 P"0:/sys/meltingplot/ensure_safety"

@@ -1,4 +1,4 @@
-; Configuration file for Duet 3 (firmware version 3.6.1)
+; Configuration file for Duet 3 (RepRapFirmware 3.6.4, DuetSoftwareFramework 3.6.4)
 ; executed by the firmware on start-up
 
 M98 P"0:/sys/meltingplot/globals"                       ; Load Global Variables
@@ -97,7 +97,7 @@ M83                                                     ; ...but relative extrud
 
 M98 P"0:/sys/meltingplot/ce-declaration/operating-mode/default.g"
 
-M593 P"mzv" F32.8 S0.07                                 ; cancle ringing at 37Hz zvd will cover a range from around 20 - 60 hz
+M593 P"zvd" F34 S0.07                                   ; cancel ringing at 34Hz, zvd covers a range from around 20 - 60 hz
                                                         ; do not use zvddd, ei2 or ei3 as the TOOL1LC can not handle the load of it in most cases.
 
 ; Axis Limits
