@@ -6,7 +6,7 @@ M98 P"0:/sys/meltingplot/ensure_safety"
 
 ; Re-prime deficit of the melt zone (see below), read BEFORE T R1: the tool re-select runs
 ; M703, whose e-steps file sends M92 E, and every M92 E sets move.extruders[].position to 0
-; (M92 -> AdjustEndpoint -> Move::ChangeSingleEndpointAfterHoming, the same in RRF 3.6.3;
+; (M92 -> AdjustEndpoint -> Move::ChangeSingleEndpointAfterHoming, the same in RRF 3.6.4;
 ; seen on the 3.7 branch at every resume of job 20261002-154706 and at an unchanged
 ; 801 steps/mm in job 20260930-075116). Read after it, peak - 0 clamped to the full 12.7 mm
 ; whatever had been purged. A position more than 30 mm below the pause snapshot means the
