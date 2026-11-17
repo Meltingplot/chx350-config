@@ -30,6 +30,10 @@ Fan numbering follows the slicer convention so a slicer can never address an int
 
 `start.g` → `print_start` (door checks → homing → bed leveling → nozzle clean → prime) → print → `stop.g` → `print_end` (cleanup, safety reset)
 
+### Homing only after the start
+
+RRF and DSF accept codes on every other channel while `config.g` runs: `RunStartupFile` spins all channels until the file ends (`RepRap.cpp`, RRF 3.6.1), and DSF holds nothing back (`SetExecutingConfig` only counts the running start-up files, DSF 3.6.1). A G28 from DWC, PanelDue or USB would home on drives, closed loop, endstops and a door interlock that are not configured yet, possibly before `sys/meltingplot/globals` declared anything, and `daemon.g` only starts after `config.g`. Every homing file (`homeall.g`, `homex.g`, `homey.g`, `homeu.g`, `homez.g`) therefore refuses as its first statement while `state.status` reads `"starting"` (the status while the firmware processes `config.g`, `RepRap::GetStatusIndex`). It refuses with `abort`, not `M99`: `global.result` may not exist yet to report the refusal, and `abort` also ends the caller (`bed.g`, `homez.g`, a macro or job that sent the G28), which must not move on an axis that was not homed. During the start there is no running print for it to kill, so the abort ban of the filament path (which homes in `load_filament_sensorless`) is not touched. A new homing file gets the same guard.
+
 ### Key Directories
 
 - **`sys/`** — System config, firmware hooks (`start.g`, `stop.g`, `pause.g`, `resume.g`, `homeall.g`, etc.), and the `meltingplot/` subsystem
