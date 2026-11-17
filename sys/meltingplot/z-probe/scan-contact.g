@@ -17,7 +17,9 @@
 ; Back-off, 0.01 mm steps down from there: while the nozzle still presses on the bed the
 ; reading stays on its plateau. The first step that falls clearly below it, confirmed by the
 ; next one, is where the nozzle lifts off - that is Z0. Unlike the approach's knee it does
-; not depend on how soft the contact is. Approach and back-off must agree within 0.15 mm.
+; not depend on how soft the contact is. Approach and back-off must agree within 0.1 mm: clean
+; scans agree within 0.01-0.06; a warm scan of 2026-11-17 took a drifting reading for the
+; lift-off at its first back-off step, 0.137 off its knee, and put Z0 0.15 mm too deep.
 ; Why not RRF's touch mode: the SZP board takes three invalid readings in a row as a touch
 ; (TouchMode::ProcessReading), so a G30 needs a drive current that stays valid down to the
 ; bed - which is what the calibration is still looking for - and where a touch stops is what
@@ -283,7 +285,7 @@ if var.error == ""
     set var.z = var.z + var.fine
     G1 Z{var.z} F300
 
-if var.error == "" && abs(var.z_contact - var.z_knee) > 0.15
+if var.error == "" && abs(var.z_contact - var.z_knee) > 0.1
   set var.error = "approach (Z" ^ var.z_knee ^ ") and back-off (Z" ^ var.z_contact ^ ") disagree"
 
 M400
