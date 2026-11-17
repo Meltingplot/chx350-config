@@ -54,9 +54,10 @@ if param.P == 5
       echo "MFM: P=5 too much movement (sensor " ^ param.D ^ ")"
 
 ; --- Common error tolerance / pause / auto-recovery for P=4 and P=5 ---
-; The first 3 errors within 30 mm of extrusion are only counted - one segment the MFM
-; misreads must not pause the print. The speed is never lowered: a reduced speed makes the
-; MFM read lower still, the former M220 backoff made the errors worse (CLAUDE.md, MFM).
+; P=4 pauses at once. For P=5 the first 3 errors within 30 mm of extrusion are only
+; counted - one segment the MFM misreads must not pause the print. The speed is never
+; lowered: a reduced speed makes the MFM read lower still, the former M220 backoff made the
+; errors worse (CLAUDE.md, MFM).
 if param.P == 4 || param.P == 5
     ; a sequence ends 30 s after its last error - the next error starts a fresh count
     if state.upTime - global.mfm_error_time >= 30
@@ -70,16 +71,24 @@ if param.P == 4 || param.P == 5
 
     var error_dist = abs(move.extruders[0].position - global.mfm_error_extruder_ref)
 
-    ; Within safety margin and tolerance left — count and continue
-    if var.error_dist < 30 && global.mfm_error_count < 3
+    ; Within safety margin and tolerance left — count and continue. P=5 only: no P=4 has been
+    ; a misread so far. In the QA journals of 10 jobs (2026-09-29 .. 10-02) none of the 2745
+    ; segments in which the raw wheel angle showed the filament moving (>= 80 % of the
+    ; commanded) read below 74 %, and in every segment below 60 % it had stalled (0-62 %).
+    ; The tolerance only delayed the pause: at 0.1 mm layers a 5 mm segment takes 20-60 s,
+    ; so the errors came more than 30 s apart, each one started a fresh count, and only the
+    ; 30 mm guard paused, 2-4 min into the stall (job 20261002-154706: 4 layers at Z 18.2).
+    if param.P == 5 && var.error_dist < 30 && global.mfm_error_count < 3
         set global.mfm_error_count = global.mfm_error_count + 1
         if global.debug
           echo "MFM: error " ^ global.mfm_error_count ^ " of 3 tolerated (dist=" ^ var.error_dist ^ "mm)"
         M99
 
-    ; Hard pause — tolerance exhausted or 30mm safety distance exceeded
+    ; Hard pause — P=4, P=5 tolerance exhausted or 30mm safety distance exceeded
     if global.debug
-      if var.error_dist >= 30
+      if param.P == 4
+        echo "MFM: too little movement — hard pause"
+      elif var.error_dist >= 30
         echo "MFM: " ^ var.error_dist ^ "mm extruded during error sequence — hard pause"
       else
         echo "MFM: error tolerance exhausted — pause"
