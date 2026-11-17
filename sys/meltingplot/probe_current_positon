@@ -8,8 +8,8 @@ G90 ; absolute position
 set global.result = 0
 
 while iterations < 2
-  var pos_variation_x = mod(state.msUpTime,16) ; 0 - 15
-  var pos_variation_y = (mod(state.msUpTime,16)+8)-16 ; -8 - +7
+  var pos_variation_x = random(16)     ; 0 - 15, independent draw
+  var pos_variation_y = random(16) - 8 ; -8 - +7, independent draw
 
   M400
 
