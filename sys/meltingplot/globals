@@ -32,6 +32,9 @@ global filament_max_flow_rate = 20
 global last_filament_temp = 0
 if fileexists("0:/sys/meltingplot/last-filament-temp.g")
   M98 P"0:/sys/meltingplot/last-filament-temp.g"
+; hand-off from load_filament_sensorless to daemon.g (drops the filament assignment),
+; set once after the load's last decision. The daemon clears it within one cycle, so
+; nothing may read it back to decide anything - the load decides on a local.
 global filament_loading_error = false
 ; per-tool deferred physical load, armed by filament_load.g (from load.g), consumed by
 ; load_filament_sensorless_conditionally.g (from the machine-generated config.g).
