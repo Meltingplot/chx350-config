@@ -118,8 +118,10 @@ if var.error == ""
   echo "z-probe/calibrate.g " ^ param.S ^ ": standard mode S" ^ var.standard ^ " R" ^ var.offset ^ ", touch mode S" ^ var.current
   echo "z-probe/calibrate.g " ^ param.S ^ ": touch stops at Z" ^ var.h ^ " (spread " ^ var.spread ^ " over 5 touches) - szp_touch_z_offset " ^ global.szp_touch_z_offset
   ; a touch stops a little below the contact (the board needs a few readings to see the
-  ; reading stop rising), and five touches agree - both limits are guesses for the first runs
-  if var.spread > 0.05 || var.h > 0.1 || var.h < -1
+  ; reading stop rising), never above it: -0.03..-0.02 on the lab machine, -0.062 cold on a
+  ; 3.6 machine, whose warm +0.089 (2026-11-17) came from a scan that had put Z0 0.15 mm too
+  ; deep. Five touches agree. The limits are still guesses from these few runs.
+  if var.spread > 0.05 || var.h > 0.02 || var.h < -1
     if exists(param.H) && param.H == 1
       set var.error = "touch stop height Z" ^ var.h ^ " (spread " ^ var.spread ^ ") implausible - szp_touch_z_offset kept"
     else
