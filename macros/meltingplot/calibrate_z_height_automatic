@@ -55,6 +55,15 @@ G28 X Y U
 
 M290 R0 S0 ; clear baby stepping
 
+; level the bed coarsely and without contact before the first scan, as homez.g does before its
+; centre touch: a corner align_z_axis left high braked two scans of 2026-11-17 early, under
+; another part, before the nozzle reached the centre. Only the tilt is corrected, the centre
+; stays - the Z max measured below is that of the frame homez.g touches in
+M98 P"0:/sys/meltingplot/z-probe/coarse-level.g"
+if global.result != 0
+  M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g"
+  M99
+
 T0 ; select tool with SZP
 ; 250 C: in the mid range of 180 - 400 C, without burning the loaded material too much. The
 ; nozzle stays at it for the whole procedure - its thermal expansion is part of the contact
