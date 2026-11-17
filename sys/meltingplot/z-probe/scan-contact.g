@@ -66,6 +66,19 @@ G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G1 Z20 F6000
 
 var error = ""
+; Every variable a loop body uses is declared once here and only set inside: in SBC mode DSF
+; deletes a loop body's variables late, when the next iteration declares them again
+; (CodeFile.cs, DeleteStaleVariableAsync) - an iteration that skips a declaration (continue
+; before it, or a branch not taken) loses track of it, and the next "var" fails with "variable
+; already exists" (2026-11-17, var.v after the drive current change)
+var r = 0                                        ; a single board report
+var r1 = 0                                       ; three board reports at rest
+var r2 = 0
+var r3 = 0
+var v = 0                                        ; their median
+var d = 0                                        ; rise against the step before
+var collapsed = false
+var dead = true
 M400
 M564 S0                                          ; soft limits off: the contact can lie below Z0 of the frame
 G1 Z{param.S} F600
@@ -78,7 +91,7 @@ var current = -1
 while iterations < #var.currents
   M558.2 K0 S{var.currents[iterations]} R0
   G4 S1                                          ; let the sensor settle on the new current
-  var r = sensors.probes[0].value[0]
+  set var.r = sensors.probes[0].value[0]
   if var.r < 999999 && var.r > 0
     set var.current = var.currents[iterations]
     break
@@ -93,7 +106,7 @@ if var.error == ""
   var lo = 999999
   var hi = 0
   while iterations < 5
-    var r = sensors.probes[0].value[0]
+    set var.r = sensors.probes[0].value[0]
     set var.lo = min(var.lo, var.r)
     set var.hi = max(var.hi, var.r)
     G4 P250
@@ -121,16 +134,15 @@ if var.error == ""
       break
     M400
     G4 P400                                      ; at rest, and one board status after the move
-    var sum = 0
-    var valid = true
-    while iterations < 3
-      var r = sensors.probes[0].value[0]
-      if var.r >= 999999 || var.r <= 0
-        set var.valid = false
-        break
-      set var.sum = var.sum + var.r
-      G4 P250
-    if !var.valid
+    ; three board reports at rest - the SZP board sends one every 250 ms (Heat.cpp, board
+    ; status), so shorter pauses only read the same report twice. Their median, not their
+    ; mean: a single stray report drops out instead of moving the step by a third of its size
+    set var.r1 = sensors.probes[0].value[0]
+    G4 P250
+    set var.r2 = sensors.probes[0].value[0]
+    G4 P250
+    set var.r3 = sensors.probes[0].value[0]
+    if max(var.r1, var.r2, var.r3) >= 999999 || min(var.r1, var.r2, var.r3) <= 0
       ; Too close for this drive current, or a broken probe. This current read valid from z_ref
       ; down to the step before: back there - at most the 0.5 mm the repeat below goes back
       ; anyway - a probe that is only too close reads again within three board reports. Not
@@ -139,9 +151,9 @@ if var.error == ""
         G1 Z{min(var.z + 0.5, var.z_ref)} F600
         M400
         G4 S1
-        var dead = true
+        set var.dead = true
         while iterations < 3
-          var r = sensors.probes[0].value[0]
+          set var.r = sensors.probes[0].value[0]
           if var.r < 999999 && var.r > 0
             set var.dead = false
             break
@@ -163,19 +175,19 @@ if var.error == ""
       set var.dmax = 0
       set var.flat_z = 1000
       continue
-    var v = var.sum / 3
+    set var.v = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
     if global.debug
-      echo "scan-contact: Z " ^ var.z ^ " reading " ^ var.v ^ " current " ^ var.current
+      echo "scan-contact: Z " ^ var.z ^ " reading " ^ var.v ^ " (" ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ ") current " ^ var.current
     if !var.have_prev
       set var.have_prev = true
       set var.z_ref = var.z
       set var.v_ref = var.v
     else
-      var d = var.v - var.prev
+      set var.d = var.v - var.prev
       ; The approach is convex - every step rises more than the one before - so a rise down to
       ; half the steepest one is the nozzle on the bed. Biased towards sensitive: a contact
       ; taken in the air fails the back-off, a contact missed pushes the bed on into the nozzle.
-      var collapsed = var.dmax >= {10 * var.noise} && var.d <= {0.5 * var.dmax}
+      set var.collapsed = var.dmax >= {10 * var.noise} && var.d <= {0.5 * var.dmax}
       if var.collapsed && var.flat_z < 1000
         ; second collapsed step in a row: the nozzle touches. In the first one the bed rose at
         ; the approach rate dmax for a fraction f of the step and at the contact rate d for the
@@ -222,22 +234,18 @@ if var.error == ""
       break
     M400
     G4 P400
-    var sum = 0
-    var valid = true
-    while iterations < 3
-      var r = sensors.probes[0].value[0]
-      if var.r >= 999999 || var.r <= 0
-        set var.valid = false
-        break
-      set var.sum = var.sum + var.r
-      G4 P250
-    if !var.valid
+    set var.r1 = sensors.probes[0].value[0]      ; median of three board reports, as in the approach
+    G4 P250
+    set var.r2 = sensors.probes[0].value[0]
+    G4 P250
+    set var.r3 = sensors.probes[0].value[0]
+    if max(var.r1, var.r2, var.r3) >= 999999 || min(var.r1, var.r2, var.r3) <= 0
       ; this current read valid down to the contact, and the bed moves away from it
       set var.error = "SZP reading invalid at Z" ^ var.z ^ " while backing off - probe cable or coil broken?"
       break
-    var v = var.sum / 3
+    set var.v = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
     if global.debug
-      echo "scan-contact: back-off Z " ^ var.z ^ " reading " ^ var.v
+      echo "scan-contact: back-off Z " ^ var.z ^ " reading " ^ var.v ^ " (" ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ ")"
     if var.v > var.vmax
       set var.vmax = var.v                       ; still on the bed
       set var.z_drop = 1000

@@ -33,6 +33,8 @@ var error = ""
 var current = 15                                 ; drive current - standard mode's, then touch mode's
 var standard = 0                                 ; standard mode's, for the report
 var offset = 0                                   ; standard mode's reading offset
+var r = 0                                        ; a board report - declared once, set in the loops: DSF loses
+                                                 ; track of loop variables (see z-probe/scan-contact.g)
 G90
 
 ; standard mode: lowest drive current that reads at the dive start (trigger + 1.5 dive heights)
@@ -43,7 +45,7 @@ while true
   M558.2 K0 S{var.current} R0
   M400
   G4 S1                                          ; let the sensor settle on the new current
-  var r = sensors.probes[0].value[0]
+  set var.r = sensors.probes[0].value[0]
   if var.r < 999999 && var.r > 0
     break
   set var.current = var.current + 1
@@ -56,7 +58,7 @@ if var.error == ""
   G1 Z{sensors.probes[0].triggerHeight} F600
   M400
   G4 S1
-  var r = sensors.probes[0].value[0]
+  set var.r = sensors.probes[0].value[0]
   if var.r >= 999999 || var.r <= 0
     set var.error = "SZP reading invalid at the standard trigger height Z" ^ sensors.probes[0].triggerHeight
   else
@@ -72,7 +74,7 @@ if var.error == ""
     M400
     M558.2 K0 S{var.current} R0
     G4 S1
-    var r = sensors.probes[0].value[0]
+    set var.r = sensors.probes[0].value[0]
     if var.r < 999999 && var.r > 0
       G1 Z0 F300                                 ; nozzle on the bed
       M400
