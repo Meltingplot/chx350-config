@@ -41,6 +41,8 @@ var h3 = 0
 var mean = 0
 var off = 0                                      ; the largest distance of a point from their mean
 var pass = 0
+var height = 12                                  ; where above the centre the reading is taken
+var tries = 0                                    ; readings at this height that failed
 
 G90
 M561                                             ; heights without bed transform, mesh or babystepping
@@ -51,9 +53,14 @@ G1 Z20 F6000
 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 
 ; the reading above the centre: valid, steady at rest (as in z-probe/scan-contact.g: a quiet
-; probe spreads a few counts) and rising as the bed comes closer
-while iterations < 2
-  G1 Z{(iterations == 0) ? 12 : 8} F600
+; probe spreads a few counts) and rising as the bed comes closer. Three tries per height, a
+; second apart: on the 3.6 machine of 2026-11-17 single invalid reports came and went (homing
+; failed on the first one, 18:31). The values go into the message.
+while true
+  if iterations > 10
+    set var.error = "the reading check above the bed centre did not end"
+    break
+  G1 Z{var.height} F600
   M400
   G4 P400
   set var.r1 = sensors.probes[0].value[0]
@@ -61,16 +68,22 @@ while iterations < 2
   set var.r2 = sensors.probes[0].value[0]
   G4 P250
   set var.r3 = sensors.probes[0].value[0]
-  if max(var.r1, var.r2, var.r3) >= 999999 || min(var.r1, var.r2, var.r3) <= 0
-    set var.error = "SZP reading invalid above the bed centre - probe cable or coil broken?"
-    break
-  if max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3) > 30
-    set var.error = "SZP reading jumps at rest by " ^ (max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)) ^ " counts above the bed centre - check coil, cable and connector"
-    break
-  if iterations == 0
+  if max(var.r1, var.r2, var.r3) >= 999999 || min(var.r1, var.r2, var.r3) <= 0 || max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3) > 30
+    set var.tries = var.tries + 1
+    if global.debug
+      echo "coarse-level: reading above the centre at Z" ^ var.height ^ ": " ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ " - try " ^ var.tries
+    if var.tries >= 3
+      set var.error = "SZP reading invalid or jumping above the bed centre at Z" ^ var.height ^ " (" ^ var.r1 ^ " " ^ var.r2 ^ " " ^ var.r3 ^ ", 3 tries) - check coil, cable and connector"
+      break
+    G4 S1
+    continue
+  if var.height == 12
     set var.v12 = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
+    set var.height = 8
+    set var.tries = 0
   else
     set var.v8 = var.r1 + var.r2 + var.r3 - max(var.r1, var.r2, var.r3) - min(var.r1, var.r2, var.r3)
+    break
 if var.error == "" && var.v8 - var.v12 < 30
   set var.error = "SZP reading rose by only " ^ (var.v8 - var.v12) ^ " from Z12 to Z8 above the bed centre - sensor not responding"
 
