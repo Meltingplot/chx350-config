@@ -27,6 +27,15 @@ if move.axes[0].homed == false || move.axes[1].homed == false || move.axes[3].ho
   set global.result = 1
   M99
 
+; level the bed coarsely and without contact before a nozzle comes near it: z-axis/align-motors.g
+; can leave a corner millimetres high, and bed.g's touch probes travel only 1.9 mm above the
+; centre - such a corner crashed the nozzle at P1 (3.6 machine, 2026-11-17, z-probe/coarse-level.g)
+M98 P"0:/sys/meltingplot/z-probe/coarse-level.g"
+if global.result != 0
+  echo "Error: Homing Z - abort! coarse levelling failed"
+  M18 Z
+  M99
+
 G90 G1 X{move.axes[0].max/2} Y{move.axes[1].max/2} U{move.axes[3].max} F60000
 G90 G1 Z200 F6000
 M400

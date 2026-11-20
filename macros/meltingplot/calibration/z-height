@@ -64,6 +64,23 @@ G28 X Y U
 
 M290 R0 S0 ; clear baby stepping
 
+; level the bed coarsely and without contact before the first scan, as homez.g does before its
+; centre touch: a corner z-axis/align-motors.g left high braked two scans of 2026-11-17 (3.6
+; machine) early, under another part, before the nozzle reached the centre. Only the tilt is
+; corrected, the centre stays in the frame of global.z_lower_stop. It needs the standard mode's
+; cold calibration, which this flow writes: on a machine without it (a fresh sys/generated/) the
+; first run goes without, as before
+if fileexists("0:/sys/generated/szp-standard-mode-cold.g")
+  ;; Die Sonde misst das Druckbett an vier Punkten aus, ohne es zu berühren, und die Z-Motoren
+  ;; gleichen eine hoch stehende Ecke aus – so kommt die Düse später keiner Ecke zu nahe.
+  M291 R"Bett grob ausrichten" P"Das Druckbett wird ohne Berührung vermessen und grob ausgerichtet." S1 T3600
+  M98 P"0:/sys/meltingplot/z-probe/coarse-level.g"
+  if global.result != 0
+    M98 P"0:/sys/meltingplot/z-probe/cancel-calibration.g"
+    M99
+else
+  M118 P0 L1 S"Warning: calibration/z-height: no standard mode calibration yet - first scan without coarse levelling"
+
 T0 ; select tool with SZP
 ; 250 C: in the mid range of 180 - 400 C, without burning the loaded material too much. The
 ; nozzle stays at it for the whole procedure - its thermal expansion is part of the contact
