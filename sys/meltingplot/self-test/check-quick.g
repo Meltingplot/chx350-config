@@ -86,6 +86,23 @@ while iterations < #global.fan_stalled
 if global.self_test_estop_state == 2 || global.self_test_estop_state == 3
   set global.self_test_found = global.self_test_found ^ "NOT-HALT hat nicht ausgelöst; "
 
+; The scanning probe's calibration in sys/generated/ (calibration/z-height). z-probe/standard-mode.g
+; and touch-mode.g load it at every call without a check: RRF only warns about a missing macro
+; file and keeps the drive current and offset set before - on a fresh sys/generated/ the board's
+; offset 0, which homez.g's coarse levelling reads as triggered before its first G30 starts.
+; So it is checked here, after every boot, and not at every call (Tim, 2026-11-20).
+var szp_missing = ""
+if !fileexists("0:/sys/generated/szp-standard-mode-cold.g")
+  set var.szp_missing = var.szp_missing ^ " Standard kalt"
+if !fileexists("0:/sys/generated/szp-standard-mode-warm.g")
+  set var.szp_missing = var.szp_missing ^ " Standard warm"
+if !fileexists("0:/sys/generated/szp-touch-mode-cold.g")
+  set var.szp_missing = var.szp_missing ^ " Touch kalt"
+if !fileexists("0:/sys/generated/szp-touch-mode-warm.g")
+  set var.szp_missing = var.szp_missing ^ " Touch warm"
+if var.szp_missing != ""
+  set global.self_test_found = global.self_test_found ^ "Z-Sonde nicht kalibriert, es fehlt:" ^ var.szp_missing ^ " - Z-Nullpunkt kalibrieren; "
+
 ; --- only a warning: a print is possible, its quality is at risk ---
 
 ; "noFilament" and the movement errors are no fault of the monitor
