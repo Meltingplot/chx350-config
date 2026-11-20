@@ -15,6 +15,10 @@ else
   M98 P"0:/sys/generated/szp-standard-mode-cold.g"
 
 G31 K0 Z3 P9000 ; trigger height 3mm, trigger value 9000
-M558 K0 H6 A1 F6000:200:20000; dive height
+; F: first tap 6000, further taps and M558.1's steps 200, mesh scan 18000 mm/min (300 mm/s). At
+; 333 mm/s an X-periodic error of ~150 mm showed in the mesh and the readings scattered 0.027 mm;
+; at 300 mm/s 0.021, at 100 mm/s 0.016 for 2 min more (lab machine, 2026-11-20). mesh.g lowers
+; the acceleration for the scan
+M558 K0 H6 A1 F6000:200:18000                   ; dive height, probing and scan speeds
 
 M558.3 K0 S0 ; standard mode

@@ -33,8 +33,22 @@ if result != 0
     echo "Error: G29 failed!"
     M99
 
-G1 Z{sensors.probes[0].diveHeights[0]} F600 
+G1 Z{sensors.probes[0].diveHeights[0]} F600
+; scan at 1000 mm/s2: RRF reads the last point of every scan line when the head arrives there,
+; still braking (Move::ScanningProbeTimerCallback), and the head tips under the deceleration -
+; at 6000 mm/s2 the right end of every +X row read 0.13-0.19 mm too high (lab machine,
+; 2026-11-20), at 1000 mm/s2 it reads like its neighbours. 300 mm/s (standard-mode.g) then
+; needs about 45 mm to brake. The accelerations are restored after the scan, also when it fails
+var acc_x = move.axes[0].acceleration
+var acc_y = move.axes[1].acceleration
+var acc_p = move.motionSystems[0].printingAcceleration
+var acc_t = move.motionSystems[0].travelAcceleration
+M201 X1000 Y1000
+M204 P1000 T1000
 G29 S0                                          ; create height map
-if result != 0
+var g29 = result                                ; before M201/M204 overwrite it
+M201 X{var.acc_x} Y{var.acc_y}
+M204 P{var.acc_p} T{var.acc_t}
+if var.g29 != 0
   set global.result = 1
   echo "Error: G29 failed!"
