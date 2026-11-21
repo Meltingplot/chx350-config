@@ -505,6 +505,11 @@ global timelapse_park_z = -1              ; highest machine Z the job's photos w
 
 ; --- scanning Z probe ---------------------------------------------------------
 global szp_touch_z_offset = -0.1        ; M558.3 H param — assumed nozzle Z (mm) at touch detection (less negative = closer to bed)
+; the measured value (calibration/z-height), trimmed by the babystep macros z-probe/offset/*.
+; Until 2026-11 only z-probe/touch-mode.g loaded it, so after a boot the global held -0.1 until
+; the first homing, and closer-0.05 / farther-0.05 saved -0.05 / -0.15 over the calibration
+if fileexists("0:/sys/generated/szp-touch-z-offset.g")
+  M98 P"0:/sys/generated/szp-touch-z-offset.g"
 global szp_warm_threshold = 40           ; temperature (°C) above which warm calibration is used for scanning Z-probe
 
 ; --- fans (sys/meltingplot/fan/) --------------------------------------------
