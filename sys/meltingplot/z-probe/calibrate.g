@@ -13,7 +13,8 @@
 ;   board detects the touch on the raw reading through a 5-25 Hz bandpass (Duet3Expansion
 ;   ScanningSensorHandler.cpp), an offset never reaches it;
 ; - touch stop height: Duet's touch calibration - "use the reported G30 S-1 stop height as the
-;   M558.3 H parameter" (wiki, scanning_z_probe_calibration) - averaged over five touches.
+;   M558.3 H parameter" (wiki, scanning_z_probe_calibration) - averaged over five touches, each
+;   at a fresh spot on a circle of 5 mm around the bed centre.
 ;   homez.g sets Z = H where its touch stops, so this H puts Z0 on the contact.
 ;   sensors.probes[0].lastStopHeight is the raw stop Z (GCodes4.cpp), whatever H is set now;
 ; - standard mode: the middle of the window of drive currents that read valid at every height
@@ -25,7 +26,10 @@
 ; oozes from it in the meantime freezes on the cold bed and grows with every touch at the same
 ; spot. With the window search (about 40 s above the bed centre) in front of them, the cold
 ; touches of 2026-11-20 rose from +0.044 to +0.166 (PLA, a spot on the bed afterwards); the
-; warm ones, on the 90 C bed where PLA stays soft, held at -0.056..-0.061.
+; warm ones, on the 90 C bed where PLA stays soft, held at -0.056..-0.061. Right after the scan
+; the cold touches still rose, -0.009, 0.016, 0.040, 0.052, 0.055 (2026-11-20 evening), so every
+; touch goes to a spot of its own: five points on a circle of 5 mm around the scan's spot, 5.9 mm
+; apart. Their mean is the centre, so a tilt of the bed cancels in the mean height.
 ; A reading is invalid at 999999 (the SZP board's error value) and at 0 (the board could not
 ; read the LDC1612) - RRF takes both as errors (RemoteZProbe.cpp).
 ; Returns global.result 0, or 1 when a step failed (reason echoed, bed at Z5).
@@ -57,6 +61,8 @@ var win_lo = -1                                  ; the window: the longest run, 
 var win_hi = -2
 var window = ""                                  ; the window as text, for the messages
 var coil = sensors.analog[4].lastReading         ; coil temperature, reported with the result
+var cx = move.axes[0].userPosition               ; where scan-contact.g set Z0: the touches circle it,
+var cy = move.axes[1].userPosition               ; the standard-mode window is measured above it
 G90
 
 ; touch mode: lowest drive current that reads at the touch start and on the bed (Z0), from S15
@@ -84,10 +90,12 @@ if var.error == ""
   echo >{"0:/sys/generated/szp-touch-mode-" ^ param.S ^ ".g"} "M558.2 K0 S" ^ var.touch ^ " R0"
 
 ; touch stop height, five touches with the drive current just found (touch-mode.g above
-; loaded the file of the coil's temperature, M558.2 then set this one)
+; loaded the file of the coil's temperature, M558.2 then set this one), each at its own spot
+; on a circle of 5 mm around the scan's spot (see the header)
 if var.error == ""
   while iterations < 5
     G1 Z5 F600                                   ; a touch must start with the nozzle above the bed
+    G1 X{var.cx + 5 * cos(iterations * 2 * pi / 5)} Y{var.cy + 5 * sin(iterations * 2 * pi / 5)} F6000
     M400
     G30 K0 S-1
     if result > 1                                ; 1 = warning (M558 A2 readings outside S0.05) - the spread below judges that
@@ -96,6 +104,10 @@ if var.error == ""
     set var.h_sum = var.h_sum + sensors.probes[0].lastStopHeight
     set var.h_min = min(var.h_min, sensors.probes[0].lastStopHeight)
     set var.h_max = max(var.h_max, sensors.probes[0].lastStopHeight)
+    if global.debug
+      echo "z-probe/calibrate.g: touch " ^ (iterations + 1) ^ " at X" ^ move.axes[0].userPosition ^ " Y" ^ move.axes[1].userPosition ^ " stops at Z" ^ sensors.probes[0].lastStopHeight
+  G1 Z5 F600
+  G1 X{var.cx} Y{var.cy} F6000                   ; back above the scan's spot for the standard-mode window
   if var.error == ""
     set var.h = {round(var.h_sum * 200) / 1000}  ; mean of the five, to 0.001 mm
     set var.spread = var.h_max - var.h_min
