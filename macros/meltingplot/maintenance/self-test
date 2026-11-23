@@ -11,7 +11,7 @@
 ; The self-test (CLAUDE.md, "Power-on self-test"), an ordinary flow. It runs what is due
 ; (self-test/tick.g), without a prompt: nobody has to be at the machine. Started with nothing due, it
 ; asks which tier to run, for instance after a repair: a failed tier is otherwise not due for 30 min.
-; self-test/tick.g starts it by itself with A1, on the HTTP channel (M98.3): after every boot and every
+; self-test/tick.g starts it by itself with A1, on the HTTP channel (M98.1 S0): after every boot and every
 ; self_test_interval hours of operation. The UI then follows it as after a browser reload: the panel
 ; comes with the first documented box and goes after the last, with no result and no close button.
 ; So with A1 it shows the outcome itself. Never as a blocking prompt: that would hold the HTTP channel,

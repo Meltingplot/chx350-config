@@ -46,7 +46,7 @@ if global.self_test_estop_state == 2 || global.self_test_estop_state == 3
 
 ; Self-test (self-test/check-quick.g, check-weekly.g): a failed check refuses the job, a running
 ; print goes on. No quick tier yet since the boot: it runs here, the flow starts a minute after the
-; boot at the earliest and needs DSF 3.7.0+mp.11. The interval 0 switches that off too. Macro maintenance/self-test runs a failed tier again at once
+; boot at the earliest and needs DSF 3.7.0+mp.15. The interval 0 switches that off too. Macro maintenance/self-test runs a failed tier again at once
 ; after a repair.
 if global.self_test_done[0] < 0 && global.self_test_interval[0] > 0
   M98 P"0:/sys/meltingplot/self-test/check-quick.g"

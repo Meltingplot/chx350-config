@@ -585,7 +585,7 @@ global self_test_failed = vector(3, "")
 ; one can run now.
 global self_test_due = vector(3, false)
 global self_test_wanted = false
-global self_test_can_start = false             ; DSF knows M98.3, tick.g may start the flow (self-test/check-dsf.g, from config.g)
+global self_test_can_start = false             ; DSF knows M98.1 S, tick.g may start the flow (self-test/check-dsf.g, from config.g)
 global self_test_wake = 60                     ; upTime at which the tick looks again. 60 lets the boards report after a boot
 global self_test_weekly_ready = false          ; answer of self-test/check-weekly-ready.g
 global self_test_update_running = false        ; answer of self-test/check-update.g
