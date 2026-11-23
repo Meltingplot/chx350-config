@@ -32,9 +32,11 @@ M98 P"0:/sys/meltingplot/self-test/check-due.g"
 ; check only by hand (Tim, 2026-11-06).
 set global.self_test_wanted = state.status == "idle" && global.self_test_due[0]
 
-; HTTP busy (inputs[0], index 0 = HTTP, CodeChannel.cs): no call, the next look tries again. state
-; alone reads idle between two codes of a running SBC macro, so inMacro too (DSF PR #208). M98.1 then
-; waits up to 500 ms for a code that came in between and gives result 1 with a warning if it stays.
+; HTTP busy (inputs[0], index 0 = HTTP, CodeChannel.cs): no call, the next look tries again. Free is
+; idle or unused: RRF reads unused until the first code on the channel allocates its buffer
+; (GCodeBuffer::GetStateText), which after a boot is the normal case. state alone reads idle between
+; two codes of a running SBC macro, so inMacro too (DSF PR #208). M98.1 then waits up to 500 ms for a
+; code that came in between and gives result 1 with a warning if it stays.
 ; Anything worse (the channel disabled, the file missing) would repeat its error every minute, so it
 ; stops until the next boot.
 ; Not behind a notice the operator must close (T0, it has no timeout): the steps would queue unseen
@@ -47,7 +49,7 @@ if global.self_test_wanted && global.self_test_can_start
   if var.notice
     if global.self_test_quick_outcome == 0
       set global.self_test_quick_outcome = 3
-  elif inputs[0].state == "idle" && !inputs[0].inMacro
+  elif (inputs[0].state == "idle" || inputs[0].state == "unused") && !inputs[0].inMacro
     M98.1 S0 P"0:/macros/meltingplot/maintenance/self-test" A1
     if result > 1
       set global.self_test_can_start = false
