@@ -123,7 +123,7 @@ M143 H0 S120                                            ; set temperature limit 
 M570 H0 P5 T10 S10                                      ; Enable heater fault detection (Trigger Time 5sec, temp deviation 10°, cancel print after 10min) 
 
 ; Hotend
-M308 S2 P"20.temp0" Y"pt1000" A"left"                   ; configure sensor 2 as PT1000 on pin 20.temp0
+M308 S2 P"*20.temp0" Y"pt1000" A"left"                   ; configure sensor 2 as PT1000 on pin 20.temp0
 M950 H1 C"20.out0" T2                                   ; create nozzle heater output on out1 and map it to sensor 2
 M143 H1 S300                                            ; set temperature limit for heater 2 to 300C
 M307 H1 R1.962 K0.205:0.114 D5.81 E1.35 S1.00 B0 V24.0  ; disable bang-bang mode for the nozzle heater and set PWM limit
