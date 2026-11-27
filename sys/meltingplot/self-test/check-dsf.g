@@ -4,7 +4,10 @@
 ; 3.7.0+mp.15 (PR #208, merged 2026-11-23 after mp.14). DSF mp.11 to mp.14 had M98.<n> instead and
 ; refuse M98.1 as "Invalid code channel number 1"; an older DSF hands it to RRF, which looks for a macro
 ; M98.1.g and answers "not supported" with result 1, the same as a busy channel (GCodes::TryMacroFile):
-; a warning every minute, for ever.
+; a warning every minute, for ever. W (the longest M98.1 waits for a busy channel) came with
+; 3.7.0+mp.16 and 3.7.1-rc.1+mp.1 (PR #243), which without W wait for as long as the channel is busy.
+; tick.g always passes W500, and mp.15 waits its fixed 500 ms and hands W on to the macro, so mp.15
+; still counts.
 ; Fork versions: 3.7.0-rc.X+mp.N lack it, 3.7.0+mp.N has it from N = 15, a later base has it, and mp.N
 ; starts at 1 again on every base. Stock DSF has no "mp." and an unknown format counts as not having
 ; it: the tile and start.g still run the tiers. Each find() on a line of its own, see config.g at T8.

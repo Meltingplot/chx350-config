@@ -4,10 +4,13 @@
 ; tier is due, in hours of operation (operating_time_base + upTime), and whether one can run now.
 ; It runs no test: they are the ordinary flow maintenance/self-test, on a channel of their own. On
 ; the Trigger channel a wait would hold up trigger2.g and trigger4.g. So it starts the flow on HTTP,
-; as if DWC had started it: M98.1 S0 returns once the macro is queued. A1 tells the flow that nobody
-; asked for it, so it must not wait for an answer.
-; Reads and set, M98.1, M118 and M291 S1 only: nothing in here may block. M98.1 waits at most 500 ms,
-; and only for a code that took HTTP between the inputs[0] check below and the call.
+; as if DWC had started it: M98.1 S0 returns once the macro has started, it does not wait for its end.
+; A1 tells the flow that nobody asked for it, so it must not wait for an answer.
+; Reads and set, M98.1, M118 and M291 S1 only: nothing in here may block. M98.1 waits for a busy
+; channel, and from DSF 3.7.0+mp.16 / 3.7.1-rc.1+mp.1 (PR #243) without W for as long as it stays busy,
+; which would hold the Trigger channel. W500 caps the wait at 500 ms, and it only ever waits for a code
+; that took HTTP between the inputs[0] check below and the call. DSF mp.15 waits 500 ms whatever W says
+; and hands W on to the flow as param.W, which the flow does not read.
 
 var now = global.operating_time_base + state.upTime
 var wanted_before = global.self_test_wanted
@@ -35,8 +38,8 @@ set global.self_test_wanted = state.status == "idle" && global.self_test_due[0]
 ; HTTP busy (inputs[0], index 0 = HTTP, CodeChannel.cs): no call, the next look tries again. Free is
 ; idle or unused: RRF reads unused until the first code on the channel allocates its buffer
 ; (GCodeBuffer::GetStateText), which after a boot is the normal case. state alone reads idle between
-; two codes of a running SBC macro, so inMacro too (DSF PR #208). M98.1 then waits up to 500 ms for a
-; code that came in between and gives result 1 with a warning if it stays.
+; two codes of a running SBC macro, so inMacro too (DSF PR #208). M98.1 then waits up to W500 ms for
+; a code that came in between and gives result 1 with a warning if it stays.
 ; Anything worse (the channel disabled, the file missing) would repeat its error every minute, so it
 ; stops until the next boot.
 ; Not behind a notice the operator must close (T0, it has no timeout): the steps would queue unseen
@@ -50,7 +53,7 @@ if global.self_test_wanted && global.self_test_can_start
     if global.self_test_quick_outcome == 0
       set global.self_test_quick_outcome = 3
   elif (inputs[0].state == "idle" || inputs[0].state == "unused") && !inputs[0].inMacro
-    M98.1 S0 P"0:/macros/meltingplot/maintenance/self-test" A1
+    M98.1 S0 W500 P"0:/macros/meltingplot/maintenance/self-test" A1
     if result > 1
       set global.self_test_can_start = false
       M118 P0 L1 S"Warning: self-test: the flow could not be started - it does not start by itself until the next boot"
